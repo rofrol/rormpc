@@ -41,7 +41,7 @@ RO_LB_REPO=https://github.com/rofrol/ro-listenbrainz-mpd
 RO_LB_TAG=v2.6.0-ro.4
 RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
 RORMPC_TOOLS_REPO=https://github.com/rofrol/rormpc-tools
-RORMPC_TOOLS_TAG=v0.1.4
+RORMPC_TOOLS_TAG=v0.1.5
 RORMPC_TOOLS_DIR="${RORMPC_TOOLS_DIR:-$HOME/personal_projects/rormpc-tools}"
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
@@ -128,7 +128,9 @@ service_state() {
     launchctl print "gui/$(id -u)/io.github.rofrol.rormpc.$1" 2>/dev/null | sed -n 's/^\tstate = //p' | grep . || echo "not installed"
   else
     systemctl --user is-active "rormpc-$1.service" 2>/dev/null || true
-    systemctl --user is-active "rormpc-$1.timer" 2>/dev/null | sed 's/^/timer /' || true
+    if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/rormpc-$1.timer" ]; then
+      echo "timer $(systemctl --user is-active "rormpc-$1.timer" 2>/dev/null)"
+    fi
   fi
 }
 
@@ -149,7 +151,7 @@ companions() {
   else
     uv tool install --force "rormpc-tools @ git+$RORMPC_TOOLS_REPO@$RORMPC_TOOLS_TAG"
     cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
-  fi
+  fi || { echo "building ro-listenbrainz-mpd failed; on Debian/Ubuntu it needs: sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev" >&2; exit 1; }
   local tools; tools="$(uv tool dir --bin)"
   service musicdb 3600 "$tools/musicdb" update
   [ -f "$lb_config" ] || "$HOME/.cargo/bin/ro-listenbrainz-mpd" --create-default-config

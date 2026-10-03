@@ -24,6 +24,10 @@ rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and 
   It also records skipped songs for musicdb.
 - `mpd-gap` (rormpc-tools): seconds of silence between songs, default 3, `--gap 0` removes it.
 
+On Linux, building the scrobbler needs a C toolchain, OpenSSL and SQLite headers (Debian/Ubuntu:
+`sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev`), and the services need a systemd user
+session: log in normally, or on a machine nobody logs into run `sudo loginctl enable-linger $USER` once.
+
 They run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
 `rormpc-*.service` (musicdb with a `.timer`) on Linux; the installer writes them, so edits there are overwritten.
 `companions --local` installs both from checkouts instead (`$RORMPC_TOOLS_DIR`, `$RO_LB_DIR`), rormpc-tools editable.
