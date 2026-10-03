@@ -82,3 +82,37 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
       message pump).
 - [ ] Whatever is documented, check: works with rormpc closed, survives MPD restart and sleep/wake, clears
       stale metadata when playback stops, uninstall leaves MPD alone.
+
+## Modals and the context menu: mouse
+
+Reported 2026-10-03. Causes found in the code:
+
+- No hover in the context menu: `shared/mouse_event.rs` maps `CTMouseEventKind::Moved` to `None`, so motion never
+  reaches widgets (crossterm's `EnableMouseCapture` already requests any-motion reports, ?1003).
+- A menu entry needs a double click: `MenuModal::handle_mouse_event` only selects on `LeftClick` and confirms on
+  `DoubleClick`.
+- A click outside a modal does nothing: `Ui::handle_mouse_event` hands every event to `modals.last_mut()` without a
+  hit test, and the `Modal` trait has no area.
+- No dimmed background: `Ui::render` already has `theme.modal_backdrop` (sets `fg(DarkGray)` on the whole buffer, which
+  flattens all colours); the `roman` theme has it off. herdr adds `Modifier::DIM` to every cell instead (colours kept),
+  and dims dialogs but not its context menu or navigator.
+
+Plan (asked GPT-6.1 Sol and MiMo on 2026-10-03; both agreed on the points below):
+
+- [ ] Menu: hover selects the entry under the cursor, a single left click confirms it. One hit-test function shared by
+      hover and click (headers, separators, borders, scrolling); a click on blank space never runs the selected entry.
+      Redraw only when the selection changes.
+- [ ] `Moved`: pass it on only while a modal that wants hover is open; drop it early otherwise, so motion causes no
+      redraws or wakeups elsewhere. Check that nothing treats any mouse event as activity.
+- [ ] Click-through: double clicks are synthesised from two left clicks, so once one click closes the menu the second
+      one arrives as `DoubleClick` on the pane underneath and can play/add a song. Reset the double-click tracker
+      when a modal closes on a click (or swallow the next click at that position).
+- [ ] Outside click: an opt-in per modal (e.g. `fn layout(&self, frame: Rect) -> Option<Rect>` computed the same way
+      as in `render`, no stored rect, so it is right before the first render and after a resize; `None` means "not
+      dismissible"). Menu, select, info, keybinds, outputs, decoders: close (same path as Esc). Input: cancel like Esc,
+      never submit. Confirm / destructive modals: never close on an outside click. Swallow the click and wheel events
+      outside instead of passing them through.
+- [ ] Backdrop: switch `modal_backdrop` to `Modifier::DIM` like herdr and enable it in the `roman` theme; decide
+      whether the context menu dims (herdr does not). Popups must start from `Clear` or they inherit DIM. Check in
+      Ghostty and kitty (`faint-opacity` / `dim_opacity` decide how strong it is) and with bold/reversed selections.
+- [ ] Order: menu hover + single click with the click-through fix first, outside click second, backdrop last.
