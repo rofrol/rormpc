@@ -133,3 +133,40 @@ DIM looks in Ghostty.
       `max_fps` still paces background renders. Second move 8 ms after the first at 30 fps: median 29 -> 22 ms
       (about 15 ms of that is the herdr send/poll overhead of the test). Sol and MiMo agreed on the cause; MiMo's
       claim of a `Duration` underflow panic in the pacing is wrong (`checked_sub` / `saturating_sub`).
+
+## Live playlists: paste a playlist URL, download it, check for new tracks
+
+Idea (2026-10-03): a button/modal in rormpc where I paste a playlist URL (YouTube, Spotify, radio.omarchy.com) and
+its songs are downloaded; locally I get an MPD playlist. It is "live": it can check the source for new tracks and
+ask whether to add them. radio.omarchy.com did not resolve (DNS) on 2026-10-03, so its format is unknown.
+
+Plan after asking GPT-6.1 Sol and MiMo (both agreed on the shape and the first version):
+
+- [ ] Prerequisite: a non-interactive mode for dotfiles `yt-mp3-mb` (e.g. `--batch --json`): no prompts, prints
+      the produced paths and the unresolved matches as JSON, resumable without duplicate downloads. Uncertain
+      matches stay "needs review" instead of being asked about inside a child process the TUI cannot answer.
+- [ ] A new CLI in dotfiles (like `musicdb` / `hits`), e.g. `liveplaylist add|check|accept|reject|list --json`.
+      It owns state, source adapters, matching, downloads and writing the MPD playlist; rormpc owns presentation
+      and decisions only (a URL input modal and a "Live playlists" pane with accept / reject / accept all), runs
+      it with argv (no shell), never blocks the UI thread, can cancel it. Progress as JSONL or a status file
+      written atomically (temp + rename), as the Hits pane does.
+- [ ] State per subscription in music-data (secrets outside it, logs/progress in ~/.cache): url, kind, MPD
+      playlist name, a stable target dir (not the playlist title, which can change), schema version, lock file.
+      Per source item: the decision (pending/accepted/rejected, rejects are durable) separate from the job state
+      (queued/downloading/needs_match/ready/failed), source position and last-seen time, the local path.
+- [ ] Order lives in the .m3u (playlist_directory), not in `NNN` file names. Publish only ready files. Songs
+      already in the library are referenced, not downloaded again, but only on a confirmed recording match
+      (MBID), never on a loose title match.
+- [ ] Removals and reorders upstream: never delete local files and never infer a removal from a failed or partial
+      check (yt-dlp YouTube extraction breaks, bot checks, 403s); an id that reappears is reactivated.
+- [ ] First version: public YouTube playlists only (`yt-dlp --flat-playlist -J` to list ids cheaply), manual
+      check, first import reviewed, batch accept. No timer: nobody answers "add these?" at 4 am; later a launchd
+      check may only add pending items and notify.
+- [ ] Later, maybe, Spotify. Verified 2026-10-03 in Spotify's February 2026 migration guide: playlist items are
+      readable only for playlists the user owns or collaborates on (not arbitrary public URLs), Development Mode
+      needs the app owner on Premium and allows 5 users; since Nov 2024 algorithmic and Spotify editorial
+      playlists are off-limits to new apps. So: user OAuth (PKCE), own playlists only. Matching to YouTube: ISRC
+      or artist + title + duration + version words, always reviewed, never the first `ytsearch` hit (covers,
+      live, nightcore, loops); a YouTube rip often fails AcoustID, so "downloaded, unidentified" is a real state.
+- [ ] Radio: only if a station publishes a track history (an API or page); ICY metadata brings ads and DJ talk.
+      Out of scope until there is a concrete station to look at.
