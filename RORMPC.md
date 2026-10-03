@@ -3,6 +3,10 @@
 A personal fork of [rmpc](https://github.com/mierak/rmpc). Fork code lives in its own files; upstream files
 only get the few lines that register new panes, so rebasing on upstream stays mechanical.
 
+The binary is `rormpc` and its config lives in `~/.config/rormpc/`, so upstream `rmpc` can stay installed
+next to it. Install with `scripts/rormpc_install.sh install` (keeps the previous binary;
+`rollback` and `list` too). Commits carry "(AI-assisted)" (see AGENTS.md).
+
 ## Hits pane
 
 Ranked chart hits produced by the `hits` CLI (dotfiles `~/scripts/hits`), e.g.
@@ -22,8 +26,8 @@ replaced. The pane re-reads the file when it changes and when the MPD database c
 
 ## Build revision
 
-`Status(BuildRevision)` renders "rormpc <short sha>" (with `+` if the binary was built with uncommitted
-changes), usable in any theme property, e.g. a border title:
+`Status(BuildRevision)` renders "rormpc <short sha>[+] <commit subject>" (`+` if the binary was built with
+uncommitted changes), usable in any theme property, e.g. a border title:
 `(kind: Property(Status(BuildRevision)), style: (fg: "#7aa0cd"))`.
 
 Next: filter column in the pane (decades or year range, Top %, genres) that runs `hits --json` itself.
