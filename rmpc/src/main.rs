@@ -500,3 +500,13 @@ fn print_version() {
         option_env!("VERGEN_GIT_DESCRIBE").map(|g| format!(" git {g}")).unwrap_or_default()
     );
 }
+
+/// rormpc: the commit this binary was built from, e.g. "rormpc 4d1a4c9+" ("+" = uncommitted changes).
+pub fn build_revision() -> &'static str {
+    static REV: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    REV.get_or_init(|| {
+        let sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
+        let dirty = option_env!("VERGEN_GIT_DIRTY") == Some("true");
+        format!("rormpc {sha}{}", if dirty { "+" } else { "" })
+    })
+}

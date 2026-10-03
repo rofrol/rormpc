@@ -64,6 +64,8 @@ pub enum StatusPropertyFile {
     Consume,
     State,
     Partition,
+    /// rormpc: short git sha of the build, "+" if built with uncommitted changes
+    BuildRevision,
     RepeatV2 {
         #[serde(default = "defaults::default_on_label")]
         on_label: String,
@@ -205,6 +207,8 @@ pub enum StatusProperty {
         stopped_style: Option<Style>,
     },
     Partition,
+    /// rormpc: short git sha of the build, "+" if built with uncommitted changes
+    BuildRevision,
     Elapsed,
     Duration,
     Crossfade,
@@ -432,6 +436,7 @@ impl TryFrom<StatusPropertyFile> for StatusProperty {
                 stopped_style: None,
             },
             StatusPropertyFile::Partition => StatusProperty::Partition,
+            StatusPropertyFile::BuildRevision => StatusProperty::BuildRevision,
             StatusPropertyFile::Duration => StatusProperty::Duration,
             StatusPropertyFile::Elapsed => StatusProperty::Elapsed,
             StatusPropertyFile::Volume => StatusProperty::Volume,

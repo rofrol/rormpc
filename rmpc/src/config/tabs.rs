@@ -213,8 +213,6 @@ pub enum PaneTypeFile {
     Hits {
         #[serde(default)]
         path: Option<String>,
-        #[serde(default)]
-        format: Option<Vec<PropertyFile<SongPropertyFile>>>,
     },
 }
 
@@ -260,7 +258,6 @@ pub enum PaneType {
     Empty,
     Hits {
         path: String,
-        format: Vec<Property<SongProperty>>,
     },
 }
 
@@ -400,9 +397,8 @@ impl TryFrom<PaneTypeFile> for PaneType {
             }
             PaneTypeFile::Cava => PaneType::Cava,
             PaneTypeFile::Empty() => PaneType::Empty,
-            PaneTypeFile::Hits { path, format } => PaneType::Hits {
+            PaneTypeFile::Hits { path } => PaneType::Hits {
                 path: path.unwrap_or_else(|| "~/.cache/rormpc/hits/current.json".to_owned()),
-                format: format.unwrap_or_default().into_iter().map(|p| p.convert()).try_collect()?,
             },
         })
     }

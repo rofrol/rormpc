@@ -309,10 +309,9 @@ impl<'panes> PaneContainer<'panes> {
                         ctx,
                     )) as Box<dyn BoxedPane>,
                 )),
-                PaneType::Hits { path, format } => Some((
+                PaneType::Hits { path } => Some((
                     pane.pane.clone(),
-                    Box::new(HitsPane::new(path.clone(), pane.pane.clone(), format.clone(), ctx))
-                        as Box<dyn BoxedPane>,
+                    Box::new(HitsPane::new(path.clone())) as Box<dyn BoxedPane>,
                 )),
                 _ => None,
             })
@@ -611,6 +610,9 @@ impl Property<PropertyKind> {
                 }
                 StatusProperty::Partition => {
                     Some(Either::Left(Span::styled(&status.partition, style)))
+                }
+                StatusProperty::BuildRevision => {
+                    Some(Either::Left(Span::styled(crate::build_revision(), style)))
                 }
                 StatusProperty::Volume => {
                     Some(Either::Left(Span::styled(status.volume.value().to_string(), style)))
