@@ -2,7 +2,7 @@
 //! set rmpc's like sticker, show which key does the same thing outside the menu, and keep the same file
 //! from piling up in the queue.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Result;
 use rmpc_mpd::{
@@ -167,11 +167,19 @@ pub fn confirm_remove_duplicates(ctx: &Ctx, count: usize) {
     );
 }
 
+/// Queue marks re-pointed at the same songs after the queue changed. Marks are row indices, so without
+/// this a mark stays on its row and lands on whatever song moves there (the "M" marker then sits in front
+/// of an unrelated title). Songs that left the queue lose their mark.
+pub fn remap_marks(old: &[Song], marked: &BTreeSet<usize>, new: &[Song]) -> BTreeSet<usize> {
+    let ids: HashSet<u32> = marked.iter().filter_map(|idx| old.get(*idx)).map(|s| s.id).collect();
+    new.iter().enumerate().filter(|(_, s)| ids.contains(&s.id)).map(|(idx, _)| idx).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use rmpc_mpd::commands::Song;
 
-    use super::duplicate_ids;
+    use super::{duplicate_ids, remap_marks};
 
     fn song(id: u32, file: &str) -> Song {
         Song { id, file: file.to_owned(), ..Default::default() }
@@ -185,5 +193,14 @@ mod tests {
         assert_eq!(duplicate_ids(&q, None), vec![3, 4, 5]);
         assert_eq!(duplicate_ids(&q, Some(6)), vec![3, 4, 5]);
         assert!(duplicate_ids(&[song(1, "a"), song(2, "b")], Some(1)).is_empty());
+    }
+
+    #[test]
+    fn marks_follow_songs_not_rows() {
+        let old = [song(1, "a"), song(2, "b"), song(3, "c"), song(4, "d")];
+        let new = [song(3, "c"), song(5, "e"), song(4, "d"), song(1, "a")];
+        let remapped = remap_marks(&old, &[0, 1, 3].into(), &new);
+        assert_eq!(remapped, [2, 3].into());
+        assert!(remap_marks(&old, &[1].into(), &new).is_empty());
     }
 }

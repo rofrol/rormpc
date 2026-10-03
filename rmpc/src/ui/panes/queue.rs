@@ -585,7 +585,13 @@ impl Pane for QueuePane {
                 self.recalculate_album_indices();
             }
             UiEvent::QueueChanged => {
+                let marked = crate::ui::rormpc_actions::remap_marks(
+                    &self.queue.items,
+                    self.queue.marked(),
+                    &ctx.queue,
+                );
                 self.queue.items.clone_from(&ctx.queue);
+                *self.queue.marked_mut() = marked;
                 self.recalculate_album_indices();
             }
             UiEvent::SongChanged => {
