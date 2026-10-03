@@ -258,20 +258,32 @@ impl HitsPane {
             .skip(skip)
             .map(|(i, row)| {
                 let text = filters.line(*row);
-                let base = if matches!(row, FilterRow::Mode | FilterRow::Apply) {
+                let label_style = if matches!(row, FilterRow::Mode | FilterRow::Apply) {
                     ctx.config.theme.preview_label_style
                 } else {
                     Style::default()
                 };
-                if i != self.filter_sel || !self.focus_filters {
-                    return Line::from(Span::styled(text, base));
-                }
-                // cursor highlights only the control ("[x] 11-20%", "‹ 1985 ›"), not the indent or the group label
+                let cursor = i == self.filter_sel;
+                // the cursor is a gutter marker, never a background: colour on "[x]" would read as "checked".
+                // Without focus the marker stays dim, so h/l returns to the same row.
+                let gutter = match (cursor, self.focus_filters) {
+                    (true, true) => Span::styled("›", ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD)),
+                    (true, false) => Span::styled("›", Style::default().add_modifier(Modifier::DIM)),
+                    _ => Span::raw(" "),
+                };
                 let at = text.find(['[', '‹']).unwrap_or(0);
                 let (label, control) = text.split_at(at);
+                let mut control_style = Style::default();
+                if ["[x]", "[+]", "[−]"].iter().any(|on| control.starts_with(on)) {
+                    control_style = ctx.config.theme.preview_label_style; // checked state lives in the box
+                }
+                if cursor && self.focus_filters {
+                    control_style = control_style.add_modifier(Modifier::BOLD);
+                }
                 Line::from(vec![
-                    Span::styled(label.to_owned(), base),
-                    Span::styled(control.to_owned(), ctx.config.theme.current_item_style),
+                    gutter,
+                    Span::styled(label.to_owned(), label_style),
+                    Span::styled(control.to_owned(), control_style),
                 ])
             })
             .collect();
