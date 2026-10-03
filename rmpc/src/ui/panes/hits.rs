@@ -235,10 +235,10 @@ impl HitsPane {
         let Some(&row) = rows.get(self.filter_sel) else { return false };
         let Some(filters) = self.filters.as_mut() else { return false };
         match action {
-            CommonAction::Down => self.filter_sel = (self.filter_sel + 1).min(rows.len() - 1),
-            CommonAction::Up => self.filter_sel = self.filter_sel.saturating_sub(1),
-            CommonAction::Top => self.filter_sel = 0,
-            CommonAction::Bottom => self.filter_sel = rows.len() - 1,
+            CommonAction::Down => self.filter_sel = snap(&rows, self.filter_sel + 1, true),
+            CommonAction::Up => self.filter_sel = snap(&rows, self.filter_sel.saturating_sub(1), false),
+            CommonAction::Top => self.filter_sel = snap(&rows, 0, true),
+            CommonAction::Bottom => self.filter_sel = snap(&rows, rows.len() - 1, false),
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => self.apply(ctx),
             CommonAction::Confirm | CommonAction::Select => filters.toggle(row),
             CommonAction::Left => {
@@ -252,7 +252,8 @@ impl HitsPane {
             _ => return false,
         }
         // the row list changes when switching decades <-> range
-        self.filter_sel = self.filter_sel.min(self.filter_rows().len().saturating_sub(1));
+        let rows = self.filter_rows();
+        self.filter_sel = snap(&rows, self.filter_sel, true);
         self.scroll_filters(0);
         true
     }
@@ -282,7 +283,10 @@ impl HitsPane {
             .skip(self.filter_offset)
             .map(|(i, row)| {
                 let text = filters.line(*row);
-                let label_style = if matches!(row, FilterRow::Source | FilterRow::Sort | FilterRow::Mode | FilterRow::Apply) {
+                let label_style = if matches!(
+                    row,
+                    FilterRow::Heading(_) | FilterRow::Source | FilterRow::Sort | FilterRow::Mode | FilterRow::Apply
+                ) {
                     ctx.config.theme.preview_label_style
                 } else {
                     Style::default()
@@ -295,10 +299,10 @@ impl HitsPane {
                     (true, false) => Span::styled("›", Style::default().add_modifier(Modifier::DIM)),
                     _ => Span::raw(" "),
                 };
-                let at = text.find(['[', '‹']).unwrap_or(0);
+                let at = text.find(['[', '‹']).unwrap_or(text.len());
                 let (label, control) = text.split_at(at);
                 let mut control_style = Style::default();
-                if ["[x]", "[+]", "[−]"].iter().any(|on| control.starts_with(on)) {
+                if ["[x]", "[+]", "[-]"].iter().any(|on| control.starts_with(on)) {
                     control_style = ctx.config.theme.preview_label_style; // checked state lives in the box
                 }
                 if cursor && self.focus_filters {
@@ -533,7 +537,7 @@ impl Pane for HitsPane {
             match event.kind {
                 MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
                     let idx = self.filter_offset + usize::from(event.y.saturating_sub(self.filter_area.y));
-                    if idx < self.filter_rows().len() {
+                    if self.filter_rows().get(idx).is_some_and(|row| !matches!(row, FilterRow::Heading(_))) {
                         self.focus_filters = true;
                         self.filter_sel = idx;
                         self.filter_action(&CommonAction::Confirm, ctx);
@@ -544,7 +548,8 @@ impl Pane for HitsPane {
                     let step = ctx.config.scroll_amount.max(1) as isize;
                     self.scroll_filters(if matches!(event.kind, MouseEventKind::ScrollDown) { step } else { -step });
                     let height = usize::from(self.filter_area.height).max(1);
-                    self.filter_sel = self.filter_sel.clamp(self.filter_offset, self.filter_offset + height - 1);
+                    let sel = self.filter_sel.clamp(self.filter_offset, self.filter_offset + height - 1);
+                    self.filter_sel = snap(&self.filter_rows(), sel, sel > self.filter_sel);
                 }
                 _ => return Ok(()),
             }
@@ -622,8 +627,20 @@ const GENRES: [&str; 18] = [
     "folk", "latin", "jazz", "blues", "punk", "reggae", "classical",
 ];
 
+/// Nearest row at or after (`forward`) / before `i` the cursor may stop on: headings are skipped, and at either
+/// end it turns back, so the cursor never rests on a heading.
+fn snap(rows: &[FilterRow], i: usize, forward: bool) -> usize {
+    let i = i.min(rows.len().saturating_sub(1));
+    let stop = |j: &usize| !matches!(rows[*j], FilterRow::Heading(_));
+    let after = || (i..rows.len()).find(stop);
+    let before = || (0..=i).rev().find(stop);
+    if forward { after().or_else(before) } else { before().or_else(after) }.unwrap_or(0)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FilterRow {
+    /// group title on its own line; the cursor skips it
+    Heading(&'static str),
     Source,
     Sort,
     Mode,
@@ -675,8 +692,11 @@ impl Filters {
         } else {
             rows.extend((0..DECADES.len()).map(FilterRow::Decade));
         }
+        rows.push(FilterRow::Heading("Top %"));
         rows.extend((0..TOPS.len()).map(FilterRow::Top));
+        rows.push(FilterRow::Heading("Genres  +in  -out"));
         rows.extend((0..GENRES.len()).map(FilterRow::Genre));
+        rows.push(FilterRow::Heading("Options"));
         rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
         rows
     }
@@ -795,16 +815,17 @@ impl Filters {
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
             FilterRow::From => format!("  from ‹ {} ›", self.from),
             FilterRow::To => format!("  to   ‹ {} ›", self.to),
-            FilterRow::Top(i) => {
-                format!("{} {} {}-{}%", if i == 0 { "Top %" } else { "     " }, check(self.tops[i]), TOPS[i].0, TOPS[i].1)
-            }
+            // every box sits at the same 2-cell indent under its heading: a hanging label per group made the
+            // columns step like an expandable tree
+            FilterRow::Heading(title) => title.to_owned(),
+            FilterRow::Top(i) => format!("  {} {}-{}%", check(self.tops[i]), TOPS[i].0, TOPS[i].1),
             FilterRow::Genre(i) => {
-                let mark = match self.genres[i] { 1 => "+", -1 => "−", _ => " " };
-                format!("{} [{mark}] {}", if i == 0 { "Genres" } else { "      " }, GENRES[i])
+                let mark = match self.genres[i] { 1 => "+", -1 => "-", _ => " " };
+                format!("  [{mark}] {}", GENRES[i])
             }
-            FilterRow::Owned => format!("{} owned only", check(self.owned)),
-            FilterRow::ShowHidden => format!("{} show hidden", check(self.show_hidden)),
-            FilterRow::Apply => "      [ Apply ]".to_owned(),
+            FilterRow::Owned => format!("  {} owned only", check(self.owned)),
+            FilterRow::ShowHidden => format!("  {} show hidden", check(self.show_hidden)),
+            FilterRow::Apply => "  [ Apply ]".to_owned(),
         }
     }
 
@@ -819,7 +840,7 @@ impl Filters {
             FilterRow::Genre(i) => self.genres[i] = match self.genres[i] { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
-            FilterRow::From | FilterRow::To | FilterRow::Apply => {}
+            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::Apply => {}
         }
     }
 
