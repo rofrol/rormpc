@@ -186,8 +186,9 @@ fn expand_home(path: &str) -> String {
 
 impl Pane for HitsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        let [main, details] =
-            Layout::horizontal([Constraint::Percentage(65), Constraint::Percentage(35)]).areas(area);
+        let [main, details] = Layout::horizontal([Constraint::Percentage(65), Constraint::Percentage(35)])
+            .spacing(3)
+            .areas(area);
         let [table_area, footer] =
             Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(main);
         self.table_area = table_area;
