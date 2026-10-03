@@ -64,6 +64,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
         wake, a tiny config (MPD address). Drop: redis/memcached, websockets, MusicBrainz.
       - Watch: forcing Playing at startup can take the Now Playing slot from Music/Spotify/a browser while
         MPD is paused (maybe claim it on the first MPD activity instead); ad-hoc sign the binary for local use.
+      - Where it lives (asked Sol and MiMo again, both chose this): a new crate in this workspace, e.g.
+        `rormpc-now-playable` (thin macOS binary, target-gated objc2 deps; MPD-state mapping in its own
+        module that rmpcd could use later), reusing `rmpc-mpd`. Not a dependency of the TUI: the keys must
+        work while rormpc is closed. Not inside rmpcd for now: rmpcd is unused here, early stage, tokio + Lua,
+        and edits there would conflict on every rebase. Only the workspace `members` line touches upstream.
+      - Daemons on the Mac stay at three: mpd, listenbrainz-mpd, the port (it replaces mpd-now-playable;
+        never run both). Do not start rmpcd on macOS and do not move scrobbling into it (its plugin is
+        Last.fm, not ListenBrainz).
+      - Install: an opt-in `rormpc_install.sh now-playable install|uninstall|rollback`, separate from the
+        TUI install; on install it uninstalls mpd-now-playable's LaunchAgent, rollback restores it.
+      - The idle thread blocks in `idle` and MPD accepts only `noidle` then, so commands from the keys go
+        through a second connection (a command worker), never the idle one.
       - Estimates from the models: a proof of concept in a day or two, as reliable as the Python tool in
         one to two weeks. Spike first: a launchd-started binary that receives play/pause and shows a title.
 - [ ] Windows: no plan unless MPD on Windows is actually used (SMTC, e.g. via souvlaki; needs a hidden HWND with a
