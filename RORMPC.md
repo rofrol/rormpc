@@ -42,13 +42,19 @@ hidden songs (marked `h`) to review and unhide them. Menu items show the key tha
 rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default
 `~/.local/state`, not in the hand-edited config; a tab missing from the config falls back to the first one).
 
-## Deletion queue (`ox`, action `ShowDeletions`)
+## Delete menu (Ctrl-x)
 
-Songs trashed with Ctrl-x (`musicdb delete`, Ctrl-y undoes) wait in a queue. `ox` opens it: per song choose
-"remove from the YouTube playlists" (`[x]` by default) and "delete the ListenBrainz listens" (off by default,
-irreversible); h/l pick the column, Space toggles, Enter shows exactly what will happen with "Cancel" as the
-default button. `musicdb deletions --confirm ID --[no-]youtube --[no-]listenbrainz` runs in a background thread
-per song; each step's outcome is shown and a failed step stays queued for a retry.
+A global key bound to `ExternalCommand(["…/musicdb", "delete"])` (Ctrl-x in my config) doesn't run it: rormpc
+opens a delete menu for the songs the command would get (the selection, else the playing song). The Queue and
+Hits context menus open the same menu ("Delete library file…"). Four items, two independent choices:
+Move to Trash · Move to Trash + delete the history · Delete permanently · Delete permanently + delete the history.
+"History" = the song's ListenBrainz listens (irreversible; kept when another library file has the same
+recording), the video in my chosen YouTube playlists and the local plays. `musicdb delete --preview [--youtube]`
+fills in the listen count and the playlist titles in a background thread; the history items wait for both, so
+their confirmation names exactly what goes. Everything except plain Trash asks first with "Cancel" as the default
+button. `musicdb delete [--permanent] [--listenbrainz]` does the work in the background; failed remote steps stay
+in its journal and `musicdb update` retries them hourly. Ctrl-y (`musicdb undo`) restores the last trashed file,
+not deleted history.
 
 ## Build revision
 

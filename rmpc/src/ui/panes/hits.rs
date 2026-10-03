@@ -377,8 +377,8 @@ impl HitsPane {
         if let Some(file) = r.file.clone() {
             let hint = rormpc_actions::external_key_hint(ctx, &["musicdb", "delete"]);
             menu = menu.list_section(ctx, move |mut section| {
-                section.add_item(format!("Move library file to Trash…{hint}"), move |ctx| {
-                    rormpc_actions::confirm_trash(ctx, file);
+                section.add_item(format!("Delete library file…{hint}"), move |ctx| {
+                    rormpc_actions::open_delete_menu(ctx, vec![file]);
                     Ok(())
                 });
                 Some(section)

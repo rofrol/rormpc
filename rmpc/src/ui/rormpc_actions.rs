@@ -1,8 +1,8 @@
-//! rormpc: actions shared by context menus (Queue, Hits): trash a library file the same way as Ctrl-x,
+//! rormpc: actions shared by context menus (Queue, Hits): delete a library file the same way as Ctrl-x,
 //! set rmpc's like sticker, show which key does the same thing outside the menu, and keep the same file
 //! from piling up in the queue.
 
-use std::{collections::HashSet, process::Command};
+use std::collections::HashSet;
 
 use anyhow::Result;
 use rmpc_mpd::{
@@ -22,7 +22,10 @@ use crate::{
         macros::{modal, status_info},
         mpd_client_ext::{Enqueue, MpdClientExt},
     },
-    ui::modals::confirm_modal::{Action, ConfirmModal},
+    ui::modals::{
+        confirm_modal::{Action, ConfirmModal},
+        delete_menu::DeleteMenu,
+    },
 };
 
 /// " (<C-x>)": the first global key bound to an external command whose arguments contain all `words`.
@@ -57,29 +60,29 @@ pub fn set_like(ctx: &Ctx, file: String, value: &'static str) {
     });
 }
 
-/// Ask, then `musicdb delete FILE` (Trash + deletion queue) in a background thread. Cancel is the default.
-pub fn confirm_trash(ctx: &Ctx, file: String) {
-    let undo = external_key_hint(ctx, &["musicdb", "undo"]);
-    let message = vec![
-        format!("Move this library file to the Trash?\n\n{file}"),
-        format!("\nIts YouTube/ListenBrainz cleanup is queued for the deletion queue (ox).\nUndo:{undo}"),
-    ];
-    let on_trash = move |_: &Ctx| -> Result<()> {
-        std::thread::spawn(move || {
-            let _ = Command::new("musicdb").args(["delete", &file]).status();
-        });
-        Ok(())
-    };
-    modal!(
-        ctx,
-        ConfirmModal::builder()
-            .ctx(ctx)
-            .message(message)
-            .action(Action::CustomButtons {
-                buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Move to Trash", Box::new(on_trash))],
-            })
-            .build()
-    );
+/// The delete menu (Trash or permanent, keep or delete the history) for these library files.
+pub fn open_delete_menu(ctx: &Ctx, files: Vec<String>) {
+    modal!(ctx, DeleteMenu::new(ctx, files));
+}
+
+/// Ctrl-x is bound to `musicdb delete`: instead of running it, open the delete menu for the songs it would
+/// get ($SELECTED_SONGS, else $FILE, the playing song). False for any other command, which runs as usual.
+pub fn delete_menu_instead(ctx: &Ctx, command: &[String], env: &[(String, String)]) -> bool {
+    let is_delete = matches!(command, [cmd, arg] if cmd.ends_with("musicdb") && arg == "delete");
+    if !is_delete {
+        return false;
+    }
+    let var = |name: &str| env.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str());
+    let files: Vec<String> = var("SELECTED_SONGS")
+        .or_else(|| var("FILE"))
+        .map(|v| v.lines().filter(|l| !l.is_empty()).map(str::to_owned).collect())
+        .unwrap_or_default();
+    if files.is_empty() {
+        status_info!("No song to delete");
+    } else {
+        open_delete_menu(ctx, files);
+    }
+    true
 }
 
 /// Queue a library file from Hits. A file already in the queue is not appended again (unless `copy`):

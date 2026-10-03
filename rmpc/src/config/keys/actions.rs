@@ -26,8 +26,6 @@ pub enum GlobalAction {
     ShowOutputs,
     ShowDecoders,
     ShowDownloads,
-    /// rormpc: the deletion queue (finish or review Ctrl-x deletions)
-    ShowDeletions,
     #[strum(to_string = "Partition({name:?})")]
     Partition {
         name: Option<String>,
@@ -79,7 +77,6 @@ pub enum GlobalActionFile {
     ShowOutputs,
     ShowDecoders,
     ShowDownloads,
-    ShowDeletions,
     Partition {
         #[serde(default)]
         name: Option<String>,
@@ -136,7 +133,6 @@ impl From<GlobalActionFile> for GlobalAction {
             GlobalActionFile::ShowDecoders => GlobalAction::ShowDecoders,
             GlobalActionFile::ShowCurrentSongInfo => GlobalAction::ShowCurrentSongInfo,
             GlobalActionFile::ShowDownloads => GlobalAction::ShowDownloads,
-            GlobalActionFile::ShowDeletions => GlobalAction::ShowDeletions,
             GlobalActionFile::CommandMode => GlobalAction::CommandMode,
             GlobalActionFile::Command { command, description } => {
                 GlobalAction::Command { command, description }
@@ -199,7 +195,6 @@ impl ToDescription for GlobalAction {
                 "Show metadata of the currently playing song in a modal popup".into()
             }
             GlobalAction::ShowDownloads => "Show current downloads".into(),
-            GlobalAction::ShowDeletions => "Show the deletion queue (finish Ctrl-x deletions)".into(),
             GlobalAction::ToggleRepeat => "Toggle repeat".into(),
             GlobalAction::ToggleSingle => {
                 "Whether to stop playing after single track or repeat track/playlist when repeat is on".into()

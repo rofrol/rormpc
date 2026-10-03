@@ -674,7 +674,13 @@ fn main_task<B: Backend + std::io::Write>(
                             MpdQueryResult::ExternalCommand(command, args, songs),
                         ) => {
                             let songs = songs.iter().map(|s| s.file.as_str());
-                            run_external(command, args, create_env(&ctx, songs));
+                            let env = create_env(&ctx, songs);
+                            // rormpc: Ctrl-x (`musicdb delete`) opens the delete menu instead
+                            if !(args.is_empty()
+                                && crate::ui::rormpc_actions::delete_menu_instead(&ctx, &command, &env))
+                            {
+                                run_external(command, args, env);
+                            }
                         }
                         (id, target, data) => {
                             if let Err(err) = ui.on_command_finished(id, target, data, &mut ctx) {

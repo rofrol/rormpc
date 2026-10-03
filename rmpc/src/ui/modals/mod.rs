@@ -14,7 +14,7 @@ use crate::{
 pub mod add_random_modal;
 pub mod confirm_modal;
 pub mod decoders;
-pub mod deletions;
+pub mod delete_menu;
 pub mod downloads;
 pub mod info_list_modal;
 pub mod info_modal;

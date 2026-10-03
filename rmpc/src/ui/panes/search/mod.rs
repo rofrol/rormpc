@@ -355,7 +355,9 @@ impl SearchPane {
             if let GlobalAction::ExternalCommand { command, prompt, .. } = action {
                 let songs = self.songs_dir.items.iter().map(|song| song.file.as_str());
                 let env = create_env(ctx, songs);
-                if *prompt {
+                if crate::ui::rormpc_actions::delete_menu_instead(ctx, command, &env) {
+                    // rormpc: Ctrl-x opens the delete menu
+                } else if *prompt {
                     let command = command.clone();
                     modal!(
                         ctx,
@@ -556,7 +558,9 @@ impl SearchPane {
                 GlobalAction::ExternalCommand { command, prompt, .. } => {
                     let songs = self.items(false).map(|(_, song)| song.as_path());
                     let env = create_env(ctx, songs);
-                    if *prompt {
+                    if crate::ui::rormpc_actions::delete_menu_instead(ctx, command, &env) {
+                        // rormpc: Ctrl-x opens the delete menu
+                    } else if *prompt {
                         let command = command.clone();
                         modal!(
                             ctx,

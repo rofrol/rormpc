@@ -281,12 +281,12 @@ impl QueuePane {
                 }
                 Some(section)
             })
-            // rormpc: trashing the file is its own section, with a confirmation (Ctrl-x does it directly)
+            // rormpc: deleting the file is its own section: the same delete menu as Ctrl-x
             .list_section(ctx, |mut section| {
                 let file = self.queue.selected().map(|s| s.file.clone())?;
                 let hint = crate::ui::rormpc_actions::external_key_hint(ctx, &["musicdb", "delete"]);
-                section.add_item(format!("Move library file to Trash…{hint}"), move |ctx| {
-                    crate::ui::rormpc_actions::confirm_trash(ctx, file);
+                section.add_item(format!("Delete library file…{hint}"), move |ctx| {
+                    crate::ui::rormpc_actions::open_delete_menu(ctx, vec![file]);
                     Ok(())
                 });
                 Some(section)
@@ -1425,7 +1425,9 @@ impl Pane for QueuePane {
                 GlobalAction::ExternalCommand { command, prompt, .. } => {
                     let songs =
                         create_env(ctx, self.items(false).map(|(_, song)| song.file.as_str()));
-                    if *prompt {
+                    if crate::ui::rormpc_actions::delete_menu_instead(ctx, command, &songs) {
+                        // rormpc: Ctrl-x opens the delete menu
+                    } else if *prompt {
                         let command = command.clone();
                         modal!(
                             ctx,
