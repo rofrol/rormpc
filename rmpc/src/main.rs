@@ -501,12 +501,17 @@ fn print_version() {
     );
 }
 
-/// rormpc: the commit this binary was built from, e.g. "rormpc 4d1a4c9+" ("+" = uncommitted changes).
+/// rormpc: the commit this binary was built from, like roherdr's footer:
+/// "rormpc 4d1a4c9+ Add Hits pane" (sha, "+" = built with uncommitted changes, commit subject).
 pub fn build_revision() -> &'static str {
     static REV: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     REV.get_or_init(|| {
-        let sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
-        let dirty = option_env!("VERGEN_GIT_DIRTY") == Some("true");
-        format!("rormpc {sha}{}", if dirty { "+" } else { "" })
+        let known = |v: Option<&'static str>| v.filter(|v| !v.is_empty() && *v != "VERGEN_IDEMPOTENT_OUTPUT");
+        let sha = known(option_env!("VERGEN_GIT_SHA")).unwrap_or("unknown");
+        let dirty = if option_env!("VERGEN_GIT_DIRTY") == Some("true") { "+" } else { "" };
+        match known(option_env!("VERGEN_GIT_COMMIT_MESSAGE")) {
+            Some(subject) => format!("rormpc {sha}{dirty} {subject}"),
+            None => format!("rormpc {sha}{dirty}"),
+        }
     })
 }

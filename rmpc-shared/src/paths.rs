@@ -9,7 +9,7 @@ use crate::{
 const CONFIG_NAME: &str = "config.debug.ron";
 #[cfg(not(debug_assertions))]
 const CONFIG_NAME: &str = "config.ron";
-const CRATE_NAME: &str = "rmpc";
+const CRATE_NAME: &str = "rormpc"; // rormpc: own config dir, so upstream rmpc can coexist
 
 pub fn home_dir() -> Option<PathBuf> {
     ENV.var_os("HOME").filter(|home| !home.is_empty()).map(PathBuf::from)
@@ -41,7 +41,7 @@ pub fn runtime_dir() -> Option<PathBuf> {
 }
 
 pub fn rmpc_config_dir() -> Option<PathBuf> {
-    config_dir().map(|config_dir| config_dir.join("rmpc"))
+    config_dir().map(|config_dir| config_dir.join(CRATE_NAME))
 }
 
 pub fn rmpcd_config_dir() -> Option<PathBuf> {

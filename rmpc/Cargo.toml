@@ -9,6 +9,12 @@ homepage.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+
+# rormpc: installed as `rormpc` next to upstream `rmpc`
+[[bin]]
+name = "rormpc"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 

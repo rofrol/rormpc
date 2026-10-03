@@ -10,7 +10,7 @@ use clap_complete::{
 use clap_mangen::Man;
 use vergen_gitcl::{Emitter, GitclBuilder};
 
-static NAME: &str = "rmpc";
+static NAME: &str = "rormpc"; // rormpc: completions and man page for the renamed binary
 
 fn generate_man_pages(cmd: ClapCommand) -> Result<(), Box<dyn Error>> {
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -42,8 +42,8 @@ fn generate_shell_completions(mut cmd: ClapCommand) -> Result<(), Box<dyn Error>
 
 fn emit_git_info() -> Result<(), Box<dyn Error>> {
     Emitter::default()
-        // rormpc: sha + dirty feed the Status(BuildRevision) theme property
-        .add_instructions(&GitclBuilder::default().describe(false, false, None).sha(true).dirty(false).build()?)?
+        // rormpc: sha + dirty + subject feed the Status(BuildRevision) theme property
+        .add_instructions(&GitclBuilder::default().describe(false, false, None).sha(true).dirty(false).commit_message(true).build()?)?
         .emit()?;
 
     Ok(())

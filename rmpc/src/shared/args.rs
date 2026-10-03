@@ -112,7 +112,7 @@ pub fn parse_cli_line(s: &str) -> Result<Args, clap::Error> {
             "empty command",
         ));
     }
-    argv.insert(0, "rmpc".to_string()); // clap expects argv[0]
+    argv.insert(0, "rormpc".to_string()); // clap expects argv[0]
     <Args as Parser>::try_parse_from(argv)
 }
 
