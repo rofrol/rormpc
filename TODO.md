@@ -123,3 +123,14 @@ menu is dimmed behind as well: it is a centred popup here, not a menu at the poi
 TUI through herdr: hover highlight, one click opens "Show info", a double click outside closes the menu without
 playing the row underneath, the backdrop cells carry DIM and the popup does not. Still to check by eye: how strong
 DIM looks in Ghostty.
+
+- [ ] Hover lag reported 2026-10-03 (the user is not sure it is real). Measured through herdr (inject SGR motion,
+      poll `herdr pane read --ansi`): highlight in herdr's screen 14-40 ms after one motion event, 28-57 ms after a
+      burst of 301, so no backlog. Taps 50 ms apart measured the same at 30 and 60 fps (median 21 vs 20 ms):
+      that test cannot see the fps cap, which only delays renders closer than one frame apart (continuous
+      movement). The chain to the screen: rormpc frame pacing (`max_fps`, `core/event_loop.rs`), herdr's
+      `MIN_RENDER_INTERVAL` 16 ms plus its server-client hop, Ghostty vsync. Sol and MiMo: the 30 fps cap and herdr
+      are the likely parts. Tried first: `max_fps: 60` in the user's config. If it still feels slow: compare
+      rormpc run directly in Ghostty (outside herdr); then render at once for input events and keep the cap for
+      background ticks, coalescing consecutive motion events. The `now` taken before the wait in the event loop
+      only costs one extra `recv_timeout(0)` iteration, and its subtractions are checked (no underflow panic).
