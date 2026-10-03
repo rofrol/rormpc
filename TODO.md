@@ -124,13 +124,12 @@ TUI through herdr: hover highlight, one click opens "Show info", a double click 
 playing the row underneath, the backdrop cells carry DIM and the popup does not. Still to check by eye: how strong
 DIM looks in Ghostty.
 
-- [ ] Hover lag reported 2026-10-03 (the user is not sure it is real). Measured through herdr (inject SGR motion,
-      poll `herdr pane read --ansi`): highlight in herdr's screen 14-40 ms after one motion event, 28-57 ms after a
-      burst of 301, so no backlog. Taps 50 ms apart measured the same at 30 and 60 fps (median 21 vs 20 ms):
-      that test cannot see the fps cap, which only delays renders closer than one frame apart (continuous
-      movement). The chain to the screen: rormpc frame pacing (`max_fps`, `core/event_loop.rs`), herdr's
-      `MIN_RENDER_INTERVAL` 16 ms plus its server-client hop, Ghostty vsync. Sol and MiMo: the 30 fps cap and herdr
-      are the likely parts. Tried first: `max_fps: 60` in the user's config. If it still feels slow: compare
-      rormpc run directly in Ghostty (outside herdr); then render at once for input events and keep the cap for
-      background ticks, coalescing consecutive motion events. The `now` taken before the wait in the event loop
-      only costs one extra `recv_timeout(0)` iteration, and its subtractions are checked (no underflow panic).
+- [x] Hover lag reported 2026-10-03 (the user is not sure it is real). The user runs rormpc in a Ghostty quick
+      terminal, not in herdr, so the chain is rormpc frame pacing + Ghostty only. Measured by driving it through
+      herdr (inject SGR motion, poll `herdr pane read --ansi`): highlight 14-40 ms after one motion event, 28-57 ms
+      after a burst of 301, so no backlog. The 30 fps cap delays only renders closer than one frame apart
+      (continuous movement); taps 50 ms apart cannot show it. Done: `max_fps: 60` in the user's config, and
+      `core/event_loop.rs` draws at once after a key or mouse event once the event queue is drained (`user_input`);
+      `max_fps` still paces background renders. Second move 8 ms after the first at 30 fps: median 29 -> 22 ms
+      (about 15 ms of that is the herdr send/poll overhead of the test). Sol and MiMo agreed on the cause; MiMo's
+      claim of a `Duration` underflow panic in the pacing is wrong (`checked_sub` / `saturating_sub`).

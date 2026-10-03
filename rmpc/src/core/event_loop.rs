@@ -67,6 +67,10 @@ fn main_task<B: Backend + std::io::Write>(
     let mut ui = Ui::new(&ctx).expect("UI to be created correctly");
     let event_receiver = event_rx;
     let mut render_wanted = false;
+    // A key or mouse event since the last frame: draw as soon as the queue is drained instead of
+    // waiting for the frame interval, so hover and selection follow the user without a frame of lag.
+    // `max_fps` still paces renders caused by background events (status, idle).
+    let mut user_input = false;
     let max_fps = f64::from(ctx.config.max_fps);
     let mut min_frame_duration = Duration::from_secs_f64(1f64 / max_fps);
     let mut last_render = std::time::Instant::now()
@@ -147,6 +151,14 @@ fn main_task<B: Backend + std::io::Write>(
         };
 
         if let Some(event) = event {
+            if matches!(
+                event,
+                AppEvent::UserKeyInput(_)
+                    | AppEvent::UserMouseInput(_)
+                    | AppEvent::ActionResolved(_)
+            ) {
+                user_input = true;
+            }
             match event {
                 AppEvent::IgnoreIdleEvent(ev) => {
                     events_to_ignore[ev] += 1;
@@ -843,7 +855,7 @@ fn main_task<B: Backend + std::io::Write>(
         if render_wanted {
             let till_next_frame =
                 min_frame_duration.saturating_sub(now.duration_since(last_render));
-            if till_next_frame != Duration::ZERO {
+            if till_next_frame != Duration::ZERO && !(user_input && event_receiver.is_empty()) {
                 continue;
             }
             terminal
@@ -857,6 +869,7 @@ fn main_task<B: Backend + std::io::Write>(
             ctx.finish_frame();
             last_render = now;
             render_wanted = false;
+            user_input = false;
         }
     }
 
