@@ -257,14 +257,22 @@ impl HitsPane {
             .enumerate()
             .skip(skip)
             .map(|(i, row)| {
-                let style = if i == self.filter_sel && self.focus_filters {
-                    ctx.config.theme.current_item_style
-                } else if matches!(row, FilterRow::Mode) || *row == FilterRow::Apply {
+                let text = filters.line(*row);
+                let base = if matches!(row, FilterRow::Mode | FilterRow::Apply) {
                     ctx.config.theme.preview_label_style
                 } else {
                     Style::default()
                 };
-                Line::from(Span::styled(filters.line(*row), style))
+                if i != self.filter_sel || !self.focus_filters {
+                    return Line::from(Span::styled(text, base));
+                }
+                // cursor highlights only the control ("[x] 11-20%", "‹ 1985 ›"), not the indent or the group label
+                let at = text.find(['[', '‹']).unwrap_or(0);
+                let (label, control) = text.split_at(at);
+                Line::from(vec![
+                    Span::styled(label.to_owned(), base),
+                    Span::styled(control.to_owned(), ctx.config.theme.current_item_style),
+                ])
             })
             .collect();
         frame.render_widget(Paragraph::new(lines), area);
