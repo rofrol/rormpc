@@ -47,6 +47,8 @@ struct HitsFile {
     generated_at: String,
     #[serde(default)]
     args: HitsArgs,
+    #[serde(default)]
+    rank_note: Option<String>,
     rows: Vec<HitsRow>,
 }
 
@@ -62,6 +64,10 @@ struct HitsArgs {
     owned: bool,
     #[serde(default)]
     show_hidden: bool,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    sort: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -93,6 +99,7 @@ pub struct HitsPane {
     rows: Vec<HitsRow>,
     label: String,
     generated_at: String,
+    rank_note: String,
     error: Option<String>,
     loaded_mtime: Option<SystemTime>,
     state: DirState<TableState>,
@@ -121,6 +128,7 @@ impl HitsPane {
             rows: Vec::new(),
             label: String::new(),
             generated_at: String::new(),
+            rank_note: String::new(),
             error: None,
             loaded_mtime: None,
             state: DirState::default(),
@@ -143,6 +151,7 @@ impl HitsPane {
                 self.rows = file.rows;
                 self.label = file.label;
                 self.generated_at = file.generated_at;
+                self.rank_note = file.rank_note.unwrap_or_default();
                 self.error = None;
                 self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
                 if !self.rows.is_empty() {
@@ -284,7 +293,7 @@ impl HitsPane {
             .skip(self.filter_offset)
             .map(|(i, row)| {
                 let text = filters.line(*row);
-                let label_style = if matches!(row, FilterRow::Mode | FilterRow::Apply) {
+                let label_style = if matches!(row, FilterRow::Source | FilterRow::Sort | FilterRow::Mode | FilterRow::Apply) {
                     ctx.config.theme.preview_label_style
                 } else {
                     Style::default()
@@ -405,7 +414,7 @@ impl HitsPane {
             Line::from(r.artist.clone()),
             Line::default(),
             field("Rank", format!("#{} of {} ({:.0}%)", r.rank, r.cohort, r.pct.ceil())),
-            Line::from(Span::styled("chart rank within the chosen years and genres", dim)),
+            Line::from(Span::styled(self.rank_note.clone(), dim)),
             field("Year-end charts", years),
             field("Genres", if r.genres.is_empty() { "unknown".to_owned() } else { r.genres.join(", ") }),
             Line::default(),
@@ -633,6 +642,8 @@ const GENRES: [&str; 17] = [
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FilterRow {
+    Source,
+    Sort,
     Mode,
     Decade(usize),
     From,
@@ -647,6 +658,10 @@ enum FilterRow {
 /// What the filter column edits; turned into `hits` arguments on Apply.
 #[derive(Debug, Clone)]
 struct Filters {
+    /// false: Billboard year-end charts, true: my liked songs
+    likes: bool,
+    /// likes only: false = by plays, true = rediscover
+    rediscover: bool,
     by_range: bool,
     decades: [bool; 8],
     from: i32,
@@ -662,13 +677,17 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; 17], owned: false, show_hidden: false }
+        Self { likes: false, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; 17], owned: false, show_hidden: false }
     }
 }
 
 impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
-        let mut rows = vec![FilterRow::Mode];
+        let mut rows = vec![FilterRow::Source];
+        if self.likes {
+            rows.push(FilterRow::Sort);
+        }
+        rows.push(FilterRow::Mode);
         if self.by_range {
             rows.extend([FilterRow::From, FilterRow::To]);
         } else {
@@ -706,7 +725,16 @@ impl Filters {
     fn args(&self, json: &str) -> Vec<String> {
         let tops: Vec<String> =
             TOPS.iter().zip(self.tops).filter(|(_, on)| *on).map(|((lo, hi), _)| format!("{lo}-{hi}")).collect();
-        let mut args = vec!["--years".to_owned(), self.years(), "--top".to_owned()];
+        let mut args = Vec::new();
+        if self.likes {
+            args.extend(["--source".to_owned(), "likes".to_owned(), "--sort".to_owned()]);
+            args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
+        }
+        // likes without any decade ticked = all years (a chart needs a period)
+        if !(self.likes && !self.by_range && !self.decades.iter().any(|d| *d)) {
+            args.extend(["--years".to_owned(), self.years()]);
+        }
+        args.push("--top".to_owned());
         args.push(if tops.is_empty() { "1-100".to_owned() } else { tops.join(",") });
         let genres = self.genre_spec();
         if !genres.is_empty() {
@@ -768,12 +796,19 @@ impl Filters {
         }
         f.owned = args.owned;
         f.show_hidden = args.show_hidden;
+        f.likes = args.source.as_deref() == Some("likes");
+        f.rediscover = args.sort.as_deref() == Some("rediscover");
+        if f.likes && args.period.is_none() {
+            f.decades = [false; 8]; // all years
+        }
         f
     }
 
     fn line(&self, row: FilterRow) -> String {
         let check = |on: bool| if on { "[x]" } else { "[ ]" };
         match row {
+            FilterRow::Source => format!("Source: {}", if self.likes { "‹my likes›" } else { "‹Billboard US›" }),
+            FilterRow::Sort => format!("Sort:   {}", if self.rediscover { "‹rediscover›" } else { "‹by plays›" }),
             FilterRow::Mode => format!("Period: {}", if self.by_range { "‹year range›" } else { "‹decades›" }),
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
             FilterRow::From => format!("  from ‹ {} ›", self.from),
@@ -794,6 +829,8 @@ impl Filters {
     /// Space / Enter on a row.
     fn toggle(&mut self, row: FilterRow) {
         match row {
+            FilterRow::Source => self.likes = !self.likes,
+            FilterRow::Sort => self.rediscover = !self.rediscover,
             FilterRow::Mode => self.by_range = !self.by_range,
             FilterRow::Decade(i) => self.decades[i] = !self.decades[i],
             FilterRow::Top(i) => self.tops[i] = !self.tops[i],
@@ -811,6 +848,8 @@ impl Filters {
             FilterRow::From => self.from = clamp(self.from + delta),
             FilterRow::To => self.to = clamp(self.to + delta),
             FilterRow::Mode => self.by_range = !self.by_range,
+            FilterRow::Source => self.likes = !self.likes,
+            FilterRow::Sort => self.rediscover = !self.rediscover,
             _ => return false,
         }
         true

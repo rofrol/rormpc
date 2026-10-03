@@ -63,5 +63,9 @@ Enter on Apply runs `hits ... --json PATH` in a background thread. One run at a 
 queued; the table keeps the previous result and the status line says "running hits…" or shows the error.
 The column starts from the arguments stored in the current JSON file.
 
+"Source" switches between the Billboard US year-end charts and your liked songs (rmpc's like sticker); with
+likes, "Sort" is "by plays" or "rediscover" (liked, often played, not lately), no decade ticked means all years,
+and Top % is within your likes. The details panel explains what the rank means for the current source.
+
 Option `command` (default `["hits"]`) names the program; use an absolute path if rormpc is not started from a
 shell with `hits` on PATH: `Pane(Hits(command: ["/Users/me/scripts/hits"]))`.
