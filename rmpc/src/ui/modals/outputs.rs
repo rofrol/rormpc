@@ -24,6 +24,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct OutputsModal {
+    popup_area: Option<Rect>,
     id: Id,
     scrolling_state: DirState<TableState>,
     outputs_table_area: Rect,
@@ -34,6 +35,7 @@ impl OutputsModal {
     pub fn new(outputs: Vec<PartitionedOutput>) -> Self {
         let len = outputs.len();
         let mut result = Self {
+            popup_area: None,
             id: id::new(),
             outputs,
             scrolling_state: DirState::default(),
@@ -90,8 +92,13 @@ impl Modal for OutputsModal {
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut ratatui::Frame, ctx: &mut Ctx) -> anyhow::Result<()> {
         let popup_area = frame.area().centered(constraint!(==70), constraint!(==10));
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg_color)), popup_area);
@@ -267,6 +274,7 @@ impl Modal for OutputsModal {
             MouseEventKind::ScrollDown => {}
             MouseEventKind::ScrollUp => {}
             MouseEventKind::Drag { drag_start_position: _ } => {}
+            MouseEventKind::Moved => {}
         }
 
         Ok(())

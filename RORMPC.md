@@ -37,6 +37,11 @@ append-only log in the private data repo; hidden songs keep their place in the r
 the Top % cut), and "Move library file to Trash…" for owned songs. "show hidden" in the filter column lists
 hidden songs (marked `h`) to review and unhide them. Menu items show the key that does the same thing directly.
 
+Mouse in menus and modals: the menu item under the pointer is selected on hover and one click runs it (upstream
+needs a double click). A click outside a modal closes it like Esc and does not reach the pane underneath, even
+as the second click of a double click; confirmation dialogs stay open. With `modal_backdrop: true` in the theme
+the screen behind a modal is dimmed with the terminal's faint attribute (as herdr does), keeping its colours.
+
 ## Last tab
 
 rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default

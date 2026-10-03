@@ -11,7 +11,7 @@ use std::{
 use anyhow::Result;
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     symbols::border,
     text::{Line, Span},
@@ -109,6 +109,7 @@ impl Choice {
 
 #[derive(Debug)]
 pub struct DeleteMenu {
+    popup_area: Option<Rect>,
     id: Id,
     files: Vec<String>,
     sel: usize,
@@ -188,6 +189,7 @@ fn youtube_lines(songs: &[Preview], done: bool) -> Vec<String> {
 impl DeleteMenu {
     pub fn new(ctx: &Ctx, files: Vec<String>) -> Self {
         let menu = Self {
+            popup_area: None,
             id: id::new(),
             files,
             sel: 0,
@@ -289,8 +291,13 @@ impl Modal for DeleteMenu {
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
         let area = frame.area().centered(Constraint::Percentage(80), Constraint::Percentage(60));
+        self.popup_area = Some(area);
         frame.render_widget(Clear, area);
         if let Some(bg) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg)), area);

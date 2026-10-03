@@ -35,6 +35,7 @@ enum FocusedComponent {
 
 #[derive(derive_more::Debug)]
 pub struct SelectModal<'a, V: Display, Callback: FnOnce(&Ctx, V, usize) -> Result<()>> {
+    popup_area: Option<Rect>,
     id: Id,
     button_group_state: ButtonGroupState,
     button_group: ButtonGroup<'a>,
@@ -78,6 +79,7 @@ impl<'a, V: Display, Callback: FnOnce(&Ctx, V, usize) -> Result<()>> SelectModal
             );
 
         Self {
+            popup_area: None,
             id: id::new(),
             button_group,
             button_group_state,
@@ -98,8 +100,13 @@ impl<V: Display + std::fmt::Debug, Callback: FnOnce(&Ctx, V, usize) -> Result<()
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
         let popup_area = frame.area().centered(constraint!(==80), constraint!(==15));
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg_color)), popup_area);
@@ -331,6 +338,7 @@ impl<V: Display + std::fmt::Debug, Callback: FnOnce(&Ctx, V, usize) -> Result<()
             MouseEventKind::ScrollDown => {}
             MouseEventKind::ScrollUp => {}
             MouseEventKind::Drag { drag_start_position: _ } => {}
+            MouseEventKind::Moved => {}
         }
         Ok(())
     }

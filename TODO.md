@@ -99,20 +99,27 @@ Reported 2026-10-03. Causes found in the code:
 
 Plan (asked GPT-6.1 Sol and MiMo on 2026-10-03; both agreed on the points below):
 
-- [ ] Menu: hover selects the entry under the cursor, a single left click confirms it. One hit-test function shared by
+- [x] Menu: hover selects the entry under the cursor, a single left click confirms it. One hit-test function shared by
       hover and click (headers, separators, borders, scrolling); a click on blank space never runs the selected entry.
       Redraw only when the selection changes.
-- [ ] `Moved`: pass it on only while a modal that wants hover is open; drop it early otherwise, so motion causes no
+- [x] `Moved`: pass it on only while a modal that wants hover is open; drop it early otherwise, so motion causes no
       redraws or wakeups elsewhere. Check that nothing treats any mouse event as activity.
-- [ ] Click-through: double clicks are synthesised from two left clicks, so once one click closes the menu the second
+- [x] Click-through: double clicks are synthesised from two left clicks, so once one click closes the menu the second
       one arrives as `DoubleClick` on the pane underneath and can play/add a song. Reset the double-click tracker
       when a modal closes on a click (or swallow the next click at that position).
-- [ ] Outside click: an opt-in per modal (e.g. `fn layout(&self, frame: Rect) -> Option<Rect>` computed the same way
+- [x] Outside click: an opt-in per modal (e.g. `fn layout(&self, frame: Rect) -> Option<Rect>` computed the same way
       as in `render`, no stored rect, so it is right before the first render and after a resize; `None` means "not
       dismissible"). Menu, select, info, keybinds, outputs, decoders: close (same path as Esc). Input: cancel like Esc,
       never submit. Confirm / destructive modals: never close on an outside click. Swallow the click and wheel events
       outside instead of passing them through.
-- [ ] Backdrop: switch `modal_backdrop` to `Modifier::DIM` like herdr and enable it in the `roman` theme; decide
+- [x] Backdrop: switch `modal_backdrop` to `Modifier::DIM` like herdr and enable it in the `roman` theme; decide
       whether the context menu dims (herdr does not). Popups must start from `Clear` or they inherit DIM. Check in
       Ghostty and kitty (`faint-opacity` / `dim_opacity` decide how strong it is) and with bold/reversed selections.
-- [ ] Order: menu hover + single click with the click-through fix first, outside click second, backdrop last.
+- [x] Order: menu hover + single click with the click-through fix first, outside click second, backdrop last.
+
+Done 2026-10-03: `MouseEventKind::Moved`, `Section::item_at`, `Modal::area` (every modal except the confirmation
+one), `Ui::modal_click`; the menu ignores `DoubleClick`; `QueueFindModal::destroy` leaves insert mode. The context
+menu is dimmed behind as well: it is a centred popup here, not a menu at the pointer as in herdr. Checked in the
+TUI through herdr: hover highlight, one click opens "Show info", a double click outside closes the menu without
+playing the row underneath, the backdrop cells carry DIM and the popup does not. Still to check by eye: how strong
+DIM looks in Ghostty.

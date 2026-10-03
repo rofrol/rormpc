@@ -29,6 +29,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct InfoListModal {
+    popup_area: Option<Rect>,
     id: Id,
     scrolling_state: DirState<TableState>,
     table_area: Rect,
@@ -58,6 +59,7 @@ impl InfoListModal {
         let mut scrolling_state = DirState::default();
         scrolling_state.select(Some(0), 0);
         Self {
+            popup_area: None,
             id: id::new(),
             scrolling_state,
             items: items.into(),
@@ -96,9 +98,14 @@ impl Modal for InfoListModal {
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
         let (w, h) = self.size;
         let popup_area = frame.area().centered(constraint!(==w%), constraint!(==h%));
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg_color)), popup_area);
@@ -251,6 +258,7 @@ impl Modal for InfoListModal {
                 ctx.render()?;
             }
             MouseEventKind::Drag { drag_start_position: _ } => {}
+            MouseEventKind::Moved => {}
         }
 
         Ok(())

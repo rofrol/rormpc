@@ -205,6 +205,12 @@ impl Section for ListSection {
         Ok(false)
     }
 
+    fn item_at(&self, pos: Position) -> bool {
+        let list_area = self.areas[ListSectionArea::List];
+        list_area.contains(pos)
+            && self.state.get_at_rendered_row(pos.y.saturating_sub(list_area.y).into()).is_some()
+    }
+
     fn item_labels_iter(&self) -> Box<dyn Iterator<Item = &str> + '_> {
         Box::new(self.items.iter().map(|i| i.label.as_str()))
     }

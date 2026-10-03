@@ -14,8 +14,8 @@ use modals::{
 use panes::{PaneContainer, Panes, pane_call};
 use ratatui::{
     Frame,
-    layout::Rect,
-    style::{Color, Style},
+    layout::{Position, Rect},
+    style::{Color, Modifier, Style},
     widgets::Block,
 };
 use rmpc_mpd::{
@@ -53,7 +53,7 @@ use crate::{
         id::Id,
         keys::ActionEvent,
         macros::{modal, status_error, status_info, status_warn},
-        mouse_event::MouseEvent,
+        mouse_event::{MouseEvent, MouseEventKind},
         mpd_client_ext::{Enqueue, MpdClientExt},
         ytdlp::YtDlpHost,
     },
@@ -95,6 +95,9 @@ pub struct Ui<'ui> {
     tabs: HashMap<TabName, TabScreen>,
     layout: SizedPaneOrSplit,
     area: Rect,
+    /// Where the last click handled by a modal landed. A double click synthesised from it and a
+    /// second click after the modal closed must not reach the pane underneath.
+    modal_click: Option<Position>,
 }
 
 const OPEN_DECODERS_MODAL: &str = "open_decoders_modal";
@@ -118,6 +121,7 @@ impl<'ui> Ui<'ui> {
             layout: ctx.config.theme.layout.clone(),
             modals: Vec::default(),
             area: Rect::default(),
+            modal_click: None,
             tabs: Self::init_tabs(ctx)?,
         })
     }
@@ -216,7 +220,9 @@ impl<'ui> Ui<'ui> {
 
         if ctx.config.theme.modal_backdrop && !self.modals.is_empty() {
             let buffer = frame.buffer_mut();
-            buffer.set_style(*buffer.area(), Style::default().fg(Color::DarkGray));
+            // DIM like herdr: the colours stay, only fainter. Modals start from `Clear`, so their
+            // own cells are not dimmed.
+            buffer.set_style(*buffer.area(), Style::default().add_modifier(Modifier::DIM));
         }
 
         for modal in &mut self.modals {
@@ -227,8 +233,26 @@ impl<'ui> Ui<'ui> {
     }
 
     pub fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &mut Ctx) -> Result<()> {
+        let is_click = matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::RightClick);
         if let Some(ref mut modal) = self.modals.last_mut() {
+            if is_click {
+                self.modal_click = Some(event.into());
+                if modal.area().is_some_and(|area| !area.contains(event.into())) {
+                    modal.hide(ctx)?;
+                    return Ok(());
+                }
+            }
             modal.handle_mouse_event(event, ctx)?;
+            return Ok(());
+        }
+
+        // Panes have no hover, and each event they get triggers a render.
+        if matches!(event.kind, MouseEventKind::Moved) {
+            return Ok(());
+        }
+        if self.modal_click.take().is_some_and(|pos| pos == Position::from(event))
+            && matches!(event.kind, MouseEventKind::DoubleClick)
+        {
             return Ok(());
         }
 

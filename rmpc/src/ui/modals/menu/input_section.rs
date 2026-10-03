@@ -154,6 +154,10 @@ impl Section for InputSection<'_> {
         Ok(true)
     }
 
+    fn item_at(&self, pos: Position) -> bool {
+        self.area.contains(pos)
+    }
+
     fn item_labels_iter(&self) -> Box<dyn Iterator<Item = &str> + '_> {
         Box::new(std::iter::once(self.label.as_ref()))
     }

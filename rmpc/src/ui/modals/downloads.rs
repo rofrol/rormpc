@@ -35,6 +35,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct DownloadsModal {
+    popup_area: Option<Rect>,
     id: Id,
     queue: Dir<DownloadId, TableState>,
     table_area: Rect,
@@ -45,8 +46,13 @@ impl Modal for DownloadsModal {
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
         let popup_area = frame.area().centered(constraint!(==90), constraint!(==20));
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg_color)), popup_area);
@@ -197,6 +203,7 @@ impl Modal for DownloadsModal {
                 ctx.render()?;
             }
             MouseEventKind::Drag { drag_start_position: _ } => {}
+            MouseEventKind::Moved => {}
         }
         Ok(())
     }
@@ -223,7 +230,7 @@ impl DownloadsModal {
             queue.state.select(Some(0), 0);
         }
 
-        Self { id: id::new(), queue, table_area: Rect::default() }
+        Self { id: id::new(), queue, table_area: Rect::default(), popup_area: None }
     }
 
     pub fn create_menu(&self, ctx: &mut Ctx) {

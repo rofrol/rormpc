@@ -67,7 +67,7 @@ impl MouseEventTracker {
                 },
             }),
             CTMouseEventKind::Drag(_) => None,
-            CTMouseEventKind::Moved => None,
+            CTMouseEventKind::Moved => Some(MouseEvent { x, y, kind: MouseEventKind::Moved }),
             CTMouseEventKind::ScrollLeft => None,
             CTMouseEventKind::ScrollRight => None,
         }
@@ -90,6 +90,8 @@ pub enum MouseEventKind {
     ScrollDown,
     ScrollUp,
     Drag { drag_start_position: Position },
+    /// Pointer motion without a button. Only modals that use hover get it; `Ui` drops it otherwise.
+    Moved,
 }
 
 #[derive(Debug, Clone, Copy)]

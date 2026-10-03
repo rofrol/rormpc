@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use anyhow::Result;
-use ratatui::{Frame, symbols};
+use ratatui::{Frame, layout::Rect, symbols};
 
 use super::UiEvent;
 use crate::{
@@ -38,6 +38,12 @@ pub(crate) trait Modal: std::fmt::Debug {
     fn handle_key(&mut self, key: &mut ActionEvent, ctx: &mut Ctx) -> Result<()>;
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &mut Ctx) -> Result<()>;
+
+    /// The popup's outer area from the last render. A click outside it closes the modal like Esc;
+    /// `None` keeps the modal open (confirmations, or before the first render).
+    fn area(&self) -> Option<Rect> {
+        None
+    }
 
     fn on_query_finished(
         &mut self,

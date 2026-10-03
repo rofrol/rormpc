@@ -715,6 +715,7 @@ impl Pane for QueuePane {
             }
             MouseEventKind::RightClick => {}
             MouseEventKind::Drag { .. } => {}
+            MouseEventKind::Moved => {}
         }
 
         self.highlight_timeout(ctx);

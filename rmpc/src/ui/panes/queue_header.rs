@@ -211,6 +211,7 @@ impl Pane for QueueHeaderPane {
             MouseEventKind::ScrollDown => {}
             MouseEventKind::ScrollUp => {}
             MouseEventKind::Drag { .. } => {}
+            MouseEventKind::Moved => {}
         }
 
         Ok(())

@@ -219,6 +219,10 @@ impl Section for MultiActionSection<'_> {
         Ok(false)
     }
 
+    fn item_at(&self, pos: Position) -> bool {
+        self.area.contains(pos) && usize::from(pos.y.saturating_sub(self.area.y)) < self.items.len()
+    }
+
     fn item_labels_iter(&self) -> Box<dyn Iterator<Item = &str> + '_> {
         Box::new(self.items.iter().map(|i| i.label.as_str()))
     }

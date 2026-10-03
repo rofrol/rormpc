@@ -71,6 +71,8 @@ trait Section {
 
     fn left_click(&mut self, pos: ratatui::layout::Position, ctx: &Ctx);
     fn double_click(&mut self, pos: ratatui::layout::Position, ctx: &Ctx) -> Result<bool>;
+    /// Whether an item (not a scrollbar or empty row) is under `pos`, so a click there may run it.
+    fn item_at(&self, pos: ratatui::layout::Position) -> bool;
 
     fn item_labels_iter(&self) -> Box<dyn Iterator<Item = &str> + '_>;
 }
@@ -216,6 +218,15 @@ impl Section for SectionType<'_> {
             SectionType::Multi(s) => s.double_click(pos, ctx),
             SectionType::Input(s) => s.double_click(pos, ctx),
             SectionType::Select(s) => s.double_click(pos, ctx),
+        }
+    }
+
+    fn item_at(&self, pos: Position) -> bool {
+        match self {
+            SectionType::Menu(s) => s.item_at(pos),
+            SectionType::Multi(s) => s.item_at(pos),
+            SectionType::Input(s) => s.item_at(pos),
+            SectionType::Select(s) => s.item_at(pos),
         }
     }
 

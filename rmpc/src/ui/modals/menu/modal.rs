@@ -39,6 +39,7 @@ pub struct MenuModal<'a> {
     sections_labels: Vec<Vec<String>>,
     current_section_idx: usize,
     areas: Vec<Rect>,
+    popup_area: Option<Rect>,
     width: u16,
     id: Id,
     filter: Option<String>,
@@ -58,6 +59,7 @@ impl Modal for MenuModal<'_> {
 
         let popup_area =
             frame.area().centered(constraint!(==self.width), constraint!(==needed_height as u16));
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg_color)), popup_area);
@@ -213,20 +215,33 @@ impl Modal for MenuModal<'_> {
         Ok(())
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &mut Ctx) -> Result<()> {
         match event.kind {
-            MouseEventKind::LeftClick => {
-                if let Some(idx) = self.section_idx_at_position(event.into()) {
-                    if idx != self.current_section_idx {
-                        self.sections[self.current_section_idx].unselect(ctx);
+            // Hover selects the item under the pointer, like a desktop context menu. Not while
+            // typing: unselecting an input section would leave insert mode.
+            MouseEventKind::Moved => {
+                if ctx.input.is_insert_mode() {
+                    return Ok(());
+                }
+                if let Some(idx) = self.item_section_at_position(event.into()) {
+                    let before = (self.current_section_idx, self.sections[idx].selected());
+                    self.select_at_position(idx, event.into(), ctx);
+                    let after = (self.current_section_idx, self.sections[idx].selected());
+                    // A multi-action row also highlights the button under the pointer.
+                    if before != after || matches!(self.sections[idx], SectionType::Multi(_)) {
+                        ctx.render()?;
                     }
-                    self.current_section_idx = idx;
-                    self.sections[idx].left_click(event.into(), ctx);
-                    ctx.render()?;
                 }
             }
-            MouseEventKind::DoubleClick => {
-                if let Some(idx) = self.section_idx_at_position(event.into()) {
+            // A single click runs the item; a click on a border, scrollbar or empty row does
+            // nothing, so it never runs the item selected earlier.
+            MouseEventKind::LeftClick => {
+                if let Some(idx) = self.item_section_at_position(event.into()) {
+                    self.select_at_position(idx, event.into(), ctx);
                     self.sections[idx].double_click(event.into(), ctx)?;
                     if ctx.input.is_insert_mode() {
                         ctx.render()?;
@@ -235,6 +250,9 @@ impl Modal for MenuModal<'_> {
                     }
                 }
             }
+            // The first click already ran the item. The second one of a double click can arrive
+            // before the menu is gone and must not run it again.
+            MouseEventKind::DoubleClick => {}
             MouseEventKind::MiddleClick => {}
             MouseEventKind::RightClick => {}
             MouseEventKind::ScrollUp => {
@@ -266,6 +284,7 @@ impl<'a> MenuModal<'a> {
             sections_labels: Vec::default(),
             current_section_idx: 0,
             areas: Vec::new(),
+            popup_area: None,
             width: 40,
             id: id::new(),
             filter: None,
@@ -473,5 +492,17 @@ impl<'a> MenuModal<'a> {
 
     fn section_idx_at_position(&self, position: Position) -> Option<usize> {
         self.areas.iter().enumerate().find(|(_, a)| a.contains(position)).map(|(i, _)| i)
+    }
+
+    fn item_section_at_position(&self, position: Position) -> Option<usize> {
+        self.section_idx_at_position(position).filter(|&idx| self.sections[idx].item_at(position))
+    }
+
+    fn select_at_position(&mut self, idx: usize, position: Position, ctx: &Ctx) {
+        if idx != self.current_section_idx {
+            self.sections[self.current_section_idx].unselect(ctx);
+        }
+        self.current_section_idx = idx;
+        self.sections[idx].left_click(position, ctx);
     }
 }

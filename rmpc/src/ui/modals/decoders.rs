@@ -26,6 +26,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct DecodersModal {
+    popup_area: Option<Rect>,
     id: Id,
     scrolling_state: DirState<TableState>,
     table_area: Rect,
@@ -44,6 +45,7 @@ impl DecodersModal {
             })
             .collect();
         let mut result = Self {
+            popup_area: None,
             id: id::new(),
             decoders,
             scrolling_state: DirState::default(),
@@ -84,8 +86,13 @@ impl Modal for DecodersModal {
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
         let popup_area = frame.area().centered(constraint!(==80%), constraint!(==80%));
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg_color)), popup_area);
@@ -259,6 +266,7 @@ impl Modal for DecodersModal {
             MouseEventKind::ScrollDown => {}
             MouseEventKind::ScrollUp => {}
             MouseEventKind::Drag { drag_start_position: _ } => {}
+            MouseEventKind::Moved => {}
         }
 
         Ok(())

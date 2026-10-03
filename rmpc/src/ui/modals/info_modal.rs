@@ -5,7 +5,7 @@ use bon::bon;
 use itertools::Itertools;
 use ratatui::{
     Frame,
-    layout::Alignment,
+    layout::{Alignment, Rect},
     macros::constraint,
     prelude::{Constraint, Layout},
     style::Style,
@@ -28,6 +28,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct InfoModal<'a> {
+    popup_area: Option<Rect>,
     id: Id,
     message: Vec<String>,
     button_group_state: ButtonGroupState,
@@ -68,6 +69,7 @@ impl<'a> InfoModal<'a> {
             );
 
         Self {
+            popup_area: None,
             id: id::new(),
             message,
             button_group_state,
@@ -83,6 +85,10 @@ impl<'a> InfoModal<'a> {
 impl Modal for InfoModal<'_> {
     fn id(&self) -> Id {
         self.id
+    }
+
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
     }
 
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
@@ -103,6 +109,7 @@ impl Modal for InfoModal<'_> {
             constraint!(==width),
             constraint!(==self.size.map_or(u16::try_from(lines.len())? + 4, |v| v.height)),
         );
+        self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
 
         if let Some(bg_color) = ctx.config.theme.modal_background_color {

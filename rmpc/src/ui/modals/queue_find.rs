@@ -9,7 +9,7 @@ use nucleo_matcher::{
 };
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     symbols::border,
     text::{Line, Span},
@@ -33,6 +33,7 @@ use crate::{
 };
 
 pub struct QueueFindModal {
+    popup_area: Option<Rect>,
     id: Id,
     buffer: BufferId,
     matcher: Matcher,
@@ -54,6 +55,7 @@ impl QueueFindModal {
         let buffer = BufferId::new();
         ctx.input.insert_mode(buffer);
         Self {
+            popup_area: None,
             id: id::new(),
             buffer,
             matcher: Matcher::new(Config::DEFAULT),
@@ -109,9 +111,14 @@ impl Modal for QueueFindModal {
         self.id
     }
 
+    fn area(&self) -> Option<Rect> {
+        self.popup_area
+    }
+
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
         self.refresh(ctx);
         let area = frame.area().centered(Constraint::Percentage(70), Constraint::Percentage(70));
+        self.popup_area = Some(area);
         frame.render_widget(Clear, area);
         if let Some(bg) = ctx.config.theme.modal_background_color {
             frame.render_widget(Block::default().style(Style::default().bg(bg)), area);
@@ -166,6 +173,11 @@ impl Modal for QueueFindModal {
             "j/k move · Enter play · i edit filter · Esc close"
         };
         frame.render_widget(Paragraph::new(Span::styled(hint, Style::default().add_modifier(Modifier::DIM))), help);
+        Ok(())
+    }
+
+    fn destroy(&mut self, ctx: &Ctx) -> Result<()> {
+        ctx.input.destroy_buffer(self.buffer);
         Ok(())
     }
 
