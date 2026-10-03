@@ -41,7 +41,7 @@ RO_LB_REPO=https://github.com/rofrol/ro-listenbrainz-mpd
 RO_LB_TAG=v2.6.0-ro.3
 RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
 RORMPC_TOOLS_REPO=https://github.com/rofrol/rormpc-tools
-RORMPC_TOOLS_TAG=v0.1.0
+RORMPC_TOOLS_TAG=v0.1.1
 RORMPC_TOOLS_DIR="${RORMPC_TOOLS_DIR:-$HOME/personal_projects/rormpc-tools}"
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
@@ -144,7 +144,7 @@ companions() {
   done
   command -v uv >/dev/null || { echo "needs uv: https://docs.astral.sh/uv/" >&2; exit 1; }
   if [ -n "$local_build" ]; then
-    uv tool install --force --editable "$RORMPC_TOOLS_DIR[youtube]"
+    uv tool install --force --editable "$RORMPC_TOOLS_DIR"
     cargo install --locked --path "$RO_LB_DIR"
   else
     uv tool install --force "rormpc-tools @ git+$RORMPC_TOOLS_REPO@$RORMPC_TOOLS_TAG"
