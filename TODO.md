@@ -170,3 +170,33 @@ Plan after asking GPT-6.1 Sol and MiMo (both agreed on the shape and the first v
       live, nightcore, loops); a YouTube rip often fails AcoustID, so "downloaded, unidentified" is a real state.
 - [ ] Radio: only if a station publishes a track history (an API or page); ICY metadata brings ads and DJ talk.
       Out of scope until there is a concrete station to look at.
+
+## Tests and GitHub Actions for rormpc, rormpc-tools and ro-listenbrainz-mpd
+
+Today nothing guards these three repositories: rormpc's CI comes from upstream and runs only on pull requests
+and by hand (pushes to master run nothing), rormpc-tools has no tests, and the scrobbler fork's deltas are not
+tested anywhere (upstream's CI is on Codeberg). Bugs found by hand on 2026-10-03 that tests would have caught:
+KeyError 'user_name' on an invalid ListenBrainz token, an uncaught SystemExit that stopped the hourly sync,
+the launchd bootout/bootstrap race (error 5), missing libsqlite3-dev on Linux.
+
+Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI second):
+
+- [ ] rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a
+      ListenBrainz outage still let `update` sync and export; play counts, and a local listen counted once with its
+      ListenBrainz copy (same timestamp); skips import and the Skipped playlist; delete/undo with the journal;
+      mpd-gap state transitions on a fake clock and fake MPD status. Workflow on Ubuntu, ~1-2 min.
+- [ ] ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule
+      (fraction, max seconds, uninterrupted: seek restarts, pause neutral) and the local log lines. ~2-4 min.
+- [ ] rormpc: installer smoke test on Ubuntu: fresh user, `loginctl enable-linger`, `XDG_RUNTIME_DIR` and the user
+      D-Bus, MPD with a generated tone, fake token and API URL, `rormpc_install.sh companions`, then assert units and
+      the musicdb timer are active, the listen_* lines are in the config and the token untouched, `status` output,
+      a reinstall. The installer pins released tags, so a smoke test would pass on a broken branch: first add
+      overrides (e.g. `RORMPC_TOOLS_REF`, `RO_LB_REF`, or reuse `--local` with checkouts) so CI tests the commit
+      under test. ~5-8 min. This is what was done by hand in an OrbStack Ubuntu VM on 2026-10-03.
+- [ ] macOS: first a throwaway probe that `launchctl bootstrap gui/$UID` works on hosted runners, then the same
+      smoke test with launchd.
+- [ ] Triggers: push to master, pull_request, workflow_dispatch, weekly schedule (toolchain, uv and runner-image
+      drift; GitHub disables schedules after 60 days without repository activity), and on release tags. Add
+      `push` to the upstream ci.yml here too.
+- Not automated: live ListenBrainz, MusicBrainz, Billboard and YouTube (OAuth) calls, and exact gap timing on
+  shared runners.
