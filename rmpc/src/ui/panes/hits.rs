@@ -1,9 +1,15 @@
 //! rormpc: Hits pane. A table of the ranked chart hits written by the `hits` CLI (`hits ... --json PATH`) with
 //! a details panel for the selected row. Rows are chart entries, not directories: a missing song is a dimmed
 //! row with nothing to play. Enter / double click append the selected owned song to the queue and play it,
-//! `a` appends without playing; the queue is never replaced. The ranking itself stays in `hits`.
+//! `a` appends without playing; the queue is never replaced. The ranking itself stays in `hits`: the filter
+//! column on the left (h/l moves between it and the table) runs `hits --json` in a background thread on Apply.
 
-use std::{path::PathBuf, time::SystemTime};
+use std::{
+    path::PathBuf,
+    process::Command,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use anyhow::{Context, Result};
 use ratatui::{
@@ -27,6 +33,7 @@ use crate::{
     shared::{
         keys::ActionEvent,
         mouse_event::{MouseEvent, MouseEventKind},
+        events::AppEvent,
         mpd_client_ext::{Enqueue, MpdClientExt},
     },
     ui::{UiEvent, dirstack::DirState},
@@ -37,7 +44,21 @@ struct HitsFile {
     version: u32,
     label: String,
     generated_at: String,
+    #[serde(default)]
+    args: HitsArgs,
     rows: Vec<HitsRow>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+struct HitsArgs {
+    #[serde(default)]
+    period: Option<String>,
+    #[serde(default)]
+    top: Option<String>,
+    #[serde(default)]
+    genre: Option<String>,
+    #[serde(default)]
+    owned: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -68,11 +89,23 @@ pub struct HitsPane {
     loaded_mtime: Option<SystemTime>,
     state: DirState<TableState>,
     table_area: Rect,
+    command: Vec<String>,
+    filters: Option<Filters>,
+    focus_filters: bool,
+    filter_sel: usize,
+    filter_area: Rect,
+    job: Arc<Mutex<Job>>,
 }
 
 impl HitsPane {
-    pub fn new(path: String) -> Self {
+    pub fn new(path: String, command: Vec<String>) -> Self {
         Self {
+            command: command.iter().map(|c| expand_home(c)).collect(),
+            filters: None,
+            focus_filters: false,
+            filter_sel: 0,
+            filter_area: Rect::default(),
+            job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
             rows: Vec::new(),
             label: String::new(),
@@ -93,6 +126,9 @@ impl HitsPane {
         self.loaded_mtime = mtime;
         match self.read() {
             Ok(file) => {
+                if self.filters.is_none() {
+                    self.filters = Some(Filters::from_args(&file.args));
+                }
                 self.rows = file.rows;
                 self.label = file.label;
                 self.generated_at = file.generated_at;
@@ -138,6 +174,100 @@ impl HitsPane {
             ctx.current_song_index(),
             None,
         );
+    }
+
+    /// Run `hits` with the current filters in a background thread; one run at a time, a newer Apply during a
+    /// run is queued and replaces any older queued one. Results arrive through the JSON file.
+    fn apply(&mut self, ctx: &Ctx) {
+        let Some(filters) = &self.filters else { return };
+        let args = filters.args(&self.path.to_string_lossy());
+        let mut job = self.job.lock().expect("hits job lock");
+        if job.running {
+            job.queued = Some(args);
+            return;
+        }
+        job.running = true;
+        job.error = None;
+        drop(job);
+        let (job, command, sender) = (Arc::clone(&self.job), self.command.clone(), ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            let mut args = args;
+            loop {
+                let result = Command::new(&command[0]).args(&command[1..]).args(&args).output();
+                let error = match result {
+                    Ok(out) if out.status.success() => None,
+                    Ok(out) => Some(
+                        String::from_utf8_lossy(&out.stderr).lines().rev().find(|l| !l.trim().is_empty())
+                            .unwrap_or("hits failed").to_owned(),
+                    ),
+                    Err(err) => Some(format!("cannot run {}: {err}", command[0])),
+                };
+                let mut j = job.lock().expect("hits job lock");
+                j.error = error;
+                match j.queued.take() {
+                    Some(next) => args = next,
+                    None => {
+                        j.running = false;
+                        j.finished = true;
+                        break;
+                    }
+                }
+            }
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+
+    fn filter_rows(&self) -> Vec<FilterRow> {
+        self.filters.as_ref().map(Filters::rows).unwrap_or_default()
+    }
+
+    fn filter_action(&mut self, action: &CommonAction, ctx: &Ctx) -> bool {
+        let rows = self.filter_rows();
+        let Some(&row) = rows.get(self.filter_sel) else { return false };
+        let Some(filters) = self.filters.as_mut() else { return false };
+        match action {
+            CommonAction::Down => self.filter_sel = (self.filter_sel + 1).min(rows.len() - 1),
+            CommonAction::Up => self.filter_sel = self.filter_sel.saturating_sub(1),
+            CommonAction::Top => self.filter_sel = 0,
+            CommonAction::Bottom => self.filter_sel = rows.len() - 1,
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => self.apply(ctx),
+            CommonAction::Confirm | CommonAction::Select => filters.toggle(row),
+            CommonAction::Left => {
+                filters.adjust(row, -1);
+            }
+            CommonAction::Right => {
+                if !filters.adjust(row, 1) {
+                    self.focus_filters = false;
+                }
+            }
+            _ => return false,
+        }
+        // the row list changes when switching decades <-> range
+        self.filter_sel = self.filter_sel.min(self.filter_rows().len().saturating_sub(1));
+        true
+    }
+
+    fn render_filters(&self, frame: &mut Frame, area: Rect, ctx: &Ctx) {
+        let Some(filters) = &self.filters else { return };
+        let rows = filters.rows();
+        // keep the selected row visible in a short terminal
+        let skip = self.filter_sel.saturating_sub(usize::from(area.height).saturating_sub(2));
+        let lines: Vec<Line> = rows
+            .iter()
+            .enumerate()
+            .skip(skip)
+            .map(|(i, row)| {
+                let style = if i == self.filter_sel && self.focus_filters {
+                    ctx.config.theme.current_item_style
+                } else if matches!(row, FilterRow::Mode) || *row == FilterRow::Apply {
+                    ctx.config.theme.preview_label_style
+                } else {
+                    Style::default()
+                };
+                Line::from(Span::styled(filters.line(*row), style))
+            })
+            .collect();
+        frame.render_widget(Paragraph::new(lines), area);
     }
 
     fn details(&self, ctx: &Ctx) -> Vec<Line<'static>> {
@@ -186,9 +316,17 @@ fn expand_home(path: &str) -> String {
 
 impl Pane for HitsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        let [main, details] = Layout::horizontal([Constraint::Percentage(65), Constraint::Percentage(35)])
-            .spacing(3)
-            .areas(area);
+        let finished = std::mem::take(&mut self.job.lock().expect("hits job lock").finished);
+        if finished {
+            self.loaded_mtime = None; // hits rewrote the file
+            self.reload();
+        }
+        let [filter_area, main, details] =
+            Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(30)])
+                .spacing(2)
+                .areas(area);
+        self.filter_area = filter_area;
+        self.render_filters(frame, filter_area, ctx);
         let [table_area, footer] =
             Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(main);
         self.table_area = table_area;
@@ -226,9 +364,14 @@ impl Pane for HitsPane {
         frame.render_stateful_widget(table, table_area, self.state.as_render_state_ref());
 
         let owned = self.rows.iter().filter(|r| r.file.is_some()).count();
-        let status = match &self.error {
-            Some(err) => Span::styled(err.clone(), Style::default().add_modifier(Modifier::BOLD)),
-            None => Span::styled(
+        let (running, job_error) = {
+            let j = self.job.lock().expect("hits job lock");
+            (j.running, j.error.clone())
+        };
+        let status = match (running, job_error.or_else(|| self.error.clone())) {
+            (true, _) => Span::styled(" running hits… (the table shows the previous result)", Style::default().add_modifier(Modifier::BOLD)),
+            (false, Some(err)) => Span::styled(err, Style::default().add_modifier(Modifier::BOLD)),
+            (false, None) => Span::styled(
                 format!(
                     " {} · {} hits · {} in library · updated {}",
                     self.label,
@@ -260,9 +403,22 @@ impl Pane for HitsPane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
+        if self.filter_area.contains(event.into()) {
+            if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
+                let idx = usize::from(event.y.saturating_sub(self.filter_area.y));
+                if idx < self.filter_rows().len() {
+                    self.focus_filters = true;
+                    self.filter_sel = idx;
+                    self.filter_action(&CommonAction::Confirm, ctx);
+                    ctx.render()?;
+                }
+            }
+            return Ok(());
+        }
         if !self.table_area.contains(event.into()) {
             return Ok(());
         }
+        self.focus_filters = false;
         let row = usize::from(event.y.saturating_sub(self.table_area.y + 1)); // +1: header row
         match event.kind {
             MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
@@ -289,8 +445,17 @@ impl Pane for HitsPane {
         let Some(action) = event.claim_common().cloned() else {
             return Ok(());
         };
+        if self.focus_filters {
+            if self.filter_action(&action, ctx) {
+                ctx.render()?;
+            } else {
+                event.abandon();
+            }
+            return Ok(());
+        }
         let (scrolloff, wrap) = (ctx.config.scrolloff, ctx.config.wrap_navigation);
         match action {
+            CommonAction::Left => self.focus_filters = true,
             CommonAction::Down => self.state.next(scrolloff, wrap),
             CommonAction::Up => self.state.prev(scrolloff, wrap),
             CommonAction::DownHalf => self.state.next_half_viewport(scrolloff),
@@ -309,4 +474,201 @@ impl Pane for HitsPane {
         ctx.render()?;
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------- filters (rormpc)
+
+const DECADES: [i32; 8] = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
+const TOPS: [(u32, u32); 3] = [(1, 10), (11, 20), (21, 50)];
+const GENRES: [&str; 17] = [
+    "rock", "pop", "hip hop", "r&b", "soul", "dance", "electronic", "disco", "funk", "country", "metal",
+    "folk", "latin", "jazz", "blues", "punk", "reggae",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilterRow {
+    Mode,
+    Decade(usize),
+    From,
+    To,
+    Top(usize),
+    Genre(usize),
+    Owned,
+    Apply,
+}
+
+/// What the filter column edits; turned into `hits` arguments on Apply.
+#[derive(Debug, Clone)]
+struct Filters {
+    by_range: bool,
+    decades: [bool; 8],
+    from: i32,
+    to: i32,
+    tops: [bool; 3],
+    /// -1 exclude, 0 off, 1 include
+    genres: [i8; 17],
+    owned: bool,
+}
+
+impl Default for Filters {
+    fn default() -> Self {
+        let mut decades = [false; 8];
+        decades[3] = true; // 1980s
+        Self { by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; 17], owned: false }
+    }
+}
+
+impl Filters {
+    fn rows(&self) -> Vec<FilterRow> {
+        let mut rows = vec![FilterRow::Mode];
+        if self.by_range {
+            rows.extend([FilterRow::From, FilterRow::To]);
+        } else {
+            rows.extend((0..DECADES.len()).map(FilterRow::Decade));
+        }
+        rows.extend((0..TOPS.len()).map(FilterRow::Top));
+        rows.extend((0..GENRES.len()).map(FilterRow::Genre));
+        rows.extend([FilterRow::Owned, FilterRow::Apply]);
+        rows
+    }
+
+    fn years(&self) -> String {
+        if self.by_range {
+            return format!("{}-{}", self.from.min(self.to), self.from.max(self.to));
+        }
+        let ranges: Vec<String> = DECADES
+            .iter()
+            .zip(self.decades)
+            .filter(|(_, on)| *on)
+            .map(|(d, _)| format!("{}-{}", d, d + 9))
+            .collect();
+        if ranges.is_empty() { "1980-1989".to_owned() } else { ranges.join(",") }
+    }
+
+    fn genre_spec(&self) -> String {
+        GENRES
+            .iter()
+            .zip(self.genres)
+            .filter(|(_, s)| *s != 0)
+            .map(|(g, s)| format!("{}{g}", if s > 0 { '+' } else { '-' }))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn args(&self, json: &str) -> Vec<String> {
+        let tops: Vec<String> =
+            TOPS.iter().zip(self.tops).filter(|(_, on)| *on).map(|((lo, hi), _)| format!("{lo}-{hi}")).collect();
+        let mut args = vec!["--years".to_owned(), self.years(), "--top".to_owned()];
+        args.push(if tops.is_empty() { "1-100".to_owned() } else { tops.join(",") });
+        let genres = self.genre_spec();
+        if !genres.is_empty() {
+            args.extend(["-g".to_owned(), genres]);
+        }
+        if self.owned {
+            args.push("--owned".to_owned());
+        }
+        args.extend(["--json".to_owned(), json.to_owned()]);
+        args
+    }
+
+    /// Start from what produced the current file, so the column matches the table.
+    fn from_args(args: &HitsArgs) -> Self {
+        let mut f = Self::default();
+        let period = args.period.clone().unwrap_or_default();
+        let parts: Vec<(i32, i32)> = period
+            .split(',')
+            .filter_map(|p| {
+                let (lo, hi) = p.trim().split_once('-').unwrap_or((p.trim(), p.trim()));
+                Some((lo.trim_end_matches('s').parse().ok()?, hi.parse().unwrap_or(-1)))
+            })
+            .collect();
+        let decade_parts: Vec<usize> = parts
+            .iter()
+            .filter_map(|(lo, hi)| {
+                let is_decade = lo % 10 == 0 && (*hi == lo + 9 || *hi == -1);
+                is_decade.then(|| DECADES.iter().position(|d| d == lo)).flatten()
+            })
+            .collect();
+        if !parts.is_empty() && decade_parts.len() == parts.len() {
+            f.decades = [false; 8];
+            decade_parts.into_iter().for_each(|i| f.decades[i] = true);
+        } else if let Some((lo, hi)) = parts.first() {
+            f.by_range = true;
+            f.from = *lo;
+            f.to = if *hi > 0 { *hi } else { *lo };
+        }
+        if let Some(top) = &args.top {
+            f.tops = [false; 3];
+            for part in top.split(',') {
+                if let Some(i) = TOPS.iter().position(|(lo, hi)| part.trim() == format!("{lo}-{hi}")) {
+                    f.tops[i] = true;
+                }
+            }
+        }
+        for tok in args.genre.clone().unwrap_or_default().split_whitespace() {
+            let (sign, name) = match tok.chars().next() {
+                Some('-') => (-1, &tok[1..]),
+                Some('+') => (1, &tok[1..]),
+                _ => (1, tok),
+            };
+            if let Some(i) = GENRES.iter().position(|g| *g == name) {
+                f.genres[i] = sign;
+            }
+        }
+        f.owned = args.owned;
+        f
+    }
+
+    fn line(&self, row: FilterRow) -> String {
+        let check = |on: bool| if on { "[x]" } else { "[ ]" };
+        match row {
+            FilterRow::Mode => format!("Period: {}", if self.by_range { "‹year range›" } else { "‹decades›" }),
+            FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
+            FilterRow::From => format!("  from ‹ {} ›", self.from),
+            FilterRow::To => format!("  to   ‹ {} ›", self.to),
+            FilterRow::Top(i) => {
+                format!("{} {} {}-{}%", if i == 0 { "Top %" } else { "     " }, check(self.tops[i]), TOPS[i].0, TOPS[i].1)
+            }
+            FilterRow::Genre(i) => {
+                let mark = match self.genres[i] { 1 => "+", -1 => "−", _ => " " };
+                format!("{} [{mark}] {}", if i == 0 { "Genres" } else { "      " }, GENRES[i])
+            }
+            FilterRow::Owned => format!("{} owned only", check(self.owned)),
+            FilterRow::Apply => "      [ Apply ]".to_owned(),
+        }
+    }
+
+    /// Space / Enter on a row.
+    fn toggle(&mut self, row: FilterRow) {
+        match row {
+            FilterRow::Mode => self.by_range = !self.by_range,
+            FilterRow::Decade(i) => self.decades[i] = !self.decades[i],
+            FilterRow::Top(i) => self.tops[i] = !self.tops[i],
+            FilterRow::Genre(i) => self.genres[i] = match self.genres[i] { 0 => 1, 1 => -1, _ => 0 },
+            FilterRow::Owned => self.owned = !self.owned,
+            FilterRow::From | FilterRow::To | FilterRow::Apply => {}
+        }
+    }
+
+    /// h / l on a year row; false when the row has nothing to adjust.
+    fn adjust(&mut self, row: FilterRow, delta: i32) -> bool {
+        let clamp = |y: i32| y.clamp(1959, 2025);
+        match row {
+            FilterRow::From => self.from = clamp(self.from + delta),
+            FilterRow::To => self.to = clamp(self.to + delta),
+            FilterRow::Mode => self.by_range = !self.by_range,
+            _ => return false,
+        }
+        true
+    }
+}
+
+/// State shared with the thread that runs `hits`.
+#[derive(Debug, Default)]
+struct Job {
+    running: bool,
+    /// Apply pressed while running: run again with these args when the current run ends
+    queued: Option<Vec<String>>,
+    error: Option<String>,
+    finished: bool,
 }

@@ -309,9 +309,9 @@ impl<'panes> PaneContainer<'panes> {
                         ctx,
                     )) as Box<dyn BoxedPane>,
                 )),
-                PaneType::Hits { path } => Some((
+                PaneType::Hits { path, command } => Some((
                     pane.pane.clone(),
-                    Box::new(HitsPane::new(path.clone())) as Box<dyn BoxedPane>,
+                    Box::new(HitsPane::new(path.clone(), command.clone())) as Box<dyn BoxedPane>,
                 )),
                 _ => None,
             })

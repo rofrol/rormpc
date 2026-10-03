@@ -213,6 +213,9 @@ pub enum PaneTypeFile {
     Hits {
         #[serde(default)]
         path: Option<String>,
+        /// program that writes the JSON (default ["hits"]); filter arguments are appended
+        #[serde(default)]
+        command: Option<Vec<String>>,
     },
 }
 
@@ -258,6 +261,7 @@ pub enum PaneType {
     Empty,
     Hits {
         path: String,
+        command: Vec<String>,
     },
 }
 
@@ -397,8 +401,9 @@ impl TryFrom<PaneTypeFile> for PaneType {
             }
             PaneTypeFile::Cava => PaneType::Cava,
             PaneTypeFile::Empty() => PaneType::Empty,
-            PaneTypeFile::Hits { path } => PaneType::Hits {
+            PaneTypeFile::Hits { path, command } => PaneType::Hits {
                 path: path.unwrap_or_else(|| "~/.cache/rormpc/hits/current.json".to_owned()),
+                command: command.filter(|c| !c.is_empty()).unwrap_or_else(|| vec!["hits".to_owned()]),
             },
         })
     }
