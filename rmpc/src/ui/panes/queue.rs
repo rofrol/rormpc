@@ -268,9 +268,32 @@ impl QueuePane {
 
                 Some(section)
             })
+            // rormpc: like / dislike the song, kept away from the destructive items
+            .list_section(ctx, |mut section| {
+                let file = self.queue.selected().map(|s| s.file.clone())?;
+                let hint = crate::ui::rormpc_actions::rate_key_hint(ctx);
+                for (label, value) in [("Like ♥", "2"), ("Dislike ✗", "0"), ("Clear like", "1")] {
+                    let file = file.clone();
+                    section.add_item(format!("{label}{hint}"), move |ctx| {
+                        crate::ui::rormpc_actions::set_like(ctx, file, value);
+                        Ok(())
+                    });
+                }
+                Some(section)
+            })
+            // rormpc: trashing the file is its own section, with a confirmation (Ctrl-x does it directly)
+            .list_section(ctx, |mut section| {
+                let file = self.queue.selected().map(|s| s.file.clone())?;
+                let hint = crate::ui::rormpc_actions::external_key_hint(ctx, &["musicdb", "delete"]);
+                section.add_item(format!("Move library file to Trash…{hint}"), move |ctx| {
+                    crate::ui::rormpc_actions::confirm_trash(ctx, file);
+                    Ok(())
+                });
+                Some(section)
+            })
             .list_section(ctx, |section| {
                 let section = section
-                    .item("Remove", move |ctx| {
+                    .item("Remove from queue (keep file)", move |ctx| {
                         if let Some(id) = selected_song_id {
                             ctx.command(move |_, client| {
                                 client.delete_id(id)?;

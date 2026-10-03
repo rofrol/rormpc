@@ -75,6 +75,7 @@ pub mod image;
 pub mod input;
 pub mod modals;
 pub mod panes;
+pub mod rormpc_actions;
 pub mod song_ext;
 pub mod tab_screen;
 pub mod widgets;

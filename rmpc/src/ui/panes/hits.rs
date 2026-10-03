@@ -36,7 +36,8 @@ use crate::{
         events::AppEvent,
         mpd_client_ext::{Enqueue, MpdClientExt},
     },
-    ui::{UiEvent, dirstack::DirState},
+    shared::macros::modal,
+    ui::{UiEvent, dirstack::DirState, modals::menu::modal::MenuModal, rormpc_actions},
 };
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +60,8 @@ struct HitsArgs {
     genre: Option<String>,
     #[serde(default)]
     owned: bool,
+    #[serde(default)]
+    show_hidden: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -77,6 +80,11 @@ struct HitsRow {
     file: Option<String>,
     #[serde(default)]
     plays: u32,
+    #[serde(default)]
+    mbid: Option<String>,
+    /// hidden with `hits hide`; present only when the run used --show-hidden
+    #[serde(default)]
+    hidden: bool,
 }
 
 #[derive(Debug)]
@@ -308,6 +316,76 @@ impl HitsPane {
         frame.render_widget(Paragraph::new(lines), area);
     }
 
+    /// Menu for the selected row: play/queue and like for owned songs, hide/unhide for any chart song, and,
+    /// kept apart, trashing the owned file. Labels show the key that does the same thing directly.
+    fn open_context_menu(&self, ctx: &Ctx) {
+        let Some(r) = self.selected().cloned() else { return };
+        let job = Arc::clone(&self.job);
+        let sender = ctx.app_event_sender.clone();
+        let mut menu = MenuModal::new(ctx);
+        if let Some(file) = r.file.clone() {
+            let (play, queue) = (file.clone(), file.clone());
+            menu = menu.list_section(ctx, move |mut section| {
+                section.add_item("Play now  (Enter)", move |ctx| {
+                    enqueue_file(ctx, play, true);
+                    Ok(())
+                });
+                section.add_item("Add to queue  (a)", move |ctx| {
+                    enqueue_file(ctx, queue, false);
+                    Ok(())
+                });
+                Some(section)
+            });
+            let hint = rormpc_actions::rate_key_hint(ctx);
+            let like_file = file.clone();
+            menu = menu.list_section(ctx, move |mut section| {
+                for (label, value) in [("Like ♥", "2"), ("Dislike ✗", "0"), ("Clear like", "1")] {
+                    let file = like_file.clone();
+                    section.add_item(format!("{label}{hint}"), move |ctx| {
+                        rormpc_actions::set_like(ctx, file, value);
+                        Ok(())
+                    });
+                }
+                Some(section)
+            });
+        }
+        let (verb, label) = if r.hidden { ("unhide", "Unhide song (show it in Hits again)") } else { ("hide", "Hide song across charts") };
+        let (artist, title, mbid, command) = (r.artist.clone(), r.title.clone(), r.mbid.clone(), self.command.clone());
+        menu = menu.list_section(ctx, move |mut section| {
+            section.add_item(label, move |_| {
+                std::thread::spawn(move || {
+                    let mut args = vec![verb.to_owned(), "--artist".to_owned(), artist, "--title".to_owned(), title];
+                    if let Some(m) = mbid {
+                        args.extend(["--mbid".to_owned(), m]);
+                    }
+                    let ok = Command::new(&command[0]).args(&command[1..]).args(&args).status().is_ok_and(|s| s.success());
+                    let mut j = job.lock().expect("hits job lock");
+                    if ok {
+                        j.rerun = true;
+                    } else {
+                        j.error = Some(format!("hits {verb} failed"));
+                    }
+                    drop(j);
+                    let _ = sender.send(AppEvent::RequestRender);
+                });
+                Ok(())
+            });
+            Some(section)
+        });
+        if let Some(file) = r.file.clone() {
+            let hint = rormpc_actions::external_key_hint(ctx, &["musicdb", "delete"]);
+            menu = menu.list_section(ctx, move |mut section| {
+                section.add_item(format!("Move library file to Trash…{hint}"), move |ctx| {
+                    rormpc_actions::confirm_trash(ctx, file);
+                    Ok(())
+                });
+                Some(section)
+            });
+        }
+        let menu = menu.list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(())))).build();
+        modal!(ctx, menu);
+    }
+
     fn details(&self, ctx: &Ctx) -> Vec<Line<'static>> {
         let Some(r) = self.selected() else {
             return vec![Line::from("No hits loaded.")];
@@ -341,8 +419,22 @@ impl HitsPane {
             }
             None => lines.push(field("In library", "no (not found in MPD)".to_owned())),
         }
+        if r.hidden {
+            lines.push(Line::from(Span::styled("hidden from Hits (menu: Unhide)", dim)));
+        }
         lines
     }
+}
+
+fn enqueue_file(ctx: &Ctx, path: String, play: bool) {
+    Client::resolve_and_enqueue(
+        ctx,
+        vec![Enqueue::File { path }],
+        Position::EndOfQueue,
+        if play { AutoplayKind::First } else { AutoplayKind::None },
+        ctx.current_song_index(),
+        None,
+    );
 }
 
 fn expand_home(path: &str) -> String {
@@ -354,6 +446,10 @@ fn expand_home(path: &str) -> String {
 
 impl Pane for HitsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
+        let rerun = std::mem::take(&mut self.job.lock().expect("hits job lock").rerun);
+        if rerun {
+            self.apply(ctx);
+        }
         let finished = std::mem::take(&mut self.job.lock().expect("hits job lock").finished);
         if finished {
             self.loaded_mtime = None; // hits rewrote the file
@@ -377,13 +473,13 @@ impl Pane for HitsPane {
             Row::new(vec![
                 Cell::from(format!("#{}", r.rank)),
                 Cell::from(format!("{:.0}%", r.pct.ceil())),
-                Cell::from(if owned { "✓" } else { "✗" }),
+                Cell::from(if r.hidden { "h" } else if owned { "✓" } else { "✗" }),
                 Cell::from(r.artist.clone()),
                 Cell::from(r.title.clone()),
                 Cell::from(r.year.to_string()),
                 Cell::from(if owned && r.plays > 0 { r.plays.to_string() } else { String::new() }),
             ])
-            .style(if owned { Style::default() } else { dim })
+            .style(if owned && !r.hidden { Style::default() } else { dim })
         });
         let header = Row::new(["Rank", "%", "", "Artist", "Title", "Year", "Plays"])
             .style(ctx.config.theme.preview_label_style);
@@ -505,6 +601,7 @@ impl Pane for HitsPane {
         let (scrolloff, wrap) = (ctx.config.scrolloff, ctx.config.wrap_navigation);
         match action {
             CommonAction::Left => self.focus_filters = true,
+            CommonAction::ContextMenu => self.open_context_menu(ctx),
             CommonAction::Down => self.state.next(scrolloff, wrap),
             CommonAction::Up => self.state.prev(scrolloff, wrap),
             CommonAction::DownHalf => self.state.next_half_viewport(scrolloff),
@@ -543,6 +640,7 @@ enum FilterRow {
     Top(usize),
     Genre(usize),
     Owned,
+    ShowHidden,
     Apply,
 }
 
@@ -557,13 +655,14 @@ struct Filters {
     /// -1 exclude, 0 off, 1 include
     genres: [i8; 17],
     owned: bool,
+    show_hidden: bool,
 }
 
 impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; 17], owned: false }
+        Self { by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; 17], owned: false, show_hidden: false }
     }
 }
 
@@ -577,7 +676,7 @@ impl Filters {
         }
         rows.extend((0..TOPS.len()).map(FilterRow::Top));
         rows.extend((0..GENRES.len()).map(FilterRow::Genre));
-        rows.extend([FilterRow::Owned, FilterRow::Apply]);
+        rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
         rows
     }
 
@@ -615,6 +714,9 @@ impl Filters {
         }
         if self.owned {
             args.push("--owned".to_owned());
+        }
+        if self.show_hidden {
+            args.push("--show-hidden".to_owned());
         }
         args.extend(["--json".to_owned(), json.to_owned()]);
         args
@@ -665,6 +767,7 @@ impl Filters {
             }
         }
         f.owned = args.owned;
+        f.show_hidden = args.show_hidden;
         f
     }
 
@@ -683,6 +786,7 @@ impl Filters {
                 format!("{} [{mark}] {}", if i == 0 { "Genres" } else { "      " }, GENRES[i])
             }
             FilterRow::Owned => format!("{} owned only", check(self.owned)),
+            FilterRow::ShowHidden => format!("{} show hidden", check(self.show_hidden)),
             FilterRow::Apply => "      [ Apply ]".to_owned(),
         }
     }
@@ -695,6 +799,7 @@ impl Filters {
             FilterRow::Top(i) => self.tops[i] = !self.tops[i],
             FilterRow::Genre(i) => self.genres[i] = match self.genres[i] { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::Owned => self.owned = !self.owned,
+            FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
             FilterRow::From | FilterRow::To | FilterRow::Apply => {}
         }
     }
@@ -720,4 +825,6 @@ struct Job {
     queued: Option<Vec<String>>,
     error: Option<String>,
     finished: bool,
+    /// a hide/unhide changed the result: run hits again with the current filters
+    rerun: bool,
 }

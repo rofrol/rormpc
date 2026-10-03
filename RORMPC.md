@@ -24,6 +24,16 @@ replaced. The pane re-reads the file when it changes and when the MPD database c
 ])),
 ```
 
+## Context menus
+
+Queue (ContextMenu, e.g. Ctrl-z): besides upstream's items, Like ♥ / Dislike ✗ / Clear like (rmpc's like
+sticker) and, in its own section, "Move library file to Trash…" with a confirmation (the same as Ctrl-x,
+`musicdb delete`); "Remove" is renamed "Remove from queue (keep file)". Hits rows: Play now, Add to queue, like
+items (owned songs), "Hide song across charts" / "Unhide" for every chart song (`hits hide|unhide`, an
+append-only log in the private data repo; hidden songs keep their place in the ranking and are dropped after
+the Top % cut), and "Move library file to Trash…" for owned songs. "show hidden" in the filter column lists
+hidden songs (marked `h`) to review and unhide them. Menu items show the key that does the same thing directly.
+
 ## Last tab
 
 rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default
