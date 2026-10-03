@@ -61,6 +61,7 @@ url = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 winnow = { workspace = true }
+nucleo-matcher = "0.3.1"
 
 [dev-dependencies]
 rstest = { workspace = true }

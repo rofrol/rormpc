@@ -849,6 +849,9 @@ impl Pane for QueuePane {
                         });
                     }
                 }
+                QueueActions::Find => {
+                    modal!(ctx, crate::ui::modals::queue_find::QueueFindModal::new(ctx));
+                }
                 QueueActions::JumpToCurrent => {
                     if let Some((idx, _)) = ctx.status.songid.and_then(|id| {
                         self.queue.items.iter().enumerate().find(|(_, song)| song.id == id)

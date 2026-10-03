@@ -22,6 +22,7 @@ pub mod input_modal;
 pub mod keybinds;
 pub mod menu;
 pub mod outputs;
+pub mod queue_find;
 pub mod select_modal;
 
 #[allow(unused)]
