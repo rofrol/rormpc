@@ -9,27 +9,29 @@ next to it. Install with `scripts/rormpc_install.sh install` (keeps the previous
 
 ## Companion tools
 
-rormpc alone needs only MPD. Optional background services that work with rormpc closed:
+rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and the delete menu run
+[rormpc-tools](https://github.com/rofrol/rormpc-tools) (`hits`, `musicdb`), and some services work with rormpc closed:
 
-    scripts/rormpc_install.sh companions [--gap SECONDS]   # install / update / restart them
+    scripts/rormpc_install.sh companions [--gap SECONDS]   # install / update / restart all of it (needs uv, cargo)
     scripts/rormpc_install.sh status                       # what is installed and running
 
+- rormpc-tools at a pinned tag (`uv tool install`), and `musicdb update` every hour: play counts, skips and likes
+  into MPD stickers. Settings (music directory, where the history goes, ListenBrainz user) in
+  `~/.config/rormpc-tools/config.toml`, see its README.
 - [ro-listenbrainz-mpd](https://github.com/rofrol/ro-listenbrainz-mpd), my fork of the listenbrainz-mpd scrobbler,
   installed with cargo at a pinned tag. `companions` adds my rule to its config (a listen is 90% of the song played
   without a seek; the `listen_*` lines, change them there) and starts it once the ListenBrainz token is in the config.
-  It also records skipped songs in `skips.jsonl`.
-- `mpd-gap` (`scripts/mpd-gap`, needs [uv](https://docs.astral.sh/uv/)): seconds of silence between songs,
-  default 3, `--gap 0` removes it. Installed to `~/.local/bin`.
+  It also records skipped songs for musicdb.
+- `mpd-gap` (rormpc-tools): seconds of silence between songs, default 3, `--gap 0` removes it.
 
-Both run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
-`rormpc-*.service` on Linux; the installer writes them, so edits there are overwritten.
-
-The Hits pane and the delete menu run `hits` and `musicdb`, which still live in my dotfiles (`scripts/` in
-github.com/rofrol/dotfiles); without them those features report that the command cannot be run.
+They run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
+`rormpc-*.service` (musicdb with a `.timer`) on Linux; the installer writes them, so edits there are overwritten.
+`companions --local` installs both from checkouts instead (`$RORMPC_TOOLS_DIR`, `$RO_LB_DIR`), rormpc-tools editable.
+Without rormpc-tools those features report that the command cannot be run; the rest works.
 
 ## Hits pane
 
-Ranked chart hits produced by the `hits` CLI (dotfiles `~/scripts/hits`), e.g.
+Ranked chart hits produced by the `hits` CLI ([rormpc-tools](https://github.com/rofrol/rormpc-tools)), e.g.
 
     hits --years 1985-1992 --top 11-20 -g "+rock +pop -country" --json ~/.cache/rormpc/hits/current.json
 
@@ -102,4 +104,4 @@ likes, "Sort" is "by plays" or "rediscover" (liked, often played, not lately), n
 and Top % is within your likes. The details panel explains what the rank means for the current source.
 
 Option `command` (default `["hits"]`) names the program; use an absolute path if rormpc is not started from a
-shell with `hits` on PATH: `Pane(Hits(command: ["/Users/me/scripts/hits"]))`.
+shell with `hits` on PATH: `Pane(Hits(command: ["/Users/me/.local/bin/hits"]))`.
