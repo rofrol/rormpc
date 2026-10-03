@@ -9,22 +9,21 @@ Ranked chart hits produced by the `hits` CLI (dotfiles `~/scripts/hits`), e.g.
 
     hits --years 1985-1992 --top 11-20 -g "+rock +pop -country" --json ~/.cache/rormpc/hits/current.json
 
-Songs you have are normal MPD songs (play, add to queue, info); missing ones are `✗` placeholder rows.
-The pane re-reads the file when it changes and when the MPD database changes. Each song gets extra metadata
-`hits_rank` ("#12 (3%)"), `hits_year` and `hits_genres` for the song format:
+A table (rank, percentile, ✓/✗ owned, artist, title, year, plays) with details for the selected row and a
+status line (label, counts, when `hits` ran). Missing songs are dimmed rows with nothing to play. Enter or a
+double click appends the selected owned song to the queue and plays it, `a` appends; the queue is never
+replaced. The pane re-reads the file when it changes and when the MPD database changes.
 
 ```ron
-(name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [(
-    pane: Pane(Hits(
-        path: "~/.cache/rormpc/hits/current.json", // default
-        format: [
-            (kind: Property(Other("hits_rank"))), (kind: Text("  ")),
-            (kind: Property(Artist)), (kind: Text(" - ")), (kind: Property(Title)),
-            (kind: Text("  (")), (kind: Property(Other("hits_year"))), (kind: Text(")")),
-        ],
-    )),
-    size: "100%", borders: "ALL", border_symbols: Rounded,
-)])),
+(name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [
+    (pane: Pane(Hits()), size: "100%", borders: "ALL", border_symbols: Rounded), // path: "~/.cache/rormpc/hits/current.json"
+])),
 ```
+
+## Build revision
+
+`Status(BuildRevision)` renders "rormpc <short sha>" (with `+` if the binary was built with uncommitted
+changes), usable in any theme property, e.g. a border title:
+`(kind: Property(Status(BuildRevision)), style: (fg: "#7aa0cd"))`.
 
 Next: filter column in the pane (decades or year range, Top %, genres) that runs `hits --json` itself.
