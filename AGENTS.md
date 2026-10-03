@@ -15,3 +15,11 @@ A file for [guiding AI coding agents](https://agents.md/).
 
 - `rustfmt.toml` uses nightly-only options: never run a plain `cargo fmt`, it reformats almost the whole
   repository. Format only your own files, with nightly if installed (`cargo +nightly fmt -- <files>`).
+
+## Checking UI behaviour
+
+- An agent can drive the TUI itself: `herdr tab create --no-focus`, `herdr pane run <pane> rormpc`, then
+  `herdr pane send-keys` / `herdr pane wait-output --source visible` / `herdr pane read --source visible`.
+  It talks to the real MPD, so undo queue changes (`mpc del`) and close the tab afterwards. To compare with
+  the build before a fix, run a backup binary from `~/.cache/rormpc/installed/`.
+- With random on, `mpc insert` appends at the end; use `mpc add` + `mpc move` to put a song at a position.
