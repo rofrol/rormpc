@@ -635,9 +635,9 @@ impl Pane for HitsPane {
 
 const DECADES: [i32; 8] = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
 const TOPS: [(u32, u32); 3] = [(1, 10), (11, 20), (21, 50)];
-const GENRES: [&str; 17] = [
+const GENRES: [&str; 18] = [
     "rock", "pop", "hip hop", "r&b", "soul", "dance", "electronic", "disco", "funk", "country", "metal",
-    "folk", "latin", "jazz", "blues", "punk", "reggae",
+    "folk", "latin", "jazz", "blues", "punk", "reggae", "classical",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -668,7 +668,7 @@ struct Filters {
     to: i32,
     tops: [bool; 3],
     /// -1 exclude, 0 off, 1 include
-    genres: [i8; 17],
+    genres: [i8; GENRES.len()],
     owned: bool,
     show_hidden: bool,
 }
@@ -677,7 +677,7 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { likes: false, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; 17], owned: false, show_hidden: false }
+        Self { likes: false, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; GENRES.len()], owned: false, show_hidden: false }
     }
 }
 
