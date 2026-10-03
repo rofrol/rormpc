@@ -9,17 +9,23 @@ next to it. Install with `scripts/rormpc_install.sh install` (keeps the previous
 
 ## Companion tools
 
-rormpc alone needs only MPD. Some fork features run my other tools, which are not installed with it:
+rormpc alone needs only MPD. Optional background services that work with rormpc closed:
 
-- `musicdb` and `hits`, Python CLIs in my dotfiles (`scripts/` in github.com/rofrol/dotfiles), on PATH: the delete
-  menu (Ctrl-x, Ctrl-y), the play counts in the `plays` sticker, likes sent to ListenBrainz, and the Hits pane.
-  Without them those features report that the command cannot be run; the rest works.
-- A ListenBrainz scrobbler, for play history: my fork [ro-listenbrainz-mpd](https://github.com/rofrol/ro-listenbrainz-mpd)
-  counts a listen only after 90% of the song played in one run without a seek. It is a separate daemon, so it
-  scrobbles with rormpc closed. Upstream listenbrainz-mpd works too, with its own rule.
+    scripts/rormpc_install.sh companions [--gap SECONDS]   # install / update / restart them
+    scripts/rormpc_install.sh status                       # what is installed and running
 
-`music-companions install` (dotfiles) installs the scrobbler at a pinned tag and starts the launchd agents;
-`music-companions status` checks all of the above.
+- [ro-listenbrainz-mpd](https://github.com/rofrol/ro-listenbrainz-mpd), my fork of the listenbrainz-mpd scrobbler,
+  installed with cargo at a pinned tag. `companions` adds my rule to its config (a listen is 90% of the song played
+  without a seek; the `listen_*` lines, change them there) and starts it once the ListenBrainz token is in the config.
+  It also records skipped songs in `skips.jsonl`.
+- `mpd-gap` (`scripts/mpd-gap`, needs [uv](https://docs.astral.sh/uv/)): seconds of silence between songs,
+  default 3, `--gap 0` removes it. Installed to `~/.local/bin`.
+
+Both run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
+`rormpc-*.service` on Linux; the installer writes them, so edits there are overwritten.
+
+The Hits pane and the delete menu run `hits` and `musicdb`, which still live in my dotfiles (`scripts/` in
+github.com/rofrol/dotfiles); without them those features report that the command cannot be run.
 
 ## Hits pane
 
