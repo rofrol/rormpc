@@ -209,6 +209,13 @@ pub enum PaneTypeFile {
     },
     Cava,
     Empty(),
+    /// rormpc: ranked chart hits from the `hits` CLI's JSON file
+    Hits {
+        #[serde(default)]
+        path: Option<String>,
+        #[serde(default)]
+        format: Option<Vec<PropertyFile<SongPropertyFile>>>,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, strum::Display, strum::EnumDiscriminants)]
@@ -251,6 +258,10 @@ pub enum PaneType {
     },
     Cava,
     Empty,
+    Hits {
+        path: String,
+        format: Vec<Property<SongProperty>>,
+    },
 }
 
 pub const PANES_ALLOWED_IN_BOTH_TAB_AND_LAYOUT: [PaneTypeDiscriminants; 2] =
@@ -389,6 +400,10 @@ impl TryFrom<PaneTypeFile> for PaneType {
             }
             PaneTypeFile::Cava => PaneType::Cava,
             PaneTypeFile::Empty() => PaneType::Empty,
+            PaneTypeFile::Hits { path, format } => PaneType::Hits {
+                path: path.unwrap_or_else(|| "~/.cache/rormpc/hits/current.json".to_owned()),
+                format: format.unwrap_or_default().into_iter().map(|p| p.convert()).try_collect()?,
+            },
         })
     }
 }

@@ -9,6 +9,7 @@ use cava::CavaPane;
 use directories::DirectoriesPane;
 use either::Either;
 use header::HeaderPane;
+use hits::HitsPane;
 use itertools::Itertools;
 use lyrics::LyricsPane;
 use playlists::PlaylistsPane;
@@ -77,6 +78,7 @@ pub mod empty;
 #[cfg(debug_assertions)]
 pub mod frame_count;
 pub mod header;
+pub mod hits;
 #[cfg(debug_assertions)]
 pub mod logs;
 pub mod lyrics;
@@ -307,6 +309,11 @@ impl<'panes> PaneContainer<'panes> {
                         ctx,
                     )) as Box<dyn BoxedPane>,
                 )),
+                PaneType::Hits { path, format } => Some((
+                    pane.pane.clone(),
+                    Box::new(HitsPane::new(path.clone(), pane.pane.clone(), format.clone(), ctx))
+                        as Box<dyn BoxedPane>,
+                )),
                 _ => None,
             })
     }
@@ -349,6 +356,11 @@ impl<'panes> PaneContainer<'panes> {
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
             )),
             p @ PaneType::Sticker { .. } => Ok(Panes::Others(
+                self.others
+                    .get_mut(pane)
+                    .with_context(|| format!("expected pane to be defined {p:?}"))?,
+            )),
+            p @ PaneType::Hits { .. } => Ok(Panes::Others(
                 self.others
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
