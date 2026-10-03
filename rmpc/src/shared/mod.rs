@@ -13,6 +13,7 @@ pub mod id;
 pub mod image;
 pub mod ipc;
 pub mod keys;
+pub mod last_tab;
 pub mod logging;
 pub mod lrc;
 pub mod macros;

@@ -93,6 +93,8 @@ pub struct HitsPane {
     filters: Option<Filters>,
     focus_filters: bool,
     filter_sel: usize,
+    /// first filter row shown when the column is taller than the pane
+    filter_offset: usize,
     filter_area: Rect,
     job: Arc<Mutex<Job>>,
 }
@@ -104,6 +106,7 @@ impl HitsPane {
             filters: None,
             focus_filters: false,
             filter_sel: 0,
+            filter_offset: 0,
             filter_area: Rect::default(),
             job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
@@ -244,18 +247,33 @@ impl HitsPane {
         }
         // the row list changes when switching decades <-> range
         self.filter_sel = self.filter_sel.min(self.filter_rows().len().saturating_sub(1));
+        self.scroll_filters(0);
         true
+    }
+
+    /// Scroll so the cursor stays visible (keyboard) or by `delta` rows (mouse wheel), within bounds.
+    fn scroll_filters(&mut self, delta: isize) {
+        let height = usize::from(self.filter_area.height).max(1);
+        let max = self.filter_rows().len().saturating_sub(height);
+        if delta == 0 {
+            if self.filter_sel < self.filter_offset {
+                self.filter_offset = self.filter_sel;
+            } else if self.filter_sel >= self.filter_offset + height {
+                self.filter_offset = self.filter_sel + 1 - height;
+            }
+        } else {
+            self.filter_offset = self.filter_offset.saturating_add_signed(delta);
+        }
+        self.filter_offset = self.filter_offset.min(max);
     }
 
     fn render_filters(&self, frame: &mut Frame, area: Rect, ctx: &Ctx) {
         let Some(filters) = &self.filters else { return };
         let rows = filters.rows();
-        // keep the selected row visible in a short terminal
-        let skip = self.filter_sel.saturating_sub(usize::from(area.height).saturating_sub(2));
         let lines: Vec<Line> = rows
             .iter()
             .enumerate()
-            .skip(skip)
+            .skip(self.filter_offset)
             .map(|(i, row)| {
                 let text = filters.line(*row);
                 let label_style = if matches!(row, FilterRow::Mode | FilterRow::Apply) {
@@ -346,6 +364,7 @@ impl Pane for HitsPane {
                 .spacing(2)
                 .areas(area);
         self.filter_area = filter_area;
+        self.scroll_filters(0); // the pane may have been resized
         self.render_filters(frame, filter_area, ctx);
         let [table_area, footer] =
             Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(main);
@@ -424,15 +443,25 @@ impl Pane for HitsPane {
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
         if self.filter_area.contains(event.into()) {
-            if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
-                let idx = usize::from(event.y.saturating_sub(self.filter_area.y));
-                if idx < self.filter_rows().len() {
-                    self.focus_filters = true;
-                    self.filter_sel = idx;
-                    self.filter_action(&CommonAction::Confirm, ctx);
-                    ctx.render()?;
+            match event.kind {
+                MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
+                    let idx = self.filter_offset + usize::from(event.y.saturating_sub(self.filter_area.y));
+                    if idx < self.filter_rows().len() {
+                        self.focus_filters = true;
+                        self.filter_sel = idx;
+                        self.filter_action(&CommonAction::Confirm, ctx);
+                    }
                 }
+                // the wheel scrolls the view; the cursor follows only if it would leave it
+                MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                    let step = ctx.config.scroll_amount.max(1) as isize;
+                    self.scroll_filters(if matches!(event.kind, MouseEventKind::ScrollDown) { step } else { -step });
+                    let height = usize::from(self.filter_area.height).max(1);
+                    self.filter_sel = self.filter_sel.clamp(self.filter_offset, self.filter_offset + height - 1);
+                }
+                _ => return Ok(()),
             }
+            ctx.render()?;
             return Ok(());
         }
         if !self.table_area.contains(event.into()) {

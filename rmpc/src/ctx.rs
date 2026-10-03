@@ -119,7 +119,7 @@ impl Ctx {
 
         let key_resolver = KeyResolver::new(&config);
 
-        let active_tab = config.tabs.names.first().context("Expected at least one tab")?.clone();
+        let active_tab = crate::shared::last_tab::initial(&config.tabs.names).context("Expected at least one tab")?;
         scheduler.start();
         Ok(Self {
             ytdlp_manager: YtDlpManager::new(work_sender.clone()),

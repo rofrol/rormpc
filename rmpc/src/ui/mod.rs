@@ -152,6 +152,7 @@ impl<'ui> Ui<'ui> {
         )?;
 
         ctx.active_tab = new_tab.clone();
+        crate::shared::last_tab::save(&new_tab);
         self.on_event(UiEvent::TabChanged(new_tab), ctx)?;
 
         self.layout.for_each_pane(

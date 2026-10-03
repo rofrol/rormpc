@@ -24,6 +24,11 @@ replaced. The pane re-reads the file when it changes and when the MPD database c
 ])),
 ```
 
+## Last tab
+
+rormpc reopens the tab that was active when it last ran (saved in `~/.cache/rormpc/last_tab`; a tab missing
+from the config falls back to the first one).
+
 ## Build revision
 
 `Status(BuildRevision)` renders "rormpc <short sha>[+] <commit subject>" (`+` if the binary was built with
