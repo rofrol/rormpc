@@ -14,7 +14,10 @@ A file for [guiding AI coding agents](https://agents.md/).
 ## Formatting
 
 - `rustfmt.toml` uses nightly-only options: never run a plain `cargo fmt`, it reformats almost the whole
-  repository. Format only your own files, with nightly if installed (`cargo +nightly fmt -- <files>`).
+  repository. `cargo +nightly fmt -- <files>` is no way out either: it still formats the whole package (it
+  rewrote 14 files on 2026-10-03). The fork's own files are not rustfmt-clean (wide doc comments, import order),
+  so even `rustfmt +nightly <file>` rewraps lines you did not touch. Match the surrounding style by hand; at most
+  run `rustfmt +nightly --edition 2024 --check <file>` and take only the hunks inside your own change.
 
 ## Checking UI behaviour
 
