@@ -15,8 +15,9 @@ Ranked chart hits produced by the `hits` CLI (dotfiles `~/scripts/hits`), e.g.
 
 A table (rank, percentile, ✓/✗ owned, artist, title, year, plays) with details for the selected row and a
 status line (label, counts, when `hits` ran). Missing songs are dimmed rows with nothing to play. Enter or a
-double click appends the selected owned song to the queue and plays it, `a` appends; the queue is never
-replaced. The pane re-reads the file when it changes and when the MPD database changes.
+double click plays the selected owned song, `a` appends it; the queue is never replaced. A file already in
+the queue is not appended again: Enter plays its existing entry (the playing one is not restarted, a paused
+one resumes), `a` only says so; the row's menu has "Add another copy" for a deliberate duplicate. The pane re-reads the file when it changes and when the MPD database changes.
 
 ```ron
 (name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [
@@ -28,7 +29,9 @@ replaced. The pane re-reads the file when it changes and when the MPD database c
 
 Queue (ContextMenu, e.g. Ctrl-z): besides upstream's items, Like ♥ / Dislike ✗ / Clear like (rmpc's like
 sticker) and, in its own section, "Move library file to Trash…" with a confirmation (the same as Ctrl-x,
-`musicdb delete`); "Remove" is renamed "Remove from queue (keep file)". Hits rows: Play now, Add to queue, like
+`musicdb delete`); "Remove" is renamed "Remove from queue (keep file)", and "Remove duplicate entries (N)…"
+collapses a file queued several times to one entry (the playing one, else the first), after a confirmation;
+library files stay. Hits rows: Play now, Add to queue, like
 items (owned songs), "Hide song across charts" / "Unhide" for every chart song (`hits hide|unhide`, an
 append-only log in the private data repo; hidden songs keep their place in the ranking and are dropped after
 the Top % cut), and "Move library file to Trash…" for owned songs. "show hidden" in the filter column lists

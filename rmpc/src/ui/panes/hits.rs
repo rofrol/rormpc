@@ -1,7 +1,8 @@
 //! rormpc: Hits pane. A table of the ranked chart hits written by the `hits` CLI (`hits ... --json PATH`) with
 //! a details panel for the selected row. Rows are chart entries, not directories: a missing song is a dimmed
-//! row with nothing to play. Enter / double click append the selected owned song to the queue and play it,
-//! `a` appends without playing; the queue is never replaced. The ranking itself stays in `hits`: the filter
+//! row with nothing to play. Enter / double click play the selected owned song (its queue entry if it is
+//! already queued, else appended), `a` appends without playing unless already queued; the queue is never
+//! replaced. The ranking itself stays in `hits`: the filter
 //! column on the left (h/l moves between it and the table) runs `hits --json` in a background thread on Apply.
 
 use std::{
@@ -20,21 +21,16 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, TableState, Wrap},
 };
-use rmpc_mpd::client::Client;
 use serde::Deserialize;
 
 use super::Pane;
 use crate::{
-    config::keys::{
-        CommonAction,
-        actions::{AutoplayKind, Position},
-    },
+    config::keys::CommonAction,
     ctx::Ctx,
     shared::{
         keys::ActionEvent,
         mouse_event::{MouseEvent, MouseEventKind},
         events::AppEvent,
-        mpd_client_ext::{Enqueue, MpdClientExt},
     },
     shared::macros::modal,
     ui::{UiEvent, dirstack::DirState, modals::menu::modal::MenuModal, rormpc_actions},
@@ -181,19 +177,12 @@ impl HitsPane {
         self.state.get_selected().and_then(|i| self.rows.get(i))
     }
 
-    /// Append the selected owned song to the end of the queue, optionally playing it.
+    /// Queue the selected owned song, optionally playing it; one already queued is not appended again.
     fn enqueue_selected(&self, play: bool, ctx: &Ctx) {
         let Some(path) = self.selected().and_then(|r| r.file.clone()) else {
             return; // missing songs have nothing to queue
         };
-        Client::resolve_and_enqueue(
-            ctx,
-            vec![Enqueue::File { path }],
-            Position::EndOfQueue,
-            if play { AutoplayKind::First } else { AutoplayKind::None },
-            ctx.current_song_index(),
-            None,
-        );
+        rormpc_actions::queue_file(ctx, path, play, false);
     }
 
     /// Run `hits` with the current filters in a background thread; one run at a time, a newer Apply during a
@@ -333,14 +322,18 @@ impl HitsPane {
         let sender = ctx.app_event_sender.clone();
         let mut menu = MenuModal::new(ctx);
         if let Some(file) = r.file.clone() {
-            let (play, queue) = (file.clone(), file.clone());
+            let (play, queue, copy) = (file.clone(), file.clone(), file.clone());
             menu = menu.list_section(ctx, move |mut section| {
                 section.add_item("Play now  (Enter)", move |ctx| {
-                    enqueue_file(ctx, play, true);
+                    rormpc_actions::queue_file(ctx, play, true, false);
                     Ok(())
                 });
                 section.add_item("Add to queue  (a)", move |ctx| {
-                    enqueue_file(ctx, queue, false);
+                    rormpc_actions::queue_file(ctx, queue, false, false);
+                    Ok(())
+                });
+                section.add_item("Add another copy", move |ctx| {
+                    rormpc_actions::queue_file(ctx, copy, false, true);
                     Ok(())
                 });
                 Some(section)
@@ -433,17 +426,6 @@ impl HitsPane {
         }
         lines
     }
-}
-
-fn enqueue_file(ctx: &Ctx, path: String, play: bool) {
-    Client::resolve_and_enqueue(
-        ctx,
-        vec![Enqueue::File { path }],
-        Position::EndOfQueue,
-        if play { AutoplayKind::First } else { AutoplayKind::None },
-        ctx.current_song_index(),
-        None,
-    );
 }
 
 fn expand_home(path: &str) -> String {

@@ -302,6 +302,23 @@ impl QueuePane {
                         }
                         Ok(())
                     })
+                    // rormpc: the same file queued several times (e.g. from Hits) collapses to one entry
+                    .item(
+                        match crate::ui::rormpc_actions::duplicate_ids(&ctx.queue, ctx.current_song().map(|s| s.id))
+                            .len()
+                        {
+                            0 => "Remove duplicate entries (none)".to_owned(),
+                            n => format!("Remove duplicate entries ({n})…"),
+                        },
+                        |ctx| {
+                            let current = ctx.current_song().map(|s| s.id);
+                            let n = crate::ui::rormpc_actions::duplicate_ids(&ctx.queue, current).len();
+                            if n > 0 {
+                                crate::ui::rormpc_actions::confirm_remove_duplicates(ctx, n);
+                            }
+                            Ok(())
+                        },
+                    )
                     .item("Clear queue", |ctx| {
                         ctx.command(|_, client| {
                             client.clear()?;
