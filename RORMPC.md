@@ -7,6 +7,20 @@ The binary is `rormpc` and its config lives in `~/.config/rormpc/`, so upstream 
 next to it. Install with `scripts/rormpc_install.sh install` (keeps the previous binary;
 `rollback` and `list` too). Commits carry "(AI-assisted)" (see AGENTS.md).
 
+## Companion tools
+
+rormpc alone needs only MPD. Some fork features run my other tools, which are not installed with it:
+
+- `musicdb` and `hits`, Python CLIs in my dotfiles (`scripts/` in github.com/rofrol/dotfiles), on PATH: the delete
+  menu (Ctrl-x, Ctrl-y), the play counts in the `plays` sticker, likes sent to ListenBrainz, and the Hits pane.
+  Without them those features report that the command cannot be run; the rest works.
+- A ListenBrainz scrobbler, for play history: my fork [ro-listenbrainz-mpd](https://github.com/rofrol/ro-listenbrainz-mpd)
+  counts a listen only after 90% of the song played in one run without a seek. It is a separate daemon, so it
+  scrobbles with rormpc closed. Upstream listenbrainz-mpd works too, with its own rule.
+
+`music-companions install` (dotfiles) installs the scrobbler at a pinned tag and starts the launchd agents;
+`music-companions status` checks all of the above.
+
 ## Hits pane
 
 Ranked chart hits produced by the `hits` CLI (dotfiles `~/scripts/hits`), e.g.
