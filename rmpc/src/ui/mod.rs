@@ -721,6 +721,9 @@ impl<'ui> Ui<'ui> {
                 GlobalAction::ShowDownloads => {
                     modal!(ctx, DownloadsModal::new(ctx));
                 }
+                GlobalAction::ShowDeletions => {
+                    modal!(ctx, crate::ui::modals::deletions::DeletionsModal::new(ctx));
+                }
             }
         } else if let Some(action) = key.claim_common() {
             #[allow(

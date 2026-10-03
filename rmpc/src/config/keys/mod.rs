@@ -85,6 +85,7 @@ impl Default for KeyConfigFile {
             (s().char('o').char('o'),             G::ShowOutputs),
             (s().char('o').char('p'),             G::ShowDecoders),
             (s().char('o').char('d'),             G::ShowDownloads),
+            (s().char('o').char('x'),             G::ShowDeletions),
             (s().char('o').char('P'),             G::Partition { name: None, autocreate: false }),
             (s().char('z'),                       G::ToggleRepeat),
             (s().char('x'),                       G::ToggleRandom),

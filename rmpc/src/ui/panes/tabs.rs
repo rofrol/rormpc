@@ -34,7 +34,8 @@ impl TabsPane<'_> {
     }
 
     fn init_active_tab(ctx: &Ctx) -> Result<TabName> {
-        Ok(ctx.config.tabs.names.first().context("Expected at least one tab")?.clone())
+        // rormpc: start on ctx.active_tab (restored last tab), not always the first tab
+        ctx.config.tabs.names.iter().find(|t| **t == ctx.active_tab).cloned().context("Expected at least one tab")
     }
 
     fn init_tab_names(ctx: &Ctx) -> Vec<String> {

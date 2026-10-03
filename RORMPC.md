@@ -26,8 +26,16 @@ replaced. The pane re-reads the file when it changes and when the MPD database c
 
 ## Last tab
 
-rormpc reopens the tab that was active when it last ran (saved in `~/.cache/rormpc/last_tab`; a tab missing
-from the config falls back to the first one).
+rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default
+`~/.local/state`, not in the hand-edited config; a tab missing from the config falls back to the first one).
+
+## Deletion queue (`ox`, action `ShowDeletions`)
+
+Songs trashed with Ctrl-x (`musicdb delete`, Ctrl-y undoes) wait in a queue. `ox` opens it: per song choose
+"remove from the YouTube playlists" (`[x]` by default) and "delete the ListenBrainz listens" (off by default,
+irreversible); h/l pick the column, Space toggles, Enter shows exactly what will happen with "Cancel" as the
+default button. `musicdb deletions --confirm ID --[no-]youtube --[no-]listenbrainz` runs in a background thread
+per song; each step's outcome is shown and a failed step stays queued for a retry.
 
 ## Build revision
 
