@@ -98,6 +98,9 @@ struct HitsRow {
     /// hidden with `hits hide`; present only when the run used --show-hidden
     #[serde(default)]
     hidden: bool,
+    /// why a recommendation is there ("similar to …")
+    #[serde(default)]
+    reason: Option<String>,
 }
 
 /// One song in the `hits fetch` queue ($XDG_STATE_HOME/rormpc-tools/fetch/queue.json).
@@ -654,7 +657,11 @@ impl HitsPane {
             Line::default(),
             field("Rank", format!("#{} of {} ({:.0}%)", r.rank, r.cohort, r.pct.ceil())),
             Line::from(Span::styled(self.rank_note.clone(), dim)),
-            field("Year-end charts", years),
+            if let Some(reason) = &r.reason {
+                field("Why", reason.clone())
+            } else {
+                field("Year-end charts", years)
+            },
             field("Genres", if r.genres.is_empty() { "unknown".to_owned() } else { r.genres.join(", ") }),
             Line::default(),
         ];
@@ -815,7 +822,7 @@ impl Pane for HitsPane {
         self.filter_area = list_area;
         self.apply_area = apply_area;
         self.scroll_filters(0); // the pane may have been resized
-        self.render_filters(frame, filter_area, ctx);
+        self.render_filters(frame, list_area, ctx);
         let [table_area, footer] =
             Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(main);
         self.table_area = table_area;
@@ -832,7 +839,7 @@ impl Pane for HitsPane {
                 Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
                 Cell::from(r.artist.clone()),
                 Cell::from(r.title.clone()),
-                Cell::from(r.year.to_string()),
+                Cell::from(if r.year > 0 { r.year.to_string() } else { String::new() }),
                 Cell::from(if owned && r.plays > 0 { r.plays.to_string() } else { String::new() }),
             ])
             .style(if owned && !r.hidden { Style::default() } else { dim })
@@ -1029,11 +1036,36 @@ enum FilterRow {
     Apply,
 }
 
+/// Where the ranked songs come from (`hits --source`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Billboard,
+    Likes,
+    Recs,
+}
+
+impl Source {
+    const ALL: [Source; 3] = [Source::Billboard, Source::Likes, Source::Recs];
+
+    fn label(self) -> &'static str {
+        match self {
+            Source::Billboard => "Billboard US",
+            Source::Likes => "my likes",
+            Source::Recs => "recommended",
+        }
+    }
+
+    /// The next (delta > 0) or previous source, wrapping around.
+    fn next(self, delta: i32) -> Source {
+        let i = Self::ALL.iter().position(|s| *s == self).unwrap_or(0) as i32;
+        Self::ALL[(i + delta).rem_euclid(Self::ALL.len() as i32) as usize]
+    }
+}
+
 /// What the filter column edits; turned into `hits` arguments on Apply.
 #[derive(Debug, Clone)]
 struct Filters {
-    /// false: Billboard year-end charts, true: my liked songs
-    likes: bool,
+    source: Source,
     /// likes only: false = by plays, true = rediscover
     rediscover: bool,
     by_range: bool,
@@ -1051,21 +1083,24 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { likes: false, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: GENRES.iter().map(|g| ((*g).to_owned(), 0)).collect(), owned: false, show_hidden: false }
+        Self { source: Source::Billboard, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: GENRES.iter().map(|g| ((*g).to_owned(), 0)).collect(), owned: false, show_hidden: false }
     }
 }
 
 impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
         let mut rows = vec![FilterRow::Source];
-        if self.likes {
+        if self.source == Source::Likes {
             rows.push(FilterRow::Sort);
         }
-        rows.push(FilterRow::Mode);
-        if self.by_range {
-            rows.extend([FilterRow::From, FilterRow::To]);
-        } else {
-            rows.extend((0..DECADES.len()).map(FilterRow::Decade));
+        // recommendations have no year to filter on
+        if self.source != Source::Recs {
+            rows.push(FilterRow::Mode);
+            if self.by_range {
+                rows.extend([FilterRow::From, FilterRow::To]);
+            } else {
+                rows.extend((0..DECADES.len()).map(FilterRow::Decade));
+            }
         }
         rows.push(FilterRow::Heading("Top %"));
         rows.extend((0..TOPS.len()).map(FilterRow::Top));
@@ -1122,12 +1157,17 @@ impl Filters {
         let tops: Vec<String> =
             TOPS.iter().zip(self.tops).filter(|(_, on)| *on).map(|((lo, hi), _)| format!("{lo}-{hi}")).collect();
         let mut args = Vec::new();
-        if self.likes {
-            args.extend(["--source".to_owned(), "likes".to_owned(), "--sort".to_owned()]);
-            args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
+        match self.source {
+            Source::Billboard => {}
+            Source::Likes => {
+                args.extend(["--source".to_owned(), "likes".to_owned(), "--sort".to_owned()]);
+                args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
+            }
+            Source::Recs => args.extend(["--source".to_owned(), "recs".to_owned()]),
         }
-        // likes without any decade ticked = all years (a chart needs a period)
-        if !(self.likes && !self.by_range && !self.decades.iter().any(|d| *d)) {
+        // likes without any decade ticked = all years (a chart needs a period); recommendations have no year
+        let all_years = self.source == Source::Likes && !self.by_range && !self.decades.iter().any(|d| *d);
+        if self.source != Source::Recs && !all_years {
             args.extend(["--years".to_owned(), self.years()]);
         }
         args.push("--top".to_owned());
@@ -1183,9 +1223,13 @@ impl Filters {
         f.add_genres(args.genre.as_deref().unwrap_or_default());
         f.owned = args.owned;
         f.show_hidden = args.show_hidden;
-        f.likes = args.source.as_deref() == Some("likes");
+        f.source = match args.source.as_deref() {
+            Some("likes") => Source::Likes,
+            Some("recs") => Source::Recs,
+            _ => Source::Billboard,
+        };
         f.rediscover = args.sort.as_deref() == Some("rediscover");
-        if f.likes && args.period.is_none() {
+        if f.source == Source::Likes && args.period.is_none() {
             f.decades = [false; 8]; // all years
         }
         f
@@ -1194,7 +1238,7 @@ impl Filters {
     fn line(&self, row: FilterRow) -> String {
         let check = |on: bool| if on { "[x]" } else { "[ ]" };
         match row {
-            FilterRow::Source => format!("Source: {}", if self.likes { "‹my likes›" } else { "‹Billboard US›" }),
+            FilterRow::Source => format!("Source: ‹{}›", self.source.label()),
             FilterRow::Sort => format!("Sort:   {}", if self.rediscover { "‹rediscover›" } else { "‹by plays›" }),
             FilterRow::Mode => format!("Period: {}", if self.by_range { "‹year range›" } else { "‹decades›" }),
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
@@ -1218,7 +1262,7 @@ impl Filters {
     /// Space / Enter on a row.
     fn toggle(&mut self, row: FilterRow) {
         match row {
-            FilterRow::Source => self.likes = !self.likes,
+            FilterRow::Source => self.source = self.source.next(1),
             FilterRow::Sort => self.rediscover = !self.rediscover,
             FilterRow::Mode => self.by_range = !self.by_range,
             FilterRow::Decade(i) => self.decades[i] = !self.decades[i],
@@ -1237,7 +1281,7 @@ impl Filters {
             FilterRow::From => self.from = clamp(self.from + delta),
             FilterRow::To => self.to = clamp(self.to + delta),
             FilterRow::Mode => self.by_range = !self.by_range,
-            FilterRow::Source => self.likes = !self.likes,
+            FilterRow::Source => self.source = self.source.next(delta),
             FilterRow::Sort => self.rediscover = !self.rediscover,
             _ => return false,
         }
