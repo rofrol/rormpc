@@ -26,3 +26,11 @@ A file for [guiding AI coding agents](https://agents.md/).
   It talks to the real MPD, so undo queue changes (`mpc del`) and close the tab afterwards. To compare with
   the build before a fix, run a backup binary from `~/.cache/rormpc/installed/`.
 - With random on, `mpc insert` appends at the end; use `mpc add` + `mpc move` to put a song at a position.
+- Features that change playback or replace the queue (Sources…, Up next): test them on a scratch MPD, never the
+  user's. A config with `music_directory` = the real library, its own `db_file`, `state_file`, `sticker_file`, a
+  copy of the playlists, `port "6650"` and `audio_output { type "null" name "null" }`, started with
+  `mpd --no-daemon --stderr <conf>` in the background; `MPD_PORT=6650 mpc update --wait`, then
+  `env XDG_STATE_HOME=<scratch> rormpc -a 127.0.0.1:6650` in a herdr tab. Stop it with `kill <pid>` (check with
+  `lsof -iTCP:6650`); `mpc kill` did not stop it.
+- Don't `export XDG_STATE_HOME` in a shell that then runs `herdr-job`: herdr-job keeps its own state there and
+  reports the job as "lost". Pass it to the command with `env` instead.
