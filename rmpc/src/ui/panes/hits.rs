@@ -731,6 +731,7 @@ impl HitsPane {
             });
             let hint = rormpc_actions::rate_key_hint(ctx);
             let like_file = file.clone();
+            let what = format!("'{}'", r.title);
             menu = menu.list_section(ctx, move |mut section| {
                 for (label, value) in [("Like ♥", "2"), ("Dislike ✗", "0"), ("Clear like", "1")] {
                     let file = like_file.clone();
@@ -739,6 +740,11 @@ impl HitsPane {
                         Ok(())
                     });
                 }
+                let playlist_file = like_file.clone();
+                section.add_item("Add to playlist…", move |ctx| {
+                    crate::ui::rormpc_playlists::open_add_to_playlist(ctx, vec![playlist_file], what);
+                    Ok(())
+                });
                 section.add_item("Tags…", move |ctx| {
                     crate::ui::rormpc_tags::open_tags_menu(ctx, like_file);
                     Ok(())

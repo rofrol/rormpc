@@ -77,6 +77,7 @@ pub mod modals;
 pub mod panes;
 pub mod rormpc_actions;
 pub mod rormpc_lyrics;
+pub mod rormpc_playlists;
 pub mod rormpc_tags;
 pub mod song_ext;
 pub mod tab_screen;

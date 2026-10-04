@@ -279,6 +279,23 @@ impl QueuePane {
                         Ok(())
                     });
                 }
+                // marked rows, else the cursor row
+                let targets: Vec<String> = if self.queue.marked().is_empty() {
+                    vec![file.clone()]
+                } else {
+                    self.queue.marked().iter().filter_map(|i| self.queue.items.get(*i)).map(|s| s.file.clone()).collect()
+                };
+                let what = if targets.len() == 1 {
+                    self.queue.selected().filter(|_| self.queue.marked().is_empty())
+                        .map(|s| format!("'{}'", s.metadata.get("title").map_or(s.file.as_str(), |t| t.last())))
+                        .unwrap_or_else(|| "1 song".to_owned())
+                } else {
+                    format!("{} marked songs", targets.len())
+                };
+                section.add_item("Add to playlist…", move |ctx| {
+                    crate::ui::rormpc_playlists::open_add_to_playlist(ctx, targets, what);
+                    Ok(())
+                });
                 let tags_file = file.clone();
                 section.add_item("Tags…", move |ctx| {
                     crate::ui::rormpc_tags::open_tags_menu(ctx, tags_file);
