@@ -100,6 +100,12 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 ])),
 ```
 
+## Add to playlist
+
+"Add to playlist…" in the Queue menu (marked rows, else the cursor row) and on owned Hits rows: a new playlist by
+name, or a stored one; each shows `✓` when it already has all the songs (then Enter does nothing) or "3/5 there,
+adds 2". It only ever adds; removing stays in the Playlists pane.
+
 ## Tags
 
 "Tags…" in the Queue menu and on owned Hits rows lists my hand-made song lists (`musicdb tag`, rormpc-tools: God,
