@@ -103,23 +103,10 @@ pub fn delete_menu_instead(ctx: &Ctx, command: &[String], env: &[(String, String
 /// Play plays the existing entry (the playing one first, so it is not restarted; a paused one resumes),
 /// Add only says so. With random on a queue position tells nothing, so the message doesn't show one.
 pub fn queue_file(ctx: &Ctx, path: String, play: bool, copy: bool) {
-    let current = ctx.current_song().map(|s| s.id);
-    let mut queued = ctx.queue.iter().filter(|s| s.file == path);
-    let existing = queued.clone().find(|s| Some(s.id) == current).or_else(|| queued.next());
-    if let (Some(song), false) = (existing, copy) {
-        let (id, title) = (song.id, song_title(song));
-        if !play {
-            status_info!("Already in the queue: {title} (menu: Add another copy)");
-        } else if Some(id) == current {
-            if ctx.status.state == State::Pause {
-                ctx.command(|_, client| Ok(client.play()?));
-            }
-        } else {
-            ctx.command(move |_, client| Ok(client.play_id(id)?));
-        }
+    if !copy && use_existing_entry(ctx, &path, play) {
         return;
     }
-    Client::resolve_and_enqueue(
+    Client::enqueue_unchecked(
         ctx,
         vec![Enqueue::File { path }],
         Position::EndOfQueue,
@@ -127,6 +114,27 @@ pub fn queue_file(ctx: &Ctx, path: String, play: bool, copy: bool) {
         ctx.current_song_index(),
         None,
     );
+}
+
+/// For a file already in the queue: play its entry (the playing one first, so it is not restarted; a paused one
+/// resumes) or, when only adding, say it is there. False when the file is not queued.
+pub fn use_existing_entry(ctx: &Ctx, path: &str, play: bool) -> bool {
+    let current = ctx.current_song().map(|s| s.id);
+    let mut queued = ctx.queue.iter().filter(|s| s.file == path);
+    let Some(song) = queued.clone().find(|s| Some(s.id) == current).or_else(|| queued.next()) else {
+        return false;
+    };
+    let (id, title) = (song.id, song_title(song));
+    if !play {
+        status_info!("Already in the queue: {title}");
+    } else if Some(id) == current {
+        if ctx.status.state == State::Pause {
+            ctx.command(|_, client| Ok(client.play()?));
+        }
+    } else {
+        ctx.command(move |_, client| Ok(client.play_id(id)?));
+    }
+    true
 }
 
 fn song_title(song: &Song) -> String {
