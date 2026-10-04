@@ -279,6 +279,11 @@ impl QueuePane {
                         Ok(())
                     });
                 }
+                let tags_file = file.clone();
+                section.add_item("Tags…", move |ctx| {
+                    crate::ui::rormpc_tags::open_tags_menu(ctx, tags_file);
+                    Ok(())
+                });
                 let lyrics_file = file.clone();
                 section.add_item("Choose lyrics…", move |ctx| {
                     crate::ui::rormpc_lyrics::open_chooser(ctx, lyrics_file);
