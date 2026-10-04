@@ -634,6 +634,8 @@ fn main_task<B: Backend + std::io::Write>(
                             ctx.set_current_song(new_current_song);
 
                             if is_new_song {
+                                // rormpc: an Up next entry that has played leaves Up next
+                                crate::ui::rormpc_upnext::song_changed(&ctx, current_song_id);
                                 if let Some(command) = &ctx.config.on_song_change {
                                     let mut env = create_env(&ctx, std::iter::empty());
 

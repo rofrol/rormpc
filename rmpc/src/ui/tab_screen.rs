@@ -68,9 +68,10 @@ impl TabScreen {
         ctx: &Ctx,
     ) -> Result<()> {
         let focused = self.panes.panes_iter().find(|pane| pane.id == self.focused);
+        let mut queue_area: Option<Rect> = None;
         self.panes.for_each_pane_custom_data(
             area,
-            frame,
+            &mut *frame,
             &mut |pane, area, block, block_area, bg_color, frame| {
                 let pane_data = self
                     .pane_data
@@ -91,6 +92,9 @@ impl TabScreen {
                 let mut pane_instance = pane_container.get_mut(&pane.pane, ctx)?;
                 pane_call!(pane_instance, render(frame, area, ctx))?;
                 frame.render_widget(block, block_area);
+                if matches!(pane.pane, crate::config::tabs::PaneType::Queue) {
+                    queue_area = Some(area);
+                }
                 Ok(())
             },
             &mut |block, block_area, background_color, frame| {
@@ -105,6 +109,16 @@ impl TabScreen {
             },
             ctx,
         )?;
+        // rormpc: "Playing from: … · Up next N" on the border line right above the queue, drawn last so no
+        // block paints over it; only where that line really is a border
+        if let (Some(q), Some(header)) = (queue_area, crate::ui::rormpc_upnext::header(ctx))
+            && q.y > 0
+            && frame.buffer_mut().cell((q.x + 2, q.y - 1)).is_some_and(|c| c.symbol() == "─")
+        {
+            let width = (header.chars().count() as u16).min(q.width.saturating_sub(4));
+            let line = Rect { x: q.x + 2, y: q.y - 1, width, height: 1 };
+            frame.render_widget(ratatui::widgets::Paragraph::new(header).style(ctx.config.as_border_style()), line);
+        }
         Ok(())
     }
 
