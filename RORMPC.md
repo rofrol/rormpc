@@ -73,6 +73,20 @@ needs a double click). A click outside a modal closes it like Esc and does not r
 as the second click of a double click; confirmation dialogs stay open. With `modal_backdrop: true` in the theme
 the screen behind a modal is dimmed with the terminal's faint attribute (as herdr does), keeping its colours.
 
+## Deleted pane
+
+Songs deleted with Ctrl-x, newest first, from `musicdb deletions --json --all` (rormpc-tools): when, whether the
+file went to the Trash or was deleted permanently, whether its history was kept or deleted, and failed steps
+(`!`). The details show the ListenBrainz listens deleted, the YouTube playlists the video was removed from and
+each step's outcome. Enter (or the context menu) restores a song still in the Trash (`musicdb undo --id`) or
+retries failed steps; nothing in this pane deletes. It reloads when shown and when the MPD database changes.
+
+```ron
+(name: "Deleted", pane: Split(size: "100%", direction: Vertical, panes: [
+    (pane: Pane(Deleted()), size: "100%", borders: "ALL", border_symbols: Rounded),
+])),
+```
+
 ## Last tab
 
 rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default
