@@ -76,6 +76,7 @@ pub mod input;
 pub mod modals;
 pub mod panes;
 pub mod rormpc_actions;
+pub mod rormpc_lyrics;
 pub mod song_ext;
 pub mod tab_screen;
 pub mod widgets;
