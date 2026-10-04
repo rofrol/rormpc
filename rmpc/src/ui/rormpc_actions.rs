@@ -60,6 +60,20 @@ pub fn set_like(ctx: &Ctx, file: String, value: &'static str) {
     });
 }
 
+/// "Keep": the song is not a deletion candidate; `musicdb keep` logs it and `musicdb sync` drops it from the
+/// "Not finished" playlist and its notFinished sticker.
+pub fn keep_song(file: String) {
+    std::thread::spawn(move || {
+        let ok = std::process::Command::new("musicdb").args(["keep", "--", &file]).status().is_ok_and(|s| s.success())
+            && std::process::Command::new("musicdb").arg("sync").status().is_ok_and(|s| s.success());
+        if ok {
+            status_info!("Kept: no longer in Not finished");
+        } else {
+            crate::shared::macros::status_error!("musicdb keep failed");
+        }
+    });
+}
+
 /// The delete menu (Trash or permanent, keep or delete the history) for these library files.
 pub fn open_delete_menu(ctx: &Ctx, files: Vec<String>) {
     modal!(ctx, DeleteMenu::new(ctx, files));
