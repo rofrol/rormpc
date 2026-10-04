@@ -50,6 +50,13 @@ under the genre checkboxes asks for genres that have no checkbox (`italo-disco, 
 `-` excludes) and adds them as rows. `[ Apply ]` stays at the bottom of the column however far it is scrolled, and
 says "• changed" when the filters differ from the result on screen, "running…" while `hits` runs.
 
+Missing songs can be fetched from a missing row's menu: "Fetch this song", "Fetch the first 10 missing" or
+"Fetch all N missing…" (confirmed). This queues them in `hits fetch` (rormpc-tools), a verified import queue that
+keeps running when rormpc closes: it downloads one song at a time with pauses, and only an exact match of the
+chart's recording goes into `Hits/<decade>s`; anything else waits for review. The `✗` column then shows the state:
+`…` queued, `↓` fetching, `?` review (menu: Accept / Reject the download), `!` failed (menu: Retry, the details say
+why), `+` arrived (the result reruns to show it as owned); the status line counts them.
+
 ```ron
 (name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [
     (pane: Pane(Hits()), size: "100%", borders: "ALL", border_symbols: Rounded), // path: "~/.cache/rormpc/hits/current.json"

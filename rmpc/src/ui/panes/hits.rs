@@ -4,6 +4,8 @@
 //! already queued, else appended), `a` appends without playing unless already queued; the queue is never
 //! replaced. The ranking itself stays in `hits`: the filter
 //! column on the left (h/l moves between it and the table) runs `hits --json` in a background thread on Apply.
+//! Missing songs can be fetched through `hits fetch` (a verified import queue): the menu queues them and starts
+//! the worker, and each missing row shows its state from the queue file.
 
 use std::{
     path::PathBuf,
@@ -32,11 +34,15 @@ use crate::{
         mouse_event::{MouseEvent, MouseEventKind},
         events::AppEvent,
     },
-    shared::macros::modal,
+    shared::macros::{modal, status_error, status_info},
     ui::{
         UiEvent,
         dirstack::DirState,
-        modals::{input_modal::InputModal, menu::modal::MenuModal},
+        modals::{
+            confirm_modal::{Action, ConfirmModal},
+            input_modal::InputModal,
+            menu::modal::MenuModal,
+        },
         rormpc_actions,
     },
 };
@@ -94,6 +100,50 @@ struct HitsRow {
     hidden: bool,
 }
 
+/// One song in the `hits fetch` queue ($XDG_STATE_HOME/rormpc-tools/fetch/queue.json).
+#[derive(Debug, Clone, Deserialize)]
+struct FetchItem {
+    key: String,
+    artist: String,
+    title: String,
+    #[serde(default)]
+    mbid: Option<String>,
+    state: String,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    candidate: Option<String>,
+    /// what MusicBrainz identified the download as
+    #[serde(default)]
+    found: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FetchQueue {
+    items: Vec<FetchItem>,
+}
+
+fn fetch_queue_path() -> PathBuf {
+    let state = std::env::var("XDG_STATE_HOME").map(PathBuf::from).unwrap_or_else(|_| {
+        PathBuf::from(expand_home("~/.local/state"))
+    });
+    state.join("rormpc-tools/fetch/queue.json")
+}
+
+/// One-cell mark of a missing row's fetch state.
+fn fetch_mark(state: &str) -> &'static str {
+    match state {
+        "queued" => "…",
+        "searching" | "downloading" | "verifying" => "↓",
+        "review" => "?",
+        "failed" => "!",
+        "ok" => "+",
+        _ => "✗",
+    }
+}
+
 #[derive(Debug)]
 pub struct HitsPane {
     path: PathBuf,
@@ -118,6 +168,8 @@ pub struct HitsPane {
     applied_args: Option<Vec<String>>,
     /// text typed into the "other genre" input, picked up on the next render
     genre_input: Arc<Mutex<Option<String>>>,
+    fetch: Vec<FetchItem>,
+    fetch_mtime: Option<SystemTime>,
     job: Arc<Mutex<Job>>,
 }
 
@@ -133,6 +185,8 @@ impl HitsPane {
             apply_area: Rect::default(),
             applied_args: None,
             genre_input: Arc::new(Mutex::new(None)),
+            fetch: Vec::new(),
+            fetch_mtime: None,
             job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
             rows: Vec::new(),
@@ -187,6 +241,112 @@ impl HitsPane {
             serde_json::from_str(&text).with_context(|| format!("parsing {}", self.path.display()))?;
         anyhow::ensure!(file.version == 1, "unsupported hits file version {}", file.version);
         Ok(file)
+    }
+
+    /// Re-read the fetch queue when the worker or a menu action changed it.
+    fn reload_fetch(&mut self) {
+        let path = fetch_queue_path();
+        let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        if mtime == self.fetch_mtime {
+            return;
+        }
+        self.fetch_mtime = mtime;
+        self.fetch = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<FetchQueue>(&text).ok())
+            .map(|q| q.items)
+            .unwrap_or_default();
+    }
+
+    /// The queue entry of a chart row: same recording MBID, else the same artist and title.
+    fn fetch_for(&self, r: &HitsRow) -> Option<&FetchItem> {
+        self.fetch.iter().find(|f| match (&f.mbid, &r.mbid) {
+            (Some(a), Some(b)) => a == b,
+            _ => f.artist == r.artist && f.title == r.title,
+        })
+    }
+
+    /// Menu section for a missing row: fetch it (or more), or decide on what the queue found.
+    fn fetch_section<'m>(&self, ctx: &Ctx, menu: MenuModal<'m>, r: &HitsRow) -> MenuModal<'m> {
+        let path = self.path.to_string_lossy().into_owned();
+        let missing = self.rows.iter().filter(|x| x.file.is_none() && !x.hidden).count();
+        let item = self.fetch_for(r).cloned();
+        let busy = self.fetch.iter().any(|f| matches!(f.state.as_str(), "queued" | "searching" | "downloading" | "verifying"));
+        let pane = self.clone_for_fetch();
+        let rank = r.rank;
+        menu.list_section(ctx, move |mut section| {
+            match item.as_ref().map(|f| f.state.as_str()) {
+                None => {
+                    let (one, ten, all) = (pane.clone(), pane.clone(), pane.clone());
+                    let (p1, p2, p3) = (path.clone(), path.clone(), path.clone());
+                    section.add_item("Fetch this song", move |ctx| {
+                        one.start_fetch(ctx, vec!["add".into(), "--from".into(), p1, "--rank".into(), rank.to_string()]);
+                        Ok(())
+                    });
+                    section.add_item(format!("Fetch the first {} missing", missing.min(10)), move |ctx| {
+                        ten.start_fetch(ctx, vec!["add".into(), "--from".into(), p2, "--first".into(), "10".into()]);
+                        Ok(())
+                    });
+                    section.add_item(format!("Fetch all {missing} missing…"), move |ctx| {
+                        let message = vec![format!(
+                            "Fetch all {missing} missing songs of this result?\n\nOne at a time with pauses (YouTube \
+                             blocks bursts), so this takes a while. Only exact recording matches go into the library; \
+                             the rest wait for review here."
+                        )];
+                        let go = move |ctx: &Ctx| -> Result<()> {
+                            all.start_fetch(ctx, vec!["add".into(), "--from".into(), p3.clone()]);
+                            Ok(())
+                        };
+                        modal!(
+                            ctx,
+                            ConfirmModal::builder()
+                                .ctx(ctx)
+                                .message(message)
+                                .action(Action::CustomButtons {
+                                    buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Fetch", Box::new(go))],
+                                })
+                                .build()
+                        );
+                        Ok(())
+                    });
+                }
+                Some("review") => {
+                    let f = item.clone().expect("review item");
+                    let (a, b) = (pane.clone(), pane.clone());
+                    let (k1, k2) = (f.key.clone(), f.key.clone());
+                    section.add_item("Accept the download into the library", move |ctx| {
+                        a.fetch_decision(ctx, "accept", k1);
+                        Ok(())
+                    });
+                    section.add_item("Reject the download (never again)", move |ctx| {
+                        b.fetch_decision(ctx, "reject", k2);
+                        Ok(())
+                    });
+                }
+                Some("failed" | "rejected") => {
+                    let f = item.clone().expect("failed item");
+                    let a = pane.clone();
+                    section.add_item("Retry fetching this song", move |ctx| {
+                        a.fetch_decision(ctx, "retry", f.key.clone());
+                        Ok(())
+                    });
+                }
+                Some(_) => {}
+            }
+            if busy {
+                let command = pane.command.clone();
+                section.add_item("Stop fetching after the current song", move |_| {
+                    let _ = Command::new(&command[0]).args(&command[1..]).args(["fetch", "cancel"]).status();
+                    Ok(())
+                });
+            }
+            Some(section)
+        })
+    }
+
+    /// What the fetch helpers need, cheap to clone into menu callbacks.
+    fn clone_for_fetch(&self) -> FetchHandle {
+        FetchHandle { job: Arc::clone(&self.job), command: self.command.clone() }
     }
 
     fn selected(&self) -> Option<&HitsRow> {
@@ -434,6 +594,9 @@ impl HitsPane {
                 Some(section)
             });
         }
+        if r.file.is_none() && !r.hidden {
+            menu = self.fetch_section(ctx, menu, &r);
+        }
         let (verb, label) = if r.hidden { ("unhide", "Unhide song (show it in Hits again)") } else { ("hide", "Hide song across charts") };
         let (artist, title, mbid, command) = (r.artist.clone(), r.title.clone(), r.mbid.clone(), self.command.clone());
         menu = menu.list_section(ctx, move |mut section| {
@@ -502,13 +665,117 @@ impl HitsPane {
                 lines.push(Line::default());
                 lines.push(Line::from(Span::styled("Enter: queue and play · a: queue", dim)));
             }
-            None => lines.push(field("In library", "no (not found in MPD)".to_owned())),
+            None => {
+                lines.push(field("In library", "no (not found in MPD)".to_owned()));
+                if let Some(f) = self.fetch_for(r) {
+                    lines.push(field("Fetch", f.state.clone()));
+                    for detail in [&f.reason, &f.error].into_iter().flatten() {
+                        lines.push(Line::from(Span::styled(detail.clone(), dim)));
+                    }
+                    if let Some(found) = &f.found {
+                        lines.push(field("Identified as", found.clone()));
+                    }
+                    if let Some(candidate) = &f.candidate {
+                        lines.push(field("From", candidate.clone()));
+                    }
+                    if f.state == "review" {
+                        lines.push(Line::from(Span::styled("menu: Accept / Reject the fetched file", dim)));
+                    }
+                } else {
+                    lines.push(Line::default());
+                    lines.push(Line::from(Span::styled("menu: Fetch this song", dim)));
+                }
+            }
         }
         if r.hidden {
             lines.push(Line::from(Span::styled("hidden from Hits (menu: Unhide)", dim)));
         }
         lines
     }
+}
+
+impl HitsPane {
+    /// " · fetch: 2 queued, 1 review" for the songs of this result that are in the fetch queue.
+    fn fetch_summary(&self) -> String {
+        let mut counts: Vec<(&str, usize)> = Vec::new();
+        for r in self.rows.iter().filter(|r| r.file.is_none()) {
+            if let Some(f) = self.fetch_for(r) {
+                let state = match f.state.as_str() {
+                    "searching" | "downloading" | "verifying" => "fetching",
+                    s => s,
+                };
+                match counts.iter_mut().find(|(s, _)| *s == state) {
+                    Some((_, n)) => *n += 1,
+                    None => counts.push((state, 1)),
+                }
+            }
+        }
+        if counts.is_empty() {
+            return String::new();
+        }
+        let parts: Vec<String> = counts.iter().map(|(s, n)| format!("{n} {s}")).collect();
+        format!(" · fetch: {}", parts.join(", "))
+    }
+}
+
+/// The fetch actions without the pane, for menu callbacks (they outlive the borrow of the pane).
+#[derive(Debug, Clone)]
+struct FetchHandle {
+    job: Arc<Mutex<Job>>,
+    command: Vec<String>,
+}
+
+impl FetchHandle {
+    /// `hits fetch add` with these arguments, then the worker (`hits fetch run`; a second one exits at once),
+    /// in a background thread. When songs arrived, `hits` runs again so they show as owned.
+    fn start_fetch(&self, ctx: &Ctx, add: Vec<String>) {
+        let (job, command, sender) = (Arc::clone(&self.job), self.command.clone(), ctx.app_event_sender.clone());
+        let mut args = vec!["fetch".to_owned()];
+        args.extend(add);
+        std::thread::spawn(move || {
+            let hits = |args: &[String]| Command::new(&command[0]).args(&command[1..]).args(args).output();
+            if args.len() > 1 {
+                match hits(&args) {
+                    Ok(out) if out.status.success() => status_info!("{}", last_line(&out.stdout, "queued")),
+                    Ok(out) => return status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
+                    Err(err) => return status_error!("cannot run {}: {err}", command[0]),
+                }
+            }
+            match hits(&["fetch".to_owned(), "run".to_owned()]) {
+                Ok(out) if out.status.success() => {
+                    let summary = last_line(&out.stdout, "fetch: nothing to do");
+                    status_info!("{summary}");
+                    if !summary.contains("fetch: 0 new") && summary.starts_with("fetch:") {
+                        job.lock().expect("hits job lock").rerun = true;
+                    }
+                }
+                Ok(out) => status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
+                Err(err) => status_error!("cannot run {}: {err}", command[0]),
+            }
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+
+    /// accept / reject / retry one queued song, then (retry) start the worker or (accept) rerun `hits`.
+    fn fetch_decision(&self, ctx: &Ctx, verb: &'static str, key: String) {
+        let (job, command, sender) = (Arc::clone(&self.job), self.command.clone(), ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            let ok = Command::new(&command[0]).args(&command[1..]).args(["fetch", verb, &key]).status().is_ok_and(|s| s.success());
+            if !ok {
+                status_error!("hits fetch {verb} failed");
+            } else if verb == "accept" {
+                job.lock().expect("hits job lock").rerun = true;
+            }
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+        if verb == "retry" {
+            self.start_fetch(ctx, Vec::new());
+        }
+    }
+}
+
+fn last_line(bytes: &[u8], fallback: &str) -> String {
+    String::from_utf8_lossy(bytes).lines().rev().find(|l| !l.trim().is_empty()).unwrap_or(fallback).to_owned()
 }
 
 fn expand_home(path: &str) -> String {
@@ -554,13 +821,15 @@ impl Pane for HitsPane {
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
 
+        self.reload_fetch();
         let dim = Style::default().add_modifier(Modifier::DIM);
         let rows = self.rows.iter().map(|r| {
             let owned = r.file.is_some();
+            let missing_mark = self.fetch_for(r).map_or("✗", |f| fetch_mark(&f.state));
             Row::new(vec![
                 Cell::from(format!("#{}", r.rank)),
                 Cell::from(format!("{:.0}%", r.pct.ceil())),
-                Cell::from(if r.hidden { "h" } else if owned { "✓" } else { "✗" }),
+                Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
                 Cell::from(r.artist.clone()),
                 Cell::from(r.title.clone()),
                 Cell::from(r.year.to_string()),
@@ -595,11 +864,12 @@ impl Pane for HitsPane {
             (false, Some(err)) => Span::styled(err, Style::default().add_modifier(Modifier::BOLD)),
             (false, None) => Span::styled(
                 format!(
-                    " {} · {} hits · {} in library · updated {}",
+                    " {} · {} hits · {} in library · updated {}{}",
                     self.label,
                     self.rows.len(),
                     owned,
-                    self.generated_at.replace('T', " ")
+                    self.generated_at.replace('T', " "),
+                    self.fetch_summary()
                 ),
                 dim,
             ),
