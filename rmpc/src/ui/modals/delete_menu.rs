@@ -48,6 +48,9 @@ struct YouTube {
     playlists: Vec<Playlist>,
     #[serde(default)]
     error: Option<String>,
+    /// the login expired and the answer comes from yt-playlist's cached index of this time
+    #[serde(default)]
+    cached_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -174,9 +177,16 @@ fn youtube_lines(songs: &[Preview], done: bool) -> Vec<String> {
                 (Some(YouTube { error: Some(err), .. }), _) => {
                     format!("unknown ({err}); run `yt-playlist auth` in a terminal")
                 }
-                (Some(yt), _) if yt.playlists.is_empty() => "in none of my playlists".to_owned(),
                 (Some(yt), _) => {
-                    yt.playlists.iter().map(|p| p.title.as_str()).collect::<Vec<_>>().join(", ")
+                    let found = if yt.playlists.is_empty() {
+                        "in none of my playlists".to_owned()
+                    } else {
+                        yt.playlists.iter().map(|p| p.title.as_str()).collect::<Vec<_>>().join(", ")
+                    };
+                    match &yt.cached_at {
+                        Some(at) => format!("{found} (cached {}, login expired)", at.get(..16).unwrap_or(at).replace('T', " ")),
+                        None => found,
+                    }
                 }
                 (_, false) => "checking…".to_owned(),
                 _ => "unknown".to_owned(),
