@@ -33,7 +33,12 @@ use crate::{
         events::AppEvent,
     },
     shared::macros::modal,
-    ui::{UiEvent, dirstack::DirState, modals::menu::modal::MenuModal, rormpc_actions},
+    ui::{
+        UiEvent,
+        dirstack::DirState,
+        modals::{input_modal::InputModal, menu::modal::MenuModal},
+        rormpc_actions,
+    },
 };
 
 #[derive(Debug, Deserialize)]
@@ -106,7 +111,13 @@ pub struct HitsPane {
     filter_sel: usize,
     /// first filter row shown when the column is taller than the pane
     filter_offset: usize,
+    /// the scrolled filter rows; Apply is drawn below it in `apply_area` and never scrolls away
     filter_area: Rect,
+    apply_area: Rect,
+    /// `hits` arguments of the result on screen, to show whether the filters changed since
+    applied_args: Option<Vec<String>>,
+    /// text typed into the "other genre" input, picked up on the next render
+    genre_input: Arc<Mutex<Option<String>>>,
     job: Arc<Mutex<Job>>,
 }
 
@@ -119,6 +130,9 @@ impl HitsPane {
             filter_sel: 0,
             filter_offset: 0,
             filter_area: Rect::default(),
+            apply_area: Rect::default(),
+            applied_args: None,
+            genre_input: Arc::new(Mutex::new(None)),
             job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
             rows: Vec::new(),
@@ -142,7 +156,9 @@ impl HitsPane {
         match self.read() {
             Ok(file) => {
                 if self.filters.is_none() {
-                    self.filters = Some(Filters::from_args(&file.args));
+                    let filters = Filters::from_args(&file.args);
+                    self.applied_args = Some(filters.args(&self.path.to_string_lossy()));
+                    self.filters = Some(filters);
                 }
                 self.rows = file.rows;
                 self.label = file.label;
@@ -204,7 +220,10 @@ impl HitsPane {
             loop {
                 let result = Command::new(&command[0]).args(&command[1..]).args(&args).output();
                 let error = match result {
-                    Ok(out) if out.status.success() => None,
+                    Ok(out) if out.status.success() => {
+                        job.lock().expect("hits job lock").ok_args = Some(args.clone());
+                        None
+                    }
                     Ok(out) => Some(
                         String::from_utf8_lossy(&out.stderr).lines().rev().find(|l| !l.trim().is_empty())
                             .unwrap_or("hits failed").to_owned(),
@@ -240,6 +259,10 @@ impl HitsPane {
             CommonAction::Top => self.filter_sel = snap(&rows, 0, true),
             CommonAction::Bottom => self.filter_sel = snap(&rows, rows.len() - 1, false),
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => self.apply(ctx),
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::AddGenre => {
+                self.ask_genre(ctx);
+                return true;
+            }
             CommonAction::Confirm | CommonAction::Select => filters.toggle(row),
             CommonAction::Left => {
                 filters.adjust(row, -1);
@@ -259,10 +282,14 @@ impl HitsPane {
     }
 
     /// Scroll so the cursor stays visible (keyboard) or by `delta` rows (mouse wheel), within bounds.
+    /// Apply (the last row) lives in its own footer, so it neither counts nor scrolls here.
     fn scroll_filters(&mut self, delta: isize) {
-        let height = usize::from(self.filter_area.height).max(1);
-        let max = self.filter_rows().len().saturating_sub(height);
-        if delta == 0 {
+        let height = usize::from(self.filter_area.height);
+        let listed = self.filter_rows().len().saturating_sub(1);
+        let max = listed.saturating_sub(height);
+        if delta == 0 && (height == 0 || self.filter_sel >= listed) {
+            // the cursor is on the Apply footer, or no list row fits: nothing to follow
+        } else if delta == 0 {
             if self.filter_sel < self.filter_offset {
                 self.filter_offset = self.filter_sel;
             } else if self.filter_sel >= self.filter_offset + height {
@@ -274,12 +301,32 @@ impl HitsPane {
         self.filter_offset = self.filter_offset.min(max);
     }
 
+    /// Ask for genres that have no checkbox; they are added as rows ("+name" includes, "-name" excludes).
+    fn ask_genre(&self, ctx: &Ctx) {
+        let input = Arc::clone(&self.genre_input);
+        let sender = ctx.app_event_sender.clone();
+        modal!(
+            ctx,
+            InputModal::new(ctx)
+                .title("Other genres, e.g. italo-disco, -schlager")
+                .input_label("Genres:")
+                .confirm_label("Add")
+                .on_confirm(move |_, value| {
+                    *input.lock().expect("genre input lock") = Some(value.to_owned());
+                    let _ = sender.send(AppEvent::RequestRender);
+                    Ok(())
+                })
+        );
+    }
+
     fn render_filters(&self, frame: &mut Frame, area: Rect, ctx: &Ctx) {
         let Some(filters) = &self.filters else { return };
         let rows = filters.rows();
+        let apply_idx = rows.len().saturating_sub(1);
         let lines: Vec<Line> = rows
             .iter()
             .enumerate()
+            .take(apply_idx)
             .skip(self.filter_offset)
             .map(|(i, row)| {
                 let text = filters.line(*row);
@@ -316,6 +363,38 @@ impl HitsPane {
             })
             .collect();
         frame.render_widget(Paragraph::new(lines), area);
+        frame.render_widget(Paragraph::new(self.apply_line(filters, apply_idx, ctx)), self.apply_area);
+    }
+
+    /// The sticky Apply footer: the button plus whether pressing it would change anything.
+    fn apply_line(&self, filters: &Filters, apply_idx: usize, ctx: &Ctx) -> Line<'static> {
+        let cursor = self.filter_sel == apply_idx;
+        let gutter = match (cursor, self.focus_filters) {
+            (true, true) => Span::styled("›", ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD)),
+            (true, false) => Span::styled("›", Style::default().add_modifier(Modifier::DIM)),
+            _ => Span::raw(" "),
+        };
+        let mut button = ctx.config.theme.preview_label_style.add_modifier(Modifier::REVERSED);
+        if cursor && self.focus_filters {
+            button = button.add_modifier(Modifier::BOLD);
+        }
+        let (running, queued) = {
+            let j = self.job.lock().expect("hits job lock");
+            (j.running, j.queued.is_some())
+        };
+        let changed = self.applied_args.as_ref() != Some(&filters.args(&self.path.to_string_lossy()));
+        let state = match (running, queued, changed) {
+            (true, true, _) => " running, then again",
+            (true, false, _) => " running…",
+            (false, _, true) => " • changed",
+            (false, _, false) => "",
+        };
+        Line::from(vec![
+            gutter,
+            Span::raw(" "),
+            Span::styled("[ Apply ]", button),
+            Span::styled(state, Style::default().add_modifier(Modifier::DIM)),
+        ])
     }
 
     /// Menu for the selected row: play/queue and like for owned songs, hide/unhide for any chart song, and,
@@ -445,6 +524,16 @@ impl Pane for HitsPane {
         if rerun {
             self.apply(ctx);
         }
+        if let Some(args) = self.job.lock().expect("hits job lock").ok_args.take() {
+            self.applied_args = Some(args);
+        }
+        let typed = self.genre_input.lock().expect("genre input lock").take();
+        if let (Some(spec), Some(filters)) = (typed, self.filters.as_mut()) {
+            if let Some(first) = filters.add_genres(&spec) {
+                let rows = filters.rows();
+                self.filter_sel = rows.iter().position(|r| *r == FilterRow::Genre(first)).unwrap_or(self.filter_sel);
+            }
+        }
         let finished = std::mem::take(&mut self.job.lock().expect("hits job lock").finished);
         if finished {
             self.loaded_mtime = None; // hits rewrote the file
@@ -454,7 +543,10 @@ impl Pane for HitsPane {
             Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(30)])
                 .spacing(2)
                 .areas(area);
-        self.filter_area = filter_area;
+        // Apply gets its row first, so even a tiny pane shows it
+        let [list_area, apply_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(filter_area);
+        self.filter_area = list_area;
+        self.apply_area = apply_area;
         self.scroll_filters(0); // the pane may have been resized
         self.render_filters(frame, filter_area, ctx);
         let [table_area, footer] =
@@ -533,11 +625,22 @@ impl Pane for HitsPane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
+        if self.apply_area.contains(event.into()) {
+            // a click applies; the wheel does nothing over the footer
+            if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
+                self.focus_filters = true;
+                self.filter_sel = self.filter_rows().len().saturating_sub(1);
+                self.apply(ctx);
+                ctx.render()?;
+            }
+            return Ok(());
+        }
         if self.filter_area.contains(event.into()) {
             match event.kind {
                 MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
                     let idx = self.filter_offset + usize::from(event.y.saturating_sub(self.filter_area.y));
-                    if self.filter_rows().get(idx).is_some_and(|row| !matches!(row, FilterRow::Heading(_))) {
+                    let clickable = |row: &FilterRow| !matches!(row, FilterRow::Heading(_) | FilterRow::Apply);
+                    if self.filter_rows().get(idx).is_some_and(clickable) {
                         self.focus_filters = true;
                         self.filter_sel = idx;
                         self.filter_action(&CommonAction::Confirm, ctx);
@@ -649,6 +752,8 @@ enum FilterRow {
     To,
     Top(usize),
     Genre(usize),
+    /// opens an input for genres without a checkbox
+    AddGenre,
     Owned,
     ShowHidden,
     Apply,
@@ -666,8 +771,8 @@ struct Filters {
     from: i32,
     to: i32,
     tops: [bool; 3],
-    /// -1 exclude, 0 off, 1 include
-    genres: [i8; GENRES.len()],
+    /// the fixed GENRES first, then typed ones; -1 exclude, 0 off, 1 include
+    genres: Vec<(String, i8)>,
     owned: bool,
     show_hidden: bool,
 }
@@ -676,7 +781,7 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { likes: false, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: [0; GENRES.len()], owned: false, show_hidden: false }
+        Self { likes: false, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: GENRES.iter().map(|g| ((*g).to_owned(), 0)).collect(), owned: false, show_hidden: false }
     }
 }
 
@@ -695,7 +800,8 @@ impl Filters {
         rows.push(FilterRow::Heading("Top %"));
         rows.extend((0..TOPS.len()).map(FilterRow::Top));
         rows.push(FilterRow::Heading("Genres  +in  -out"));
-        rows.extend((0..GENRES.len()).map(FilterRow::Genre));
+        rows.extend((0..self.genres.len()).map(FilterRow::Genre));
+        rows.push(FilterRow::AddGenre);
         rows.push(FilterRow::Heading("Options"));
         rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
         rows
@@ -714,14 +820,32 @@ impl Filters {
         if ranges.is_empty() { "1980-1989".to_owned() } else { ranges.join(",") }
     }
 
+    /// Comma-separated, so names with spaces ("hip hop") survive the round trip through `hits`.
     fn genre_spec(&self) -> String {
-        GENRES
+        self.genres
             .iter()
-            .zip(self.genres)
             .filter(|(_, s)| *s != 0)
-            .map(|(g, s)| format!("{}{g}", if s > 0 { '+' } else { '-' }))
+            .map(|(g, s)| format!("{}{g}", if *s > 0 { '+' } else { '-' }))
             .collect::<Vec<_>>()
-            .join(" ")
+            .join(", ")
+    }
+
+    /// Set the genres of a spec like "+italo-disco, -schlager" (no sign = include), adding rows for names
+    /// without one. Returns the index of the first genre touched.
+    fn add_genres(&mut self, spec: &str) -> Option<usize> {
+        let mut first = None;
+        for (sign, name) in parse_genre_spec(spec) {
+            let i = match self.genres.iter().position(|(g, _)| *g == name) {
+                Some(i) => i,
+                None => {
+                    self.genres.push((name, 0));
+                    self.genres.len() - 1
+                }
+            };
+            self.genres[i].1 = sign;
+            first.get_or_insert(i);
+        }
+        first
     }
 
     fn args(&self, json: &str) -> Vec<String> {
@@ -786,16 +910,7 @@ impl Filters {
                 }
             }
         }
-        for tok in args.genre.clone().unwrap_or_default().split_whitespace() {
-            let (sign, name) = match tok.chars().next() {
-                Some('-') => (-1, &tok[1..]),
-                Some('+') => (1, &tok[1..]),
-                _ => (1, tok),
-            };
-            if let Some(i) = GENRES.iter().position(|g| *g == name) {
-                f.genres[i] = sign;
-            }
-        }
+        f.add_genres(args.genre.as_deref().unwrap_or_default());
         f.owned = args.owned;
         f.show_hidden = args.show_hidden;
         f.likes = args.source.as_deref() == Some("likes");
@@ -820,9 +935,10 @@ impl Filters {
             FilterRow::Heading(title) => title.to_owned(),
             FilterRow::Top(i) => format!("  {} {}-{}%", check(self.tops[i]), TOPS[i].0, TOPS[i].1),
             FilterRow::Genre(i) => {
-                let mark = match self.genres[i] { 1 => "+", -1 => "-", _ => " " };
-                format!("  [{mark}] {}", GENRES[i])
+                let mark = match self.genres[i].1 { 1 => "+", -1 => "-", _ => " " };
+                format!("  [{mark}] {}", self.genres[i].0)
             }
+            FilterRow::AddGenre => "  + other genre…".to_owned(),
             FilterRow::Owned => format!("  {} owned only", check(self.owned)),
             FilterRow::ShowHidden => format!("  {} show hidden", check(self.show_hidden)),
             FilterRow::Apply => "  [ Apply ]".to_owned(),
@@ -837,10 +953,10 @@ impl Filters {
             FilterRow::Mode => self.by_range = !self.by_range,
             FilterRow::Decade(i) => self.decades[i] = !self.decades[i],
             FilterRow::Top(i) => self.tops[i] = !self.tops[i],
-            FilterRow::Genre(i) => self.genres[i] = match self.genres[i] { 0 => 1, 1 => -1, _ => 0 },
+            FilterRow::Genre(i) => self.genres[i].1 = match self.genres[i].1 { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
-            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::Apply => {}
+            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Apply => {}
         }
     }
 
@@ -869,4 +985,60 @@ struct Job {
     finished: bool,
     /// a hide/unhide changed the result: run hits again with the current filters
     rerun: bool,
+    /// arguments of the last run that succeeded, taken by the next render
+    ok_args: Option<Vec<String>>,
+}
+
+/// Tokens of a genre spec as `hits` reads them (`genre_filter`): a token runs to a comma or to whitespace
+/// followed by `+`/`-`, so "+hip hop -country" is two genres. Lowercased, like the matching in `hits`.
+fn parse_genre_spec(spec: &str) -> Vec<(i8, String)> {
+    let mut tokens = Vec::new();
+    for part in spec.split(',') {
+        let mut current = String::new();
+        let words: Vec<&str> = part.split_whitespace().collect();
+        for (n, word) in words.iter().enumerate() {
+            if n > 0 && (word.starts_with('+') || word.starts_with('-')) {
+                tokens.push(std::mem::take(&mut current));
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        }
+        tokens.push(current);
+    }
+    tokens
+        .into_iter()
+        .filter_map(|tok| {
+            let (sign, name) = match tok.chars().next()? {
+                '-' => (-1, &tok[1..]),
+                '+' => (1, &tok[1..]),
+                _ => (1, tok.as_str()),
+            };
+            let name = name.trim().to_lowercase();
+            (!name.is_empty()).then_some((sign, name))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn genre_spec_round_trip() {
+        let mut f = Filters::default();
+        f.add_genres("+hip hop -country, italo-disco");
+        assert_eq!(f.genre_spec(), "+hip hop, -country, +italo-disco");
+        let back = Filters::from_args(&HitsArgs { genre: Some(f.genre_spec()), ..HitsArgs::default() });
+        assert_eq!(back.genre_spec(), f.genre_spec());
+        assert_eq!(back.genres.len(), GENRES.len() + 1);
+    }
+
+    #[test]
+    fn genre_spec_tokens() {
+        assert_eq!(parse_genre_spec("-thrash metal"), vec![(-1, "thrash metal".to_owned())]);
+        assert_eq!(parse_genre_spec("rock -country"), vec![(1, "rock".to_owned()), (-1, "country".to_owned())]);
+        assert_eq!(parse_genre_spec(" , +Synth-Pop,"), vec![(1, "synth-pop".to_owned())]);
+    }
 }
