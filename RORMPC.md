@@ -100,6 +100,12 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 ])),
 ```
 
+## Not finished
+
+`musicdb sync` (rormpc-tools) writes the playlist "Not finished": songs I rarely play to the end lately (deletion
+candidates to review, never deleted by themselves), with the reason in the `notFinished` sticker (usable as a
+column). The Queue menu offers "Keep (drop from Not finished)" on them (`musicdb keep`).
+
 ## Add to playlist
 
 "Add to playlist…" in the Queue menu (marked rows, else the cursor row) and on owned Hits rows: a new playlist by

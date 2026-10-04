@@ -279,6 +279,14 @@ impl QueuePane {
                         Ok(())
                     });
                 }
+                // rormpc: a "Not finished" deletion candidate can be kept
+                if ctx.song_stickers(&file).is_some_and(|st| st.contains_key("notFinished")) {
+                    let keep_file = file.clone();
+                    section.add_item("Keep (drop from Not finished)", move |_| {
+                        crate::ui::rormpc_actions::keep_song(keep_file);
+                        Ok(())
+                    });
+                }
                 // marked rows, else the cursor row
                 let targets: Vec<String> = if self.queue.marked().is_empty() {
                     vec![file.clone()]
