@@ -9,6 +9,7 @@ use cava::CavaPane;
 use directories::DirectoriesPane;
 use either::Either;
 use header::HeaderPane;
+use deleted::DeletedPane;
 use hits::HitsPane;
 use itertools::Itertools;
 use lyrics::LyricsPane;
@@ -74,6 +75,7 @@ use crate::{
 pub mod album_art;
 pub mod cava;
 pub mod directories;
+pub mod deleted;
 pub mod empty;
 #[cfg(debug_assertions)]
 pub mod frame_count;
@@ -313,6 +315,9 @@ impl<'panes> PaneContainer<'panes> {
                     pane.pane.clone(),
                     Box::new(HitsPane::new(path.clone(), command.clone())) as Box<dyn BoxedPane>,
                 )),
+                PaneType::Deleted => {
+                    Some((pane.pane.clone(), Box::new(DeletedPane::new()) as Box<dyn BoxedPane>))
+                }
                 _ => None,
             })
     }
@@ -359,7 +364,7 @@ impl<'panes> PaneContainer<'panes> {
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
             )),
-            p @ PaneType::Hits { .. } => Ok(Panes::Others(
+            p @ (PaneType::Hits { .. } | PaneType::Deleted) => Ok(Panes::Others(
                 self.others
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,

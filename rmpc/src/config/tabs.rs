@@ -217,6 +217,8 @@ pub enum PaneTypeFile {
         #[serde(default)]
         command: Option<Vec<String>>,
     },
+    /// rormpc: songs deleted with Ctrl-x, from `musicdb deletions --json --all`
+    Deleted(),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, strum::Display, strum::EnumDiscriminants)]
@@ -263,6 +265,7 @@ pub enum PaneType {
         path: String,
         command: Vec<String>,
     },
+    Deleted,
 }
 
 pub const PANES_ALLOWED_IN_BOTH_TAB_AND_LAYOUT: [PaneTypeDiscriminants; 2] =
@@ -405,6 +408,7 @@ impl TryFrom<PaneTypeFile> for PaneType {
                 path: path.unwrap_or_else(|| "~/.cache/rormpc/hits/current.json".to_owned()),
                 command: command.filter(|c| !c.is_empty()).unwrap_or_else(|| vec!["hits".to_owned()]),
             },
+            PaneTypeFile::Deleted() => PaneType::Deleted,
         })
     }
 }
