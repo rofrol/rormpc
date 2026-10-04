@@ -26,7 +26,7 @@ use crate::{
     shared::{
         events::AppEvent,
         keys::ActionEvent,
-        macros::{modal, status_error, status_info},
+        macros::{modal, status_error, status_info, status_warn},
         mouse_event::{MouseEvent, MouseEventKind},
     },
     ui::{UiEvent, dirstack::DirState, modals::menu::modal::MenuModal},
@@ -97,6 +97,21 @@ fn run(args: &[&str]) -> Result<String, String> {
 
 impl DeletedPane {
     pub fn new() -> Self {
+        // the pane is built at startup: say once if deletion cleanup steps are failing, even when it is not shown
+        std::thread::spawn(|| {
+            #[derive(Deserialize)]
+            struct Pending {
+                #[serde(default)]
+                error: Option<String>,
+            }
+            let failed = run(&["deletions", "--json"])
+                .ok()
+                .and_then(|out| serde_json::from_str::<Vec<Pending>>(&out).ok())
+                .map_or(0, |rows| rows.iter().filter(|r| r.error.is_some()).count());
+            if failed > 0 {
+                status_warn!("cleanup: {failed} deletions have failed steps (Deleted tab; retried hourly)");
+            }
+        });
         Self {
             rows: Vec::new(),
             state: DirState::default(),
