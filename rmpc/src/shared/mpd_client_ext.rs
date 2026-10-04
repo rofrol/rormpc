@@ -26,7 +26,44 @@ use crate::{
 };
 
 pub trait MpdClientExt {
+    /// rormpc: every pane adds through here, so the duplicate policy lives here once. A single file that is
+    /// already queued is not appended again: playing it plays its existing entry, adding it only says so. A plain
+    /// add of several files (no autoplay) skips the ones already queued. Replacing the queue, directories,
+    /// playlists and searches are left alone; `enqueue_unchecked` is the deliberate "another copy".
     fn resolve_and_enqueue(
+        ctx: &Ctx,
+        mut items: Vec<Enqueue>,
+        position: Position,
+        autoplay: AutoplayKind,
+        current_song_idx: Option<usize>,
+        hovered_song_idx: Option<usize>,
+    ) {
+        if !matches!(position, Position::Replace) {
+            let queued = |path: &str| ctx.queue.iter().any(|s| s.file == path);
+            if let [Enqueue::File { path }] = items.as_slice()
+                && queued(path)
+            {
+                crate::ui::rormpc_actions::use_existing_entry(ctx, path, !matches!(autoplay, AutoplayKind::None));
+                return;
+            }
+            if matches!(autoplay, AutoplayKind::None) && items.len() > 1 {
+                let before = items.len();
+                items.retain(|i| !matches!(i, Enqueue::File { path } if queued(path)));
+                let skipped = before - items.len();
+                if items.is_empty() {
+                    status_info!("All {before} songs are already in the queue");
+                    return;
+                }
+                if skipped > 0 {
+                    status_info!("Skipped {skipped} songs already in the queue");
+                }
+            }
+        }
+        Self::enqueue_unchecked(ctx, items, position, autoplay, current_song_idx, hovered_song_idx);
+    }
+
+    /// Enqueue without the duplicate policy (upstream's resolve_and_enqueue).
+    fn enqueue_unchecked(
         ctx: &Ctx,
         items: Vec<Enqueue>,
         position: Position,
