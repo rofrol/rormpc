@@ -73,7 +73,8 @@ why), `+` arrived (the result reruns to show it as owned); the status line count
 Queue (ContextMenu, e.g. Ctrl-z): besides upstream's items, Like ♥ / Dislike ✗ / Clear like (rmpc's like
 sticker) and, in its own section, "Move library file to Trash…" with a confirmation (the same as Ctrl-x,
 `musicdb delete`); "Remove" is renamed "Remove from queue (keep file)", and "Remove duplicate entries (N)…"
-collapses a file queued several times to one entry (the playing one, else the first), after a confirmation;
+collapses a file queued several times to one entry (the playing one, else the first), after a confirmation (such
+entries carry a dim `⧉` in the first column);
 library files stay. Hits rows: Play now, Add to queue, like
 items (owned songs), "Hide song across charts" / "Unhide" for every chart song (`hits hide|unhide`, an
 append-only log in the private data repo; hidden songs keep their place in the ranking and are dropped after

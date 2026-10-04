@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use enum_map::{Enum, EnumMap, enum_map};
@@ -7,7 +7,7 @@ use ratatui::{
     Frame,
     layout::Flex,
     prelude::{Constraint, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Row, TableState},
 };
@@ -414,6 +414,15 @@ impl Pane for QueuePane {
         let formats = &config.theme.song_table_format;
 
         let marker_symbol_len = config.theme.symbols.marker.chars().count();
+        // rormpc: a file queued more than once gets a dim badge in the first column
+        let duplicates: HashSet<String> = {
+            let mut copies: HashMap<&str, usize> = HashMap::new();
+            for song in &self.queue.items {
+                *copies.entry(song.file.as_str()).or_default() += 1;
+            }
+            copies.into_iter().filter(|(_, n)| *n > 1).map(|(f, _)| f.to_owned()).collect()
+        };
+        const DUPLICATE_BADGE: &str = "⧉ ";
 
         let current_song_id = ctx.current_song().map(|s| s.id);
         let marked = std::mem::take(self.queue.marked_mut());
@@ -427,6 +436,7 @@ impl Pane for QueuePane {
                 let is_under_cursor = selected_idx.is_some_and(|i| i == idx);
 
                 let is_marked = marked.contains(&idx);
+                let is_duplicate = duplicates.contains(&song.file);
                 let matches_filter = is_currently_playing_song
                     || if self.queue.filter_active {
                         song.matches_formats(self.column_formats.as_slice(), &filter, ctx)
@@ -442,6 +452,9 @@ impl Pane for QueuePane {
                     // and the song is marked.
                     if is_marked && i == 0 {
                         max_len = max_len.saturating_sub(marker_symbol_len);
+                    }
+                    if is_duplicate && i == 0 {
+                        max_len = max_len.saturating_sub(DUPLICATE_BADGE.chars().count());
                     }
                     let format = &formats[i];
 
@@ -473,6 +486,10 @@ impl Pane for QueuePane {
                         let marker_span = Span::styled(&config.theme.symbols.marker, marker_style);
 
                         line.spans.splice(..0, std::iter::once(marker_span));
+                    }
+                    if is_duplicate && i == 0 {
+                        let badge = Span::styled(DUPLICATE_BADGE, Style::default().add_modifier(Modifier::DIM));
+                        line.spans.insert(usize::from(is_marked), badge);
                     }
 
                     line
