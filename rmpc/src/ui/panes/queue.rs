@@ -300,8 +300,17 @@ impl QueuePane {
                 } else {
                     format!("{} marked songs", targets.len())
                 };
+                let next_targets = targets.clone();
+                section.add_item("Play next (Up next)", move |ctx| {
+                    crate::ui::rormpc_upnext::play_next(ctx, next_targets);
+                    Ok(())
+                });
                 section.add_item("Add to playlist…", move |ctx| {
                     crate::ui::rormpc_playlists::open_add_to_playlist(ctx, targets, what);
+                    Ok(())
+                });
+                section.add_item("Sources… (play the library or a playlist)", |ctx| {
+                    crate::ui::rormpc_upnext::open_sources(ctx);
                     Ok(())
                 });
                 let tags_file = file.clone();
@@ -448,6 +457,8 @@ impl Pane for QueuePane {
             copies.into_iter().filter(|(_, n)| *n > 1).map(|(f, _)| f.to_owned()).collect()
         };
         const DUPLICATE_BADGE: &str = "⧉ ";
+        // rormpc: Up next entries show their turn ("↑1 ")
+        let up_next = crate::ui::rormpc_upnext::up_next_ids();
 
         let current_song_id = ctx.current_song().map(|s| s.id);
         let marked = std::mem::take(self.queue.marked_mut());
@@ -462,6 +473,7 @@ impl Pane for QueuePane {
 
                 let is_marked = marked.contains(&idx);
                 let is_duplicate = duplicates.contains(&song.file);
+                let up_badge = up_next.iter().position(|id| *id == song.id).map(|k| format!("↑{} ", k + 1));
                 let matches_filter = is_currently_playing_song
                     || if self.queue.filter_active {
                         song.matches_formats(self.column_formats.as_slice(), &filter, ctx)
@@ -480,6 +492,9 @@ impl Pane for QueuePane {
                     }
                     if is_duplicate && i == 0 {
                         max_len = max_len.saturating_sub(DUPLICATE_BADGE.chars().count());
+                    }
+                    if let (Some(badge), 0) = (&up_badge, i) {
+                        max_len = max_len.saturating_sub(badge.chars().count());
                     }
                     let format = &formats[i];
 
@@ -516,6 +531,10 @@ impl Pane for QueuePane {
                         let badge = Span::styled(DUPLICATE_BADGE, Style::default().add_modifier(Modifier::DIM));
                         line.spans.insert(usize::from(is_marked), badge);
                     }
+                    if let (Some(badge), 0) = (&up_badge, i) {
+                        let badge = Span::styled(badge.clone(), Style::default().add_modifier(Modifier::BOLD));
+                        line.spans.insert(usize::from(is_marked), badge);
+                    }
 
                     line
                 });
@@ -540,6 +559,7 @@ impl Pane for QueuePane {
             });
 
         frame.render_widget(table_block, self.areas[Areas::Table]);
+
         frame.render_stateful_widget(table, self.areas[Areas::Table], &mut self.queue.state);
 
         let _ = std::mem::replace(self.queue.marked_mut(), marked);

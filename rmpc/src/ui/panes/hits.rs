@@ -740,6 +740,11 @@ impl HitsPane {
                         Ok(())
                     });
                 }
+                let next_file = like_file.clone();
+                section.add_item("Add to Up next", move |ctx| {
+                    crate::ui::rormpc_upnext::play_next(ctx, vec![next_file]);
+                    Ok(())
+                });
                 let playlist_file = like_file.clone();
                 section.add_item("Add to playlist…", move |ctx| {
                     crate::ui::rormpc_playlists::open_add_to_playlist(ctx, vec![playlist_file], what);

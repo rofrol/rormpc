@@ -106,6 +106,20 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 candidates to review, never deleted by themselves), with the reason in the `notFinished` sticker (usable as a
 column). The Queue menu offers "Keep (drop from Not finished)" on them (`musicdb keep`).
 
+## Playing from + Up next
+
+The whole queue stays in MPD (phones, media keys and mpc keep working); rormpc remembers where it came from in
+`$XDG_STATE_HOME/rormpc/source.json` and shows it on the border above the queue: "Playing from: Tag God · Up next 2",
+"(modified)" when another client changed the queue since.
+
+- Queue menu "Sources… (play the library or a playlist)": the whole library or a saved playlist replaces the queue
+  and plays now, after a confirmation. Up next is kept and plays first.
+- "Play next (Up next)" in the Queue menu (marked rows, else the cursor row) and "Add to Up next" on owned Hits
+  rows: with random on the songs get MPD priorities 255, 254, … (first asked plays first; MPD drops a song's
+  priority when it starts); with random off they move right after the current song, in order. Waiting entries
+  carry `↑1`, `↑2`. A song that was not in the queue is added and removed again after it played, so the source
+  stays as it was. Consume must be off. MPD song ids don't survive an MPD restart, so Up next doesn't either.
+
 ## Add to playlist
 
 "Add to playlist…" in the Queue menu (marked rows, else the cursor row) and on owned Hits rows: a new playlist by
