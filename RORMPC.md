@@ -49,7 +49,10 @@ The filter column on the left (h/l moves between it and the table) builds the `h
 Billboard US (year-end charts) / my likes / recommended (songs of artists similar to the ones I play most,
 from ListenBrainz Radio; no years, the details say which artists led to each song). "+ other genre…"
 under the genre checkboxes asks for genres that have no checkbox (`italo-disco, -schlager`: no sign includes,
-`-` excludes) and adds them as rows. `[ Apply ]` stays at the bottom of the column however far it is scrolled, and
+`-` excludes) and adds them as rows. The genre checkboxes are the ones pinned with `hits genres pin` (rormpc-tools,
+`~/.config/rormpc-tools/hits-genres.json`). "⋯ explore genres…" lists every genre of the library with its song
+count (how many from the recording's own tags) and plays; picking one filters by it alone, on the chart or
+among my liked songs, or pins/unpins its checkbox. `[ Apply ]` stays at the bottom of the column however far it is scrolled, and
 says "• changed" when the filters differ from the result on screen, "running…" while `hits` runs.
 
 Missing songs can be fetched from a missing row's menu: "Fetch this song", "Fetch the first 10 missing" or

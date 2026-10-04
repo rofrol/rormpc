@@ -103,6 +103,55 @@ struct HitsRow {
     reason: Option<String>,
 }
 
+/// One genre of `hits genres --json` (the genre explorer).
+#[derive(Debug, Clone, Deserialize)]
+struct GenreInfo {
+    name: String,
+    songs: u32,
+    recording: u32,
+    #[serde(default)]
+    plays: u32,
+    #[serde(default)]
+    pinned: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GenresFile {
+    total: u32,
+    unknown: u32,
+    genres: Vec<GenreInfo>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExplorerPick {
+    Filter,
+    FilterLikes,
+    Pin,
+    Unpin,
+}
+
+/// State shared with the thread that counts genres and the explorer menus.
+#[derive(Debug, Default)]
+struct Explorer {
+    loading: bool,
+    ready: Option<GenresFile>,
+    pick: Option<(String, ExplorerPick)>,
+}
+
+/// Genres pinned as checkboxes (`hits genres pin`), else the built-in list.
+fn pinned_genres() -> Vec<String> {
+    let config = std::env::var("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(expand_home("~/.config")));
+    #[derive(Deserialize)]
+    struct Pins {
+        pins: Vec<String>,
+    }
+    std::fs::read_to_string(config.join("rormpc-tools/hits-genres.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Pins>(&t).ok())
+        .map(|p| p.pins)
+        .unwrap_or_else(|| GENRES.iter().map(|g| (*g).to_owned()).collect())
+}
+
 /// One song in the `hits fetch` queue ($XDG_STATE_HOME/rormpc-tools/fetch/queue.json).
 #[derive(Debug, Clone, Deserialize)]
 struct FetchItem {
@@ -171,6 +220,7 @@ pub struct HitsPane {
     applied_args: Option<Vec<String>>,
     /// text typed into the "other genre" input, picked up on the next render
     genre_input: Arc<Mutex<Option<String>>>,
+    explorer: Arc<Mutex<Explorer>>,
     fetch: Vec<FetchItem>,
     fetch_mtime: Option<SystemTime>,
     job: Arc<Mutex<Job>>,
@@ -188,6 +238,7 @@ impl HitsPane {
             apply_area: Rect::default(),
             applied_args: None,
             genre_input: Arc::new(Mutex::new(None)),
+            explorer: Arc::new(Mutex::new(Explorer::default())),
             fetch: Vec::new(),
             fetch_mtime: None,
             job: Arc::new(Mutex::new(Job::default())),
@@ -426,6 +477,10 @@ impl HitsPane {
                 self.ask_genre(ctx);
                 return true;
             }
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::Explore => {
+                self.count_genres(ctx);
+                return true;
+            }
             CommonAction::Confirm | CommonAction::Select => filters.toggle(row),
             CommonAction::Left => {
                 filters.adjust(row, -1);
@@ -462,6 +517,96 @@ impl HitsPane {
             self.filter_offset = self.filter_offset.saturating_add_signed(delta);
         }
         self.filter_offset = self.filter_offset.min(max);
+    }
+
+    /// Count the library's genres (`hits genres --json`) in the background; the menu opens when they arrive.
+    /// The first run looks artists up on MusicBrainz and takes minutes; later ones read the caches.
+    fn count_genres(&self, ctx: &Ctx) {
+        let mut ex = self.explorer.lock().expect("explorer lock");
+        if ex.loading {
+            return;
+        }
+        ex.loading = true;
+        drop(ex);
+        status_info!("Counting the library's genres…");
+        let (explorer, command, sender) = (Arc::clone(&self.explorer), self.command.clone(), ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            let out = Command::new(&command[0]).args(&command[1..]).args(["genres", "--json"]).output();
+            let parsed = match out {
+                Ok(o) if o.status.success() => serde_json::from_slice::<GenresFile>(&o.stdout).map_err(|e| e.to_string()),
+                Ok(o) => Err(last_line(&o.stderr, "hits genres failed")),
+                Err(err) => Err(format!("cannot run {}: {err}", command[0])),
+            };
+            let mut ex = explorer.lock().expect("explorer lock");
+            ex.loading = false;
+            match parsed {
+                Ok(file) => ex.ready = Some(file),
+                Err(err) => status_error!("hits genres: {err}"),
+            }
+            drop(ex);
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+
+    /// Every genre with its song count; choosing one asks what to do with it.
+    fn open_explorer(&self, ctx: &Ctx, file: GenresFile) {
+        let explorer = Arc::clone(&self.explorer);
+        let title = format!("{} songs, {} without a genre · songs (own tags) plays", file.total, file.unknown);
+        let menu = MenuModal::new(ctx)
+            .width(60)
+            .list_section(ctx, move |mut section| {
+                section.add_item(title, |_| Ok(()));
+                for g in file.genres {
+                    let explorer = Arc::clone(&explorer);
+                    let label = format!(
+                        "{:>4} ({:>3}) {:>5}  {}{}",
+                        g.songs,
+                        g.recording,
+                        g.plays,
+                        g.name,
+                        if g.pinned { "  [pinned]" } else { "" }
+                    );
+                    section.add_item(label, move |ctx| {
+                        open_genre_actions(ctx, explorer, g.name.clone(), g.pinned);
+                        Ok(())
+                    });
+                }
+                Some(section)
+            })
+            .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
+            .build();
+        modal!(ctx, menu);
+    }
+
+    /// Act on a genre picked in the explorer: filter by it alone (and run hits), or pin / unpin its checkbox.
+    fn explorer_pick(&mut self, ctx: &Ctx, genre: String, pick: ExplorerPick) {
+        let Some(filters) = self.filters.as_mut() else { return };
+        match pick {
+            ExplorerPick::Filter | ExplorerPick::FilterLikes => {
+                filters.genres.iter_mut().for_each(|g| g.1 = 0);
+                filters.add_genres(&format!("+{genre}"));
+                if pick == ExplorerPick::FilterLikes {
+                    filters.source = Source::Likes;
+                    filters.by_range = false;
+                    filters.decades = [false; 8]; // all years
+                    filters.tops = [false; 3]; // every liked song with it, not a percentile of a few
+                }
+                self.apply(ctx);
+            }
+            ExplorerPick::Pin | ExplorerPick::Unpin => {
+                if pick == ExplorerPick::Pin && !filters.genres.iter().any(|(g, _)| *g == genre) {
+                    filters.genres.push((genre.clone(), 0));
+                }
+                let verb = if pick == ExplorerPick::Pin { "pin" } else { "unpin" };
+                let command = self.command.clone();
+                std::thread::spawn(move || {
+                    match Command::new(&command[0]).args(&command[1..]).args(["genres", verb, &genre]).output() {
+                        Ok(o) if o.status.success() => status_info!("{verb}ned {genre}"),
+                        _ => status_error!("hits genres {verb} {genre} failed"),
+                    }
+                });
+            }
+        }
     }
 
     /// Ask for genres that have no checkbox; they are added as rows ("+name" includes, "-name" excludes).
@@ -705,6 +850,31 @@ impl HitsPane {
     }
 }
 
+/// What to do with a genre chosen in the explorer.
+fn open_genre_actions(ctx: &Ctx, explorer: Arc<Mutex<Explorer>>, genre: String, pinned: bool) {
+    let sender = ctx.app_event_sender.clone();
+    let choose = move |pick: ExplorerPick| {
+        let (explorer, genre, sender) = (Arc::clone(&explorer), genre.clone(), sender.clone());
+        move |_: &Ctx| -> Result<()> {
+            explorer.lock().expect("explorer lock").pick = Some((genre.clone(), pick));
+            let _ = sender.send(AppEvent::RequestRender);
+            Ok(())
+        }
+    };
+    let (filter, likes, pin) = (choose(ExplorerPick::Filter), choose(ExplorerPick::FilterLikes),
+        choose(if pinned { ExplorerPick::Unpin } else { ExplorerPick::Pin }));
+    let menu = MenuModal::new(ctx)
+        .list_section(ctx, move |mut section| {
+            section.add_item("Top hits with this genre (chart)", filter);
+            section.add_item("My liked songs with this genre", likes);
+            section.add_item(if pinned { "Unpin its checkbox" } else { "Pin as a checkbox" }, pin);
+            Some(section)
+        })
+        .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
+        .build();
+    modal!(ctx, menu);
+}
+
 impl HitsPane {
     /// " · fetch: 2 queued, 1 review" for the songs of this result that are in the fetch queue.
     fn fetch_summary(&self) -> String {
@@ -811,6 +981,16 @@ impl Pane for HitsPane {
                 let rows = filters.rows();
                 self.filter_sel = rows.iter().position(|r| *r == FilterRow::Genre(first)).unwrap_or(self.filter_sel);
             }
+        }
+        let (ready, pick) = {
+            let mut ex = self.explorer.lock().expect("explorer lock");
+            (ex.ready.take(), ex.pick.take())
+        };
+        if let Some(file) = ready {
+            self.open_explorer(ctx, file);
+        }
+        if let Some((genre, pick)) = pick {
+            self.explorer_pick(ctx, genre, pick);
         }
         let finished = std::mem::take(&mut self.job.lock().expect("hits job lock").finished);
         if finished {
@@ -1035,6 +1215,8 @@ enum FilterRow {
     Genre(usize),
     /// opens an input for genres without a checkbox
     AddGenre,
+    /// the genre explorer: every genre of the library with counts
+    Explore,
     Owned,
     ShowHidden,
     Apply,
@@ -1077,7 +1259,7 @@ struct Filters {
     from: i32,
     to: i32,
     tops: [bool; 3],
-    /// the fixed GENRES first, then typed ones; -1 exclude, 0 off, 1 include
+    /// the pinned genres (or GENRES) first, then typed ones; -1 exclude, 0 off, 1 include
     genres: Vec<(String, i8)>,
     owned: bool,
     show_hidden: bool,
@@ -1087,7 +1269,7 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { source: Source::Billboard, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: GENRES.iter().map(|g| ((*g).to_owned(), 0)).collect(), owned: false, show_hidden: false }
+        Self { source: Source::Billboard, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), owned: false, show_hidden: false }
     }
 }
 
@@ -1110,7 +1292,7 @@ impl Filters {
         rows.extend((0..TOPS.len()).map(FilterRow::Top));
         rows.push(FilterRow::Heading("Genres  +in  -out"));
         rows.extend((0..self.genres.len()).map(FilterRow::Genre));
-        rows.push(FilterRow::AddGenre);
+        rows.extend([FilterRow::AddGenre, FilterRow::Explore]);
         rows.push(FilterRow::Heading("Options"));
         rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
         rows
@@ -1257,6 +1439,7 @@ impl Filters {
                 format!("  [{mark}] {}", self.genres[i].0)
             }
             FilterRow::AddGenre => "  + other genre…".to_owned(),
+            FilterRow::Explore => "  ⋯ explore genres…".to_owned(),
             FilterRow::Owned => format!("  {} owned only", check(self.owned)),
             FilterRow::ShowHidden => format!("  {} show hidden", check(self.show_hidden)),
             FilterRow::Apply => "  [ Apply ]".to_owned(),
@@ -1274,7 +1457,7 @@ impl Filters {
             FilterRow::Genre(i) => self.genres[i].1 = match self.genres[i].1 { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
-            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Apply => {}
+            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::Apply => {}
         }
     }
 
