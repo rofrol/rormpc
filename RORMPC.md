@@ -96,6 +96,20 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 ])),
 ```
 
+## Lyrics
+
+`musicdb lyrics` (rormpc-tools) fetches lyrics from LRCLIB into `lyrics_dir`, mirroring the library paths: synced
+lyrics as `.lrc` (upstream's Lyrics pane shows them), plain ones as `.txt`. rormpc shows the plain ones too,
+scrolled along with the song, and says why there are none (instrumental, nothing on LRCLIB within 2 s of the
+file's length, not checked yet). LRCLIB matches by length, so YouTube rips with intros often miss: the Queue
+menu's "Choose lyrics…" lists LRCLIB's entries for the song with their length difference and takes the one picked
+(`musicdb lyrics use`).
+
+```ron
+lyrics_dir: "~/.local/share/rormpc-tools/lyrics",
+enable_lyrics_hot_reload: true,
+```
+
 ## Last tab
 
 rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default

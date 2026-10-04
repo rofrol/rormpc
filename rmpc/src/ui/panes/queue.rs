@@ -279,6 +279,11 @@ impl QueuePane {
                         Ok(())
                     });
                 }
+                let lyrics_file = file.clone();
+                section.add_item("Choose lyrics…", move |ctx| {
+                    crate::ui::rormpc_lyrics::open_chooser(ctx, lyrics_file);
+                    Ok(())
+                });
                 Some(section)
             })
             // rormpc: deleting the file is its own section: the same delete menu as Ctrl-x

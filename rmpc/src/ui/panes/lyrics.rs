@@ -22,20 +22,26 @@ use crate::{
 #[derive(Debug)]
 pub struct LyricsPane {
     current_lyrics: Option<Lrc>,
+    /// rormpc: plain lyrics or a note when there is no .lrc
+    fallback: Option<crate::ui::rormpc_lyrics::Fallback>,
     initialized: bool,
     last_requested_line_idx: usize,
 }
 
 impl LyricsPane {
     pub fn new(_ctx: &Ctx) -> Self {
-        Self { current_lyrics: None, initialized: false, last_requested_line_idx: 0 }
+        Self { current_lyrics: None, fallback: None, initialized: false, last_requested_line_idx: 0 }
     }
 
     fn update_lyrics(&mut self, ctx: &Ctx) -> Result<()> {
         self.current_lyrics = None;
 
         let lrc = ctx.find_lrc()?;
-        let Some((_, lrc)) = lrc else { return Ok(()) };
+        self.fallback = None;
+        let Some((_, lrc)) = lrc else {
+            self.fallback = crate::ui::rormpc_lyrics::fallback(ctx);
+            return Ok(());
+        };
 
         self.current_lyrics = Some(lrc);
         Ok(())
@@ -52,7 +58,12 @@ fn align_text(text: Text, alignment: Alignment) -> Text {
 
 impl Pane for LyricsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        let Some(lrc) = &self.current_lyrics else { return Ok(()) };
+        let Some(lrc) = &self.current_lyrics else {
+            if let Some(fallback) = &self.fallback {
+                crate::ui::rormpc_lyrics::render(frame, area, ctx, fallback);
+            }
+            return Ok(());
+        };
         let offset = ctx.config.lyrics_offset;
 
         let elapsed = ctx.status.elapsed;
