@@ -96,6 +96,13 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 ])),
 ```
 
+## Tags
+
+"Tags…" in the Queue menu and on owned Hits rows lists my hand-made song lists (`musicdb tag`, rormpc-tools: God,
+melancholic, tearjerkers, …) with a ✓ on those the song is on; Enter toggles, "+ New list…" starts one. Each list
+is also an MPD playlist "Tag NAME" in the Playlists pane; nothing is queued by itself. The same menu corrects the
+song's genres ("Add a genre…", "Remove a MusicBrainz genre…", "Undo genre …"), which the Hits genre filter uses.
+
 ## Lyrics
 
 `musicdb lyrics` (rormpc-tools) fetches lyrics from LRCLIB into `lyrics_dir`, mirroring the library paths: synced

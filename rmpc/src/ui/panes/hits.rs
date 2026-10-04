@@ -594,6 +594,10 @@ impl HitsPane {
                         Ok(())
                     });
                 }
+                section.add_item("Tags…", move |ctx| {
+                    crate::ui::rormpc_tags::open_tags_menu(ctx, like_file);
+                    Ok(())
+                });
                 Some(section)
             });
         }
