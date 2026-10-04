@@ -788,6 +788,20 @@ impl HitsPane {
                 Some(section)
             });
         }
+        // the whole result as a playlist: owned rows in ranking order, missing ones skipped (and said so)
+        let owned: Vec<String> = self.rows.iter().filter_map(|x| x.file.clone()).collect();
+        let missing = self.rows.len() - owned.len();
+        if !owned.is_empty() {
+            let what = format!("{} owned songs of this result ({missing} missing skipped)", owned.len());
+            let label = format!("Add all {} owned rows to playlist…", owned.len());
+            menu = menu.list_section(ctx, move |mut section| {
+                section.add_item(label, move |ctx| {
+                    crate::ui::rormpc_playlists::open_add_to_playlist(ctx, owned, what);
+                    Ok(())
+                });
+                Some(section)
+            });
+        }
         let menu = menu.list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(())))).build();
         modal!(ctx, menu);
     }
