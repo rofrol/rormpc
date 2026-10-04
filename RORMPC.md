@@ -45,7 +45,9 @@ double click plays the selected owned song, `a` appends it; the queue is never r
 the queue is not appended again: Enter plays its existing entry (the playing one is not restarted, a paused
 one resumes), `a` only says so; the row's menu has "Add another copy" for a deliberate duplicate. The pane re-reads the file when it changes and when the MPD database changes.
 
-The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "+ other genre…"
+The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. Source cycles
+Billboard US (year-end charts) / my likes / recommended (songs of artists similar to the ones I play most,
+from ListenBrainz Radio; no years, the details say which artists led to each song). "+ other genre…"
 under the genre checkboxes asks for genres that have no checkbox (`italo-disco, -schlager`: no sign includes,
 `-` excludes) and adds them as rows. `[ Apply ]` stays at the bottom of the column however far it is scrolled, and
 says "• changed" when the filters differ from the result on screen, "running…" while `hits` runs.
