@@ -1,5 +1,19 @@
 # TODO
 
+## Next: live Queue plan view (approved 2026-10-06)
+
+- [ ] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two
+      plays (`-2`, `-1`, dimmed), `0 ▶` current, `↑n` requests, all ten forecast slots, then an unselectable
+      `unplanned · queue order` divider and the remaining songs in MPD order. Label the mode in the panel title.
+- [ ] Preserve selection, scrolling and mouse targets by queue song ID across forecast refreshes; break ties
+      by MPD position. Disable Next-header sorting in this view. Filtering keeps the original turn numbers.
+- [ ] Dim stale forecast numbers and show `stale · Xm` when the daemon is absent or its state is old.
+- [ ] J/K reorder requests in the request section; in the forecast they request a version-checked slot swap
+      from mpd-player, which alone writes priorities and publishes confirmation. Never move across section
+      boundaries or move past/current/unplanned rows. Document patch lifetime and clear it when a patched
+      song plays or leaves the queue, or the daemon draws a new forecast.
+- [ ] Verify with `cargo test`, `uv run pytest`, `uvx pyflakes src`, and TUI tests only on a scratch MPD.
+
 ## Done: Hits works like Queue, Up next as its own tab (2026-10-06)
 
 - [x] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the

@@ -33,6 +33,9 @@ A file for [guiding AI coding agents](https://agents.md/).
 
 ## Checking UI behaviour
 
+- Even inspection on the real MPD can interrupt playback: `/` then Enter in Queue plays the matched song
+  (the coordinator interrupted the playing song this way on 2026-10-06). Use a scratch MPD for inspection,
+  or never press Enter on the real one.
 - An agent can drive the TUI itself: `herdr tab create --no-focus`, `herdr pane run <pane> rormpc`, then
   `herdr pane send-keys` / `herdr pane wait-output --source visible` / `herdr pane read --source visible`.
   It talks to the real MPD, so undo queue changes (`mpc del`) and close the tab afterwards. To compare with
