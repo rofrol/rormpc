@@ -73,6 +73,13 @@ impl QueueHeaderPane {
     ) -> Result<()> {
         if let Some(format) = column_formats.get(idx) {
             let mut evald = Self::evaluate_content(format, ctx);
+            // rormpc: the Next column sorts by turn (requests, then the plan 1..10, then the rest), not as text
+            // ("10" before "2")
+            if matches!(&format.kind, PropertyKindOrText::Property(SongProperty::ShuffleNext())) {
+                for (id, key) in &mut evald {
+                    *key = crate::ui::rormpc_player::next_rank(*id).map_or_else(|| "~".to_owned(), |r| format!("{r:06}"));
+                }
+            }
             let cmp = StringCompare::builder().fold_case(true).build();
             let is_non_decreasing = evald.is_sorted_by(|(_, a), (_, b)| {
                 matches!(cmp.compare(a.as_ref(), b.as_ref()), Ordering::Less | Ordering::Equal)
