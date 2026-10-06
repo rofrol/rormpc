@@ -170,7 +170,10 @@ column). The Queue menu offers "Keep (drop from Not finished)" on them (`musicdb
 
 The whole queue stays in MPD (phones, media keys and mpc keep working); rormpc remembers where it came from in
 `$XDG_STATE_HOME/rormpc/source.json` and shows it on the border above the queue: "Playing from: Tag God · Up next 2",
-"(modified)" when another client changed the queue since.
+"(modified)" when another client changed the queue since. Up next itself belongs to mpd-player (rormpc-tools), so
+it keeps working with rormpc closed: rormpc sends `upnext add|playnow|play|first|move|remove|clear` over MPD
+messages and shows its `upnext.json`. Without mpd-player, Play next says so and Enter plays the song without
+removing it afterwards.
 
 - Queue menu "Sources… (play the library or a playlist)": the whole library or a saved playlist replaces the queue
   and plays now, after a confirmation. Up next is kept and plays first.
