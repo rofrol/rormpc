@@ -223,6 +223,14 @@ button. `musicdb delete [--permanent] [--listenbrainz]` does the work in the bac
 in its journal and `musicdb update` retries them hourly. Ctrl-y (`musicdb undo`) restores the last trashed file,
 not deleted history.
 
+## Consume off only
+
+Consume (MPD deletes every played song from the queue) breaks "Playing from" and Up next, so rormpc never turns
+it on. The global action `ConsumeOff` only turns it off (my config binds it to `c` instead of `ToggleConsume`);
+the ones already removed don't come back. When another client turns consume on, the status line says so. My
+theme shows the modes as labelled badges with their keys (`z rep x rnd v single consume off`; single armed by
+mpd-gap shows as `gap`), consume on as a red ` CONSUME c=off `.
+
 ## Build revision
 
 `Status(BuildRevision)` renders "rormpc <short sha>[+] <commit subject>" (`+` if the binary was built with
