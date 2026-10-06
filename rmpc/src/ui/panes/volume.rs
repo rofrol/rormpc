@@ -10,6 +10,8 @@ use crate::{
     config::tabs::VolumeType,
     ctx::Ctx,
     shared::{
+        events::AppEvent,
+        id::{self, Id},
         keys::ActionEvent,
         mouse_event::{MouseEvent, MouseEventKind},
     },
@@ -19,11 +21,13 @@ use crate::{
 pub struct VolumePane {
     area: Rect,
     config: VolumeType,
+    /// rormpc: redraws the mute countdown every second (also while paused, when no status updates come)
+    tick_id: Id,
 }
 
 impl VolumePane {
     pub fn new(config: VolumeType) -> Self {
-        Self { area: Rect::default(), config }
+        Self { area: Rect::default(), config, tick_id: id::new() }
     }
 }
 
@@ -31,9 +35,24 @@ impl Pane for VolumePane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> anyhow::Result<()> {
         self.area = area;
 
+        // rormpc: muted by mpd-player: the slider shows when the volume comes back
+        let mute_left = crate::ui::rormpc_mute::remaining();
+        if mute_left.is_some() {
+            ctx.scheduler.schedule_replace(self.tick_id, std::time::Duration::from_secs(1), |(tx, _)| {
+                Ok(tx.send(AppEvent::RequestRender)?)
+            });
+        }
+
         match &self.config {
             VolumeType::Slider(config) => {
                 if area.height < 1 || area.width < 1 {
+                    return Ok(());
+                }
+                if let Some(left) = mute_left {
+                    let text = format!("muted · {}", crate::ui::rormpc_mute::fmt_remaining(left));
+                    let pad = usize::from(area.width).saturating_sub(text.chars().count());
+                    let line = format!("{text}{}", " ".repeat(pad));
+                    frame.buffer_mut().set_stringn(area.x, area.y, line, usize::from(area.width), config.thumb_style);
                     return Ok(());
                 }
 
@@ -118,6 +137,11 @@ impl Pane for VolumePane {
         match event.kind {
             MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
                 if !self.area.contains(event.into()) {
+                    return Ok(());
+                }
+                // rormpc: while muted a click offers unmute / longer instead of setting a volume
+                if crate::ui::rormpc_mute::remaining().is_some() {
+                    crate::ui::rormpc_mute::open_mute_menu(ctx);
                     return Ok(());
                 }
                 // Avoid division by zero (if width or height is set to 0)

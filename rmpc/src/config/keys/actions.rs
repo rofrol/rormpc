@@ -45,6 +45,8 @@ pub enum GlobalAction {
     ConsumeOff,
     /// rormpc: choose the silence between songs (mpd-player)
     ShowGapMenu,
+    /// rormpc: mute for a while, or unmute / extend while muted (mpd-player)
+    ShowMuteMenu,
     /// rormpc: mpd-player's weighted shuffle on/off
     ToggleWeightedShuffle,
     /// rormpc: the playing song rests in the weighted shuffle (1, 3, 7, 14 days) and skips to the next
@@ -104,6 +106,8 @@ pub enum GlobalActionFile {
     ConsumeOff,
     /// rormpc: choose the silence between songs (mpd-player)
     ShowGapMenu,
+    /// rormpc: mute for a while, or unmute / extend while muted (mpd-player)
+    ShowMuteMenu,
     /// rormpc: mpd-player's weighted shuffle on/off
     ToggleWeightedShuffle,
     /// rormpc: the playing song rests in the weighted shuffle (1, 3, 7, 14 days) and skips to the next
@@ -196,6 +200,7 @@ impl From<GlobalActionFile> for GlobalAction {
             GlobalActionFile::ToggleConsumeOnOff => GlobalAction::ToggleConsumeOnOff,
             GlobalActionFile::ConsumeOff => GlobalAction::ConsumeOff,
             GlobalActionFile::ShowGapMenu => GlobalAction::ShowGapMenu,
+            GlobalActionFile::ShowMuteMenu => GlobalAction::ShowMuteMenu,
             GlobalActionFile::ToggleWeightedShuffle => GlobalAction::ToggleWeightedShuffle,
             GlobalActionFile::HeardEnough => GlobalAction::HeardEnough,
             GlobalActionFile::Partition { name, autocreate } => {
@@ -252,6 +257,7 @@ impl ToDescription for GlobalAction {
             GlobalAction::ToggleConsumeOnOff => "Toggle consume mode on or off, skipping oneshot".into(),
             GlobalAction::ConsumeOff => "Turn consume off (never on: it deletes played songs from the queue)".into(),
             GlobalAction::ShowGapMenu => "Choose the silence between songs (mpd-player)".into(),
+            GlobalAction::ShowMuteMenu => "Mute for a while, or unmute / extend while muted (mpd-player)".into(),
             GlobalAction::ToggleWeightedShuffle => "Weighted shuffle on/off (mpd-player: by plays and likes)".into(),
             GlobalAction::HeardEnough => "Heard enough: the playing song rests in the weighted shuffle and skips".into(),
             GlobalAction::Partition { name: Some(name), .. }=> format!("Switch to '{name}' partition").into(),
