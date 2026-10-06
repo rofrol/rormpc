@@ -340,6 +340,16 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       records every change of song as finished / early (48 h rest) / late, and ro-listenbrainz-mpd logs the same
       changes in skips.jsonl (imported hourly). A burst of 11 such skips (2026-10-07 00:15-00:17) was removed by
       hand from skips.jsonl and shuffle.json.
+      Experiment 2026-10-07 (scratch MPD 0.24.15, 12 songs, random on): plain `previous` walks back exactly through
+      the songs that played, also when priorities are reset after every song the way mpd-player does (3 runs). So
+      MPD itself is not the cause and a fork of MPD would change nothing (asked "what about forking MPD?",
+      consulted Sol and MiMo; Sol leaned to a small MPD patch, MiMo to a protocol proxy; both said test first).
+      In the real burst the first second moved forward through three songs (Jennifer Lopez, 34 s → Kings of Leon
+      0.2 s → Czesław Śpiewa 0.4 s → No No No), as if something sent `next`/`play` right after the key; only then
+      did Previous walk back. Next: reproduce on the scratch MPD with mpd-player running (upnext, shuffle, gap)
+      and Hammerspoon + mpd-now-playable, logging every MPD command (MPD `log_level "verbose"`), to find what
+      moves forward. M.A.L.P. and any other client send plain `previous`, so the fix must work without the daemon
+      seeing the key.
       Consulted 2026-10-07 (GPT-6.1 Sol, MiMo; both agreed unless noted):
   - `shuffle prev` in mpd-player (rormpc-tools); in weighted mode nothing calls MPD's `previous`. Hammerspoon and
     rormpc send it through the daemon's existing command channel; without the daemon, fall back to `mpc prev`
