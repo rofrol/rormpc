@@ -22,11 +22,15 @@ the music comes back. Plan after asking GPT-6.1 Sol and MiMo (both agreed on the
       and musicdb play counts (the scrobbler counts elapsed time, not audibility). A "Pause for…" variant only
       later, and only once one daemon owns both the gap and the timed resume.
 - [ ] The timer lives in mpd-gap (rormpc-tools), not in the TUI: rormpc is often closed, and a timer in it would
-      leave the music muted for good. No third playback daemon.
-- [ ] Commands go through MPD client-to-client messages (`subscribe` / `sendmessage`, channel e.g.
-      `rormpc-mute`: `start <seconds>`, `extend <seconds>`, `cancel`); rmpc-mpd already has `subscribe`, mpd-gap
-      waits on the `message` idle event next to `player`. No socket of our own (Sol) and no state file written by
-      two processes (MiMo's variant). mpd-gap is the only writer of `$XDG_STATE_HOME/rormpc/mute.json`
+      leave the music muted for good. No third playback daemon. mpd-gap is being turned into the single
+      playback-policy daemon (maybe renamed mpd-player: gap length, Up next, weighted shuffle; music-data TODO.md,
+      "Playback annoyances"); mute is a module next to those, added only after that base (channel, dispatcher,
+      state files) is committed.
+- [ ] Commands go through MPD client-to-client messages (`subscribe` / `sendmessage`) on the daemon's one shared
+      channel `rormpc`, as `<area> <verb> [args]`: `mute start <seconds>`, `mute extend <seconds>`, `mute cancel`;
+      rmpc-mpd already has `subscribe`, the daemon waits on the `message` idle event next to `player`. No socket
+      of our own (Sol) and no state file written by two processes (MiMo's variant). The daemon is the only writer
+      of `$XDG_STATE_HOME/rormpc/mute.json`
       (`saved_volume`, `deadline` as wall-clock Unix time, `generation`), written with temp + rename; the TUI
       reads it for the countdown and counts down locally between reads.
 - [ ] Wall-clock deadline, so a Mac that slept past it unmutes on wake; mpd-gap restarting reads the file and
