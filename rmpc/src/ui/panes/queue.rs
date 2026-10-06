@@ -587,7 +587,8 @@ impl Pane for QueuePane {
                         line.spans.insert(usize::from(is_marked), badge);
                     }
                     if Some(i) == like_idx && hover_like == Some(idx) && line.width() == 0 {
-                        line = Line::from(Span::styled("♡", Style::default().add_modifier(Modifier::BOLD)));
+                        // the liked glyph, dimmed: same shape, so it reads "click to like" (♡ is narrower in some fonts)
+                        line = Line::from(Span::styled("♥", Style::default().add_modifier(Modifier::DIM)));
                     }
 
                     line

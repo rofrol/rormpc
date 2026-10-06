@@ -634,6 +634,14 @@ impl Property<PropertyKind> {
                 StatusProperty::BuildRevision => {
                     Some(Either::Left(Span::styled(crate::build_revision(), style)))
                 }
+                StatusProperty::WeightedShuffle { on_label, off_label, on_style, waiting_style, off_style } => {
+                    let sh = crate::ui::rormpc_player::shuffle_state();
+                    Some(Either::Left(match (sh.enabled, sh.active) {
+                        (true, true) => Span::styled(on_label.clone(), on_style.unwrap_or(style)),
+                        (true, false) => Span::styled(on_label.clone(), waiting_style.or(*off_style).unwrap_or(style)),
+                        (false, _) => Span::styled(off_label.clone(), off_style.unwrap_or(style)),
+                    }))
+                }
                 StatusProperty::Volume => {
                     Some(Either::Left(Span::styled(status.volume.value().to_string(), style)))
                 }

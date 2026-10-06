@@ -66,6 +66,19 @@ pub enum StatusPropertyFile {
     Partition,
     /// rormpc: short git sha of the build, "+" if built with uncommitted changes
     BuildRevision,
+    /// rormpc: mpd-player's weighted shuffle: on (picking), on but waiting (e.g. random off), off
+    WeightedShuffle {
+        #[serde(default = "defaults::default_on_label")]
+        on_label: String,
+        #[serde(default = "defaults::default_off_label")]
+        off_label: String,
+        #[serde(default)]
+        on_style: Option<StyleFile>,
+        #[serde(default)]
+        waiting_style: Option<StyleFile>,
+        #[serde(default)]
+        off_style: Option<StyleFile>,
+    },
     RepeatV2 {
         #[serde(default = "defaults::default_on_label")]
         on_label: String,
@@ -209,6 +222,13 @@ pub enum StatusProperty {
     Partition,
     /// rormpc: short git sha of the build, "+" if built with uncommitted changes
     BuildRevision,
+    WeightedShuffle {
+        on_label: String,
+        off_label: String,
+        on_style: Option<Style>,
+        waiting_style: Option<Style>,
+        off_style: Option<Style>,
+    },
     Elapsed,
     Duration,
     Crossfade,
@@ -437,6 +457,16 @@ impl TryFrom<StatusPropertyFile> for StatusProperty {
             },
             StatusPropertyFile::Partition => StatusProperty::Partition,
             StatusPropertyFile::BuildRevision => StatusProperty::BuildRevision,
+            StatusPropertyFile::WeightedShuffle { on_label, off_label, on_style, waiting_style, off_style } => {
+                let conv = |s: Option<StyleFile>| s.map(|s| -> Result<_> { s.to_config_or(None, None) }).transpose();
+                StatusProperty::WeightedShuffle {
+                    on_label,
+                    off_label,
+                    on_style: conv(on_style)?,
+                    waiting_style: conv(waiting_style)?,
+                    off_style: conv(off_style)?,
+                }
+            }
             StatusPropertyFile::Duration => StatusProperty::Duration,
             StatusPropertyFile::Elapsed => StatusProperty::Elapsed,
             StatusPropertyFile::Volume => StatusProperty::Volume,

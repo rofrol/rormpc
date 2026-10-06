@@ -263,7 +263,10 @@ counts half after 60 days, log-compressed) or liked; a dislike makes it rare. On
 Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
 or off; `e` (HeardEnough) rests the playing song for 1, 3, 7, then 14 days and skips to the next (the Queue menu
 has it for the selected song, and "Back in the weighted shuffle"). Enter and Play next still play a resting song.
-The Up next pane's second footer line shows the pick ("Then likely: … · may change") or why there is none.
+The Up next pane's second footer line shows the pick ("Then likely: … · may change") or why there is none. The theme
+property `Status(WeightedShuffle(on_label, off_label, on_style, waiting_style, off_style))` shows its state, e.g.
+a `w shuf` badge next to the mode badges: on_style while it picks, waiting_style while it is on but idle (random
+off, consume on, stopped), off_style when off.
 
 A Hits result played as the source ("Play these N songs (as the source)…" in the Hits menu: its owned rows, a
 snapshot that moving a filter never changes) is shuffled in rounds: each song once, then the shuffle stops
@@ -275,7 +278,7 @@ snapshot being played.
 ## Likes in Hits and Queue
 
 Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).
-In Hits and Queue, hovering the like cell of an unrated song shows ♡; a click on the cell toggles like and nothing
+In Hits and Queue, hovering the like cell of an unrated song shows a dimmed ♥; a click on the cell toggles like and nothing
 else (no selection, no playback). `r` in Hits toggles like for the selected row; dislike is in the menu. `/` in
 Hits searches artist and title (words in any order, diacritics folded) within the result, "23 shown / 410
 results"; Esc clears it. Mouse moves reach the active tab's panes (upstream drops them), without a render unless
