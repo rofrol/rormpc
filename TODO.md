@@ -11,9 +11,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral
       outcome, prev transitions logged for `musicdb import-skips`. Without the "restart in the first seconds" rule
       until it is decided ("Previous in the weighted shuffle"). Done in rormpc-tools 328cff3 (not released).
-- [ ] Previous: rormpc's Previous and Hammerspoon's media key send `shuffle prev` to mpd-player (channel `rormpc`)
-      while it runs, `mpc prev` without it. Hammerspoon lives in dotfiles: edit only, never reload it (read
-      `~/.hammerspoon/AGENTS.md`); the user reloads. Works after the rormpc-tools release.
+- [x] Previous: rormpc's Previous and Hammerspoon's media key send `shuffle prev` to mpd-player (channel `rormpc`)
+      while it runs, `mpc prev` without it. Done: rormpc afc55ac, dotfiles 22e3b81 (Hammerspoon not reloaded). Both
+      send it only when mpd-player is subscribed and its shuffle.json has `trail`, so until the rormpc-tools
+      release they keep plain `mpc prev`. mpd-player's `playid` starts playback even when MPD was paused.
 - [ ] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
       `≋` marker, "Find versions…" with a key and Back to the Queue row ("Versions: delete a bad version…").
 - [ ] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
