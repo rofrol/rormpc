@@ -30,6 +30,8 @@ pub enum SongPropertyFile {
     Channels(),
     Added(),
     LastModified(),
+    /// rormpc: the song's turn: ↑n for an Up next request, 1..10 in the weighted shuffle's plan
+    ShuffleNext(),
     Other(String),
 }
 
@@ -51,6 +53,7 @@ pub enum SongProperty {
     Channels(),
     Added(),
     LastModified(),
+    ShuffleNext(),
     #[strum(to_string = "Other(\"{0}\")")]
     Other(String),
 }
@@ -407,6 +410,7 @@ impl From<SongPropertyFile> for SongProperty {
             SongPropertyFile::Channels() => SongProperty::Channels(),
             SongPropertyFile::Added() => SongProperty::Added(),
             SongPropertyFile::LastModified() => SongProperty::LastModified(),
+            SongPropertyFile::ShuffleNext() => SongProperty::ShuffleNext(),
         }
     }
 }
@@ -750,6 +754,7 @@ impl TryFrom<SongProperty> for Tag {
             SongProperty::Channels() => bail!("Cannot convert Channels to Tag"),
             SongProperty::Added() => bail!("Cannot convert Added to Tag"),
             SongProperty::LastModified() => bail!("Cannot convert LastModified to Tag"),
+            SongProperty::ShuffleNext() => bail!("Cannot convert ShuffleNext to Tag"),
             SongProperty::Other(val) => Ok(Tag::Custom(val)),
         }
     }
