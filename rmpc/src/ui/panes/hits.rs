@@ -152,16 +152,7 @@ struct Explorer {
 
 /// Genres pinned as checkboxes (`hits genres pin`), else the built-in list.
 fn pinned_genres() -> Vec<String> {
-    let config = std::env::var("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(expand_home("~/.config")));
-    #[derive(Deserialize)]
-    struct Pins {
-        pins: Vec<String>,
-    }
-    std::fs::read_to_string(config.join("rormpc-tools/hits-genres.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str::<Pins>(&t).ok())
-        .map(|p| p.pins)
-        .unwrap_or_else(|| GENRES.iter().map(|g| (*g).to_owned()).collect())
+    crate::ui::rormpc_genres::pins().unwrap_or_else(|| GENRES.iter().map(|g| (*g).to_owned()).collect())
 }
 
 /// One song in the `hits fetch` queue ($XDG_STATE_HOME/rormpc-tools/fetch/queue.json).
@@ -221,6 +212,8 @@ pub struct HitsPane {
     query: String,
     /// the row whose like cell the mouse is over (shows a heart to click)
     hover_like: Option<usize>,
+    /// the filter row under the mouse pointer: only a look (underline), never the cursor
+    hover_filter: Option<usize>,
     label: String,
     generated_at: String,
     rank_note: String,
@@ -247,6 +240,8 @@ pub struct HitsPane {
     explorer: Arc<Mutex<Explorer>>,
     fetch: Vec<FetchItem>,
     fetch_mtime: Option<SystemTime>,
+    /// the pins file as last read: a genre pinned elsewhere (Queue's "Pin genre…") gets its checkbox on the next render
+    pins_mtime: Option<SystemTime>,
     job: Arc<Mutex<Job>>,
 }
 
@@ -267,6 +262,7 @@ impl HitsPane {
             explorer: Arc::new(Mutex::new(Explorer::default())),
             fetch: Vec::new(),
             fetch_mtime: None,
+            pins_mtime: None,
             job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
             rows: Vec::new(),
@@ -275,6 +271,7 @@ impl HitsPane {
             typing: false,
             query: String::new(),
             hover_like: None,
+            hover_filter: None,
             label: String::new(),
             generated_at: String::new(),
             rank_note: String::new(),
@@ -339,6 +336,22 @@ impl HitsPane {
             .and_then(|text| serde_json::from_str::<FetchQueue>(&text).ok())
             .map(|q| q.items)
             .unwrap_or_default();
+    }
+
+    /// Give newly pinned genres a checkbox; unpinning leaves a box until the next start, as in the explorer.
+    fn reload_pins(&mut self) {
+        let mtime = std::fs::metadata(crate::ui::rormpc_genres::pins_path()).and_then(|m| m.modified()).ok();
+        if mtime == self.pins_mtime {
+            return;
+        }
+        self.pins_mtime = mtime;
+        if let (Some(filters), Some(pins)) = (self.filters.as_mut(), crate::ui::rormpc_genres::pins()) {
+            for genre in pins {
+                if !filters.genres.iter().any(|(g, _)| *g == genre) {
+                    filters.genres.push((genre, 0));
+                }
+            }
+        }
     }
 
     /// The queue entry of a chart row: same recording MBID, else the same artist and title.
@@ -743,9 +756,12 @@ impl HitsPane {
                     FilterRow::Heading(_) | FilterRow::Source | FilterRow::Sort | FilterRow::Mode | FilterRow::Apply
                 ) {
                     ctx.config.theme.preview_label_style
+                } else if !filters.enabled(*row) {
+                    Style::default().add_modifier(Modifier::DIM) // "× clear …" with nothing to clear
                 } else {
                     Style::default()
                 };
+                let hover = self.hover_filter == Some(i) && filters.hoverable(*row);
                 let cursor = i == self.filter_sel;
                 // the cursor is a gutter marker, never a background: colour on "[x]" would read as "checked".
                 // Without focus the marker stays dim, so h/l returns to the same row.
@@ -762,6 +778,23 @@ impl HitsPane {
                 }
                 if cursor && self.focus_filters {
                     control_style = control_style.add_modifier(Modifier::BOLD);
+                }
+                if hover {
+                    // underline the words only: never the indent or the box, whose look is its state
+                    // (BOLD too, since some terminals don't draw underlines)
+                    let hovered = Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
+                    let (boxed, name) = if control.starts_with('[') { control.split_at(3) } else { ("", control) };
+                    let (words, indent) = if boxed.is_empty() { (label, "") } else { (name, boxed) };
+                    let lead = words.len() - words.trim_start().len();
+                    let style = if boxed.is_empty() { label_style } else { Style::default() };
+                    let mut spans = vec![gutter];
+                    if !boxed.is_empty() {
+                        spans.push(Span::styled(label.to_owned(), label_style));
+                        spans.push(Span::styled(indent.to_owned(), control_style));
+                    }
+                    spans.push(Span::styled(words[..lead].to_owned(), style));
+                    spans.push(Span::styled(words[lead..].to_owned(), style.patch(hovered)));
+                    return Line::from(spans);
                 }
                 Line::from(vec![
                     gutter,
@@ -832,6 +865,7 @@ impl HitsPane {
             let hint = rormpc_actions::rate_key_hint(ctx);
             let like_file = file.clone();
             let what = format!("'{}'", r.title);
+            let genre_what = what.clone();
             menu = menu.list_section(ctx, move |mut section| {
                 for (label, value) in [("Like ♥", "2"), ("Dislike ✗", "0"), ("Clear like", "1")] {
                     let file = like_file.clone();
@@ -850,8 +884,13 @@ impl HitsPane {
                     crate::ui::rormpc_playlists::open_add_to_playlist(ctx, vec![playlist_file], what);
                     Ok(())
                 });
+                let genre_file = like_file.clone();
                 section.add_item("Tags…", move |ctx| {
                     crate::ui::rormpc_tags::open_tags_menu(ctx, like_file);
+                    Ok(())
+                });
+                section.add_item("Pin genre in Hits…", move |ctx| {
+                    crate::ui::rormpc_genres::open_pin_menu_for_file(ctx, genre_file, genre_what);
                     Ok(())
                 });
                 Some(section)
@@ -859,6 +898,14 @@ impl HitsPane {
         }
         if r.file.is_none() && !r.hidden {
             menu = self.fetch_section(ctx, menu, &r);
+            // not in the library: the genres `hits` gave the chart row
+            let (genres, what) = (r.genres.clone(), format!("'{}'", r.title));
+            menu = menu.list_section(ctx, move |section| {
+                Some(section.item("Pin genre in Hits…", move |ctx| {
+                    crate::ui::rormpc_genres::open_pin_menu(ctx, what, genres, "chart");
+                    Ok(())
+                }))
+            });
         }
         let (verb, label) = if r.hidden { ("unhide", "Unhide song (show it in Hits again)") } else { ("hide", "Hide song across charts") };
         let (artist, title, mbid, command) = (r.artist.clone(), r.title.clone(), r.mbid.clone(), self.command.clone());
@@ -1145,6 +1192,9 @@ impl Pane for HitsPane {
                 .areas(area);
         // Apply gets its row first, so even a tiny pane shows it
         let [list_area, apply_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(filter_area);
+        if list_area != self.filter_area {
+            self.hover_filter = None; // resized: the row under the pointer is another one now
+        }
         self.filter_area = list_area;
         self.apply_area = apply_area;
         self.scroll_filters(0); // the pane may have been resized
@@ -1169,6 +1219,7 @@ impl Pane for HitsPane {
         self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
 
         self.reload_fetch();
+        self.reload_pins();
         let dim = Style::default().add_modifier(Modifier::DIM);
         // the source being played, when it is a Hits snapshot: rows outside it and rows heard in this round
         let source = crate::ui::rormpc_upnext::source_info().filter(|(kind, _, _)| kind == "hits");
@@ -1286,6 +1337,12 @@ impl Pane for HitsPane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
+        if self.hover_filter.is_some()
+            && (!self.filter_area.contains(event.into()) || !matches!(event.kind, MouseEventKind::Moved))
+        {
+            self.hover_filter = None; // left the column, clicked or scrolled: the next move sets it again
+            ctx.render()?;
+        }
         if self.apply_area.contains(event.into()) {
             // a click applies; the wheel does nothing over the footer
             if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
@@ -1298,6 +1355,15 @@ impl Pane for HitsPane {
         }
         if self.filter_area.contains(event.into()) {
             match event.kind {
+                MouseEventKind::Moved => {
+                    let idx = self.filter_offset + usize::from(event.y.saturating_sub(self.filter_area.y));
+                    let rows = self.filter_rows();
+                    let hover = rows.get(idx).filter(|r| self.filters.as_ref().is_some_and(|f| f.hoverable(**r))).map(|_| idx);
+                    if hover == self.hover_filter {
+                        return Ok(());
+                    }
+                    self.hover_filter = hover;
+                }
                 MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
                     let idx = self.filter_offset + usize::from(event.y.saturating_sub(self.filter_area.y));
                     let clickable = |row: &FilterRow| !matches!(row, FilterRow::Heading(_) | FilterRow::Apply);
@@ -1390,6 +1456,7 @@ impl Pane for HitsPane {
         let Some(action) = event.claim_common().cloned() else {
             return Ok(());
         };
+        self.hover_filter = None; // a key press: the cursor is what counts, until the mouse moves again
         if self.focus_filters {
             if self.filter_action(&action, ctx) {
                 ctx.render()?;
@@ -1802,6 +1869,35 @@ impl Filters {
         }
     }
 
+    /// False for "× clear genres" / "× clear artists" when no box is + or -: drawn dim, Enter does nothing.
+    fn enabled(&self, row: FilterRow) -> bool {
+        match row {
+            FilterRow::ClearGenres => self.genres.iter().any(|(_, s)| *s != 0),
+            FilterRow::ClearArtists => self.artists.iter().any(|(_, s)| *s != 0),
+            _ => true,
+        }
+    }
+
+    /// Rows that underline under the mouse: actions and the label of a checkbox, not headings, the ‹…› cyclers,
+    /// Apply (its own button look) or a disabled row.
+    fn hoverable(&self, row: FilterRow) -> bool {
+        self.enabled(row)
+            && matches!(
+                row,
+                FilterRow::ClearGenres
+                    | FilterRow::ClearArtists
+                    | FilterRow::AddGenre
+                    | FilterRow::Explore
+                    | FilterRow::AddArtist
+                    | FilterRow::Decade(_)
+                    | FilterRow::Top(_)
+                    | FilterRow::Genre(_)
+                    | FilterRow::Artist(_)
+                    | FilterRow::Owned
+                    | FilterRow::ShowHidden
+            )
+    }
+
     /// Space / Enter on a row.
     fn toggle(&mut self, row: FilterRow) {
         match row {
@@ -1813,7 +1909,8 @@ impl Filters {
             FilterRow::Genre(i) => self.genres[i].1 = match self.genres[i].1 { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::ClearGenres => self.genres.iter_mut().for_each(|(_, s)| *s = 0),
             FilterRow::Artist(i) => self.artists[i].1 = match self.artists[i].1 { 0 => 1, 1 => -1, _ => 0 },
-            FilterRow::ClearArtists => self.artists.clear(),
+            FilterRow::ClearArtists if self.enabled(row) => self.artists.clear(),
+            FilterRow::ClearArtists => {}
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
             FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
@@ -1886,6 +1983,24 @@ fn parse_genre_spec(spec: &str) -> Vec<(i8, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clear_rows_are_disabled_with_nothing_to_clear() {
+        let mut f = Filters::default();
+        f.genres.iter_mut().for_each(|g| g.1 = 0);
+        f.artists = vec![("ABBA".to_owned(), 0)];
+        for row in [FilterRow::ClearGenres, FilterRow::ClearArtists] {
+            assert!(!f.enabled(row) && !f.hoverable(row));
+        }
+        f.toggle(FilterRow::ClearArtists);
+        assert_eq!(f.artists.len(), 1, "a disabled clear keeps the rows");
+        f.genres[0].1 = -1;
+        f.artists[0].1 = 1;
+        assert!(f.enabled(FilterRow::ClearGenres) && f.hoverable(FilterRow::ClearGenres));
+        f.toggle(FilterRow::ClearArtists);
+        assert!(f.artists.is_empty());
+        assert!(!f.hoverable(FilterRow::Heading("Genres")) && !f.hoverable(FilterRow::Apply));
+    }
 
     #[test]
     fn genre_spec_round_trip() {

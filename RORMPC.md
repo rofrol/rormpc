@@ -76,7 +76,13 @@ under the genre checkboxes asks for genres that have no checkbox (`italo-disco, 
 `-` excludes) and adds them as rows. The genre checkboxes are the ones pinned with `hits genres pin` (rormpc-tools,
 `~/.config/rormpc-tools/hits-genres.json`). "⋯ explore genres…" lists every genre of the library with its song
 count (how many from the recording's own tags) and plays; picking one filters by it alone, on the chart or
-among my liked songs, or pins/unpins its checkbox. Artists work like genres (`hits --artist "+Queen; -Madonna"`):
+among my liked songs, or pins/unpins its checkbox. "Pin genre in Hits…" in the Queue menu and on Hits rows does
+the same from a song: it lists the song's genres (`hits genres of`: the recording's MusicBrainz genres, else the
+artist's, plus my `musicdb genre` corrections; a missing chart row uses the row's genres) with 📌 on the pinned
+ones; a newly pinned genre gets its checkbox on the next render, an unpinned one keeps its box until restart.
+"× clear genres" and "× clear artists" are dim, and do nothing, while no box is + or -. Under the mouse, action
+rows and the label of a checkbox (never the box) are underlined and bold; that is only a look, the "›" cursor
+stays where it was. Artists work like genres (`hits --artist "+Queen; -Madonna"`):
 "+ artist…" lists the artists of the result's whole cohort (before the Top % cut) with their song counts, `/`
 searches the list; a picked artist is a three-state row (+ / - / off), "× clear artists" drops them. The artist
 filter applies after the Top % cut, so "Queen, 1980s, top 10%" is Queen's songs in the decade's top 10% with their
@@ -223,7 +229,9 @@ removing it afterwards.
 
 "Add to playlist…" in the Queue menu (marked rows, else the cursor row) and on owned Hits rows: a new playlist by
 name, or a stored one; each shows `✓` when it already has all the songs (then Enter does nothing) or "3/5 there,
-adds 2". It only ever adds; removing stays in the Playlists pane.
+adds 2". It only ever adds; removing stays in the Playlists pane. The genres all the songs share (`hits genres of`,
+up to 5) are offered as "+ genre" to create a playlist of that name, unless a playlist has it already; without a
+`hits` that knows `genres of` (rormpc-tools 0.2.29) the menu just has no suggestions.
 
 ## Tags
 

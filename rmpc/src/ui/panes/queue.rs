@@ -334,6 +334,7 @@ impl QueuePane {
                 // weighted shuffle (mpd-player): rest the song, or bring it back
                 let shuffle_file = file.clone();
                 let shuffle_title = self.queue.selected().map(|s| s.metadata.get("title").map_or(s.file.as_str(), |t| t.last()).to_owned()).unwrap_or_default();
+                let genre_what = format!("'{shuffle_title}'");
                 if crate::ui::rormpc_player::cooldown_days(&shuffle_file).is_some() {
                     section.add_item("Back in the weighted shuffle (undo heard enough)", move |ctx| {
                         crate::ui::rormpc_player::unheard_enough(ctx, shuffle_file.clone());
@@ -348,6 +349,11 @@ impl QueuePane {
                 let tags_file = file.clone();
                 section.add_item("Tags…", move |ctx| {
                     crate::ui::rormpc_tags::open_tags_menu(ctx, tags_file);
+                    Ok(())
+                });
+                let genre_file = file.clone();
+                section.add_item("Pin genre in Hits…", move |ctx| {
+                    crate::ui::rormpc_genres::open_pin_menu_for_file(ctx, genre_file, genre_what);
                     Ok(())
                 });
                 let lyrics_file = file.clone();
