@@ -1385,7 +1385,8 @@ impl Filters {
         args.push(if tops.is_empty() { "1-100".to_owned() } else { tops.join(",") });
         let genres = self.genre_spec();
         if !genres.is_empty() {
-            args.extend(["-g".to_owned(), genres]);
+            // one token: argparse takes a separate value starting with '-' ("-country") for an option
+            args.push(format!("--genre={genres}"));
         }
         if self.owned {
             args.push("--owned".to_owned());
@@ -1559,6 +1560,15 @@ mod tests {
         let back = Filters::from_args(&HitsArgs { genre: Some(f.genre_spec()), ..HitsArgs::default() });
         assert_eq!(back.genre_spec(), f.genre_spec());
         assert_eq!(back.genres.len(), GENRES.len() + 1);
+    }
+
+    #[test]
+    fn exclusion_only_genres_stay_one_argument() {
+        let mut f = Filters::default();
+        f.add_genres("-country");
+        let args = f.args("out.json");
+        assert!(args.contains(&"--genre=-country".to_owned()));
+        assert!(!args.contains(&"-g".to_owned()));
     }
 
     #[test]
