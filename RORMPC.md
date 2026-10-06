@@ -249,6 +249,33 @@ the ones already removed don't come back. When another client turns consume on, 
 theme shows the modes as labelled badges with their keys (`z rep x rnd v single consume off`; single armed by
 mpd-player shows as `gap`), consume on as a red ` CONSUME c=off `.
 
+## Weighted shuffle
+
+With random on, mpd-player draws the next song instead of MPD's uniform random and nominates it with priority 1,
+below Up next (2-255), so a request always plays first. Weights come from `musicdb sync` (hourly,
+`$XDG_STATE_HOME/rormpc/weights.json`): 1 for a song never played, up to 3 for songs played a lot lately (a play
+counts half after 60 days, log-compressed) or liked; a dislike makes it rare. One pick in five ignores the weights.
+Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
+or off; `e` (HeardEnough) rests the playing song for 1, 3, 7, then 14 days and skips to the next (the Queue menu
+has it for the selected song, and "Back in the weighted shuffle"). Enter and Play next still play a resting song.
+The Up next pane's second footer line shows the pick ("Then likely: … · may change") or why there is none.
+
+A Hits result played as the source ("Play these N songs (as the source)…" in the Hits menu: its owned rows, a
+snapshot that moving a filter never changes) is shuffled in rounds: each song once, then the shuffle stops
+nominating and says "round done"; the Up next menu starts a new round. The Hits footer says what plays
+("Playing: Hits · 1980s top 10% · 84 playable · heard 12/84") and "browsing other results" when the filters on
+screen differ. Hits' State column shows only exceptions: `⏳5d` resting, `heard` in this round, `·` not in the
+snapshot being played.
+
+## Likes in Hits and Queue
+
+Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).
+In Hits and Queue, hovering the like cell of an unrated song shows ♡; a click on the cell toggles like and nothing
+else (no selection, no playback). `r` in Hits toggles like for the selected row; dislike is in the menu. `/` in
+Hits searches artist and title (words in any order, diacritics folded) within the result, "23 shown / 410
+results"; Esc clears it. Mouse moves reach the active tab's panes (upstream drops them), without a render unless
+a pane's hover changed.
+
 ## Build revision
 
 `Status(BuildRevision)` renders "rormpc <short sha>[+] <commit subject>" (`+` if the binary was built with

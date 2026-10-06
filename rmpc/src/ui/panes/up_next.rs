@@ -106,6 +106,12 @@ impl UpNextPane {
                         Ok(())
                     });
                 }
+                if crate::ui::rormpc_player::shuffle_state().round.is_some_and(|r| r.done) {
+                    section.add_item("New round (every song of the source once more)", |ctx| {
+                        crate::ui::rormpc_player::new_round(ctx);
+                        Ok(())
+                    });
+                }
                 if n > 0 {
                     section.add_item(format!("Clear Up next ({n})…"), move |ctx| {
                         Self::confirm_clear(ctx, n);
@@ -123,7 +129,7 @@ impl UpNextPane {
 impl Pane for UpNextPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
         self.rows = rormpc_upnext::waiting(ctx);
-        let [table_area, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(area);
+        let [table_area, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(2)]).areas(area);
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), table_area.height.saturating_sub(1).into());
         let idx = self
@@ -168,7 +174,25 @@ impl Pane for UpNextPane {
                 self.rows.len()
             )
         };
-        frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, dim))), footer);
+        // after Up next: the weighted shuffle's pick (mpd-player), which may still change
+        let sh = crate::ui::rormpc_player::shuffle_state();
+        let then = match (&sh.nominee, sh.enabled, sh.active) {
+            (_, false, _) => " Then: MPD's order (weighted shuffle off, w turns it on)".to_owned(),
+            (Some(n), _, true) => {
+                let song = ctx.queue.iter().find(|s| s.id == n.id);
+                let name = match (tag(song, "artist"), tag(song, "title")) {
+                    (a, t) if !t.is_empty() => format!("{a} - {t}"),
+                    _ => n.file.clone(),
+                };
+                format!(" Then likely: {name} · shuffle pick, {} · may change", n.why)
+            }
+            _ if sh.round.as_ref().is_some_and(|r| r.done) => format!(" Then: {} (Ctrl-z: new round)", sh.reason),
+            _ => format!(" Then: MPD's order (weighted shuffle waiting: {})", sh.reason),
+        };
+        frame.render_widget(
+            Paragraph::new(vec![Line::from(Span::styled(hint, dim)), Line::from(Span::styled(then, dim))]),
+            footer,
+        );
         Ok(())
     }
 
