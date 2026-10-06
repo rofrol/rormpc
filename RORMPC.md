@@ -100,6 +100,36 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 ])),
 ```
 
+## Versions pane
+
+Song names that several different library files share, from `musicdb versions --json` (rormpc-tools 0.2.2 or
+newer). A play matched only by artist + title to such a name counts for no file until it is decided here, once
+per source track (a Spotify URI, a recording MBID, or the name for plays without an id); later plays of the same
+track follow the decision. Left: the groups, open ones first, most plays first, then YouTube ids / MBIDs found
+on several files. Right: the group's files (length, version label, plays) and the played tracks (source, plays,
+Spotify album, first and last play, longest play, decision, suggestion). The footer counts the open items, or
+says "clean".
+
+h / l (Left / Right) move between the list, the files and the tracks; Enter opens a menu:
+
+- on a track: "Accept suggestion" (shown with its reason under the table, never applied by itself), "N. It is
+  <file>", "A version I don't own" (it joins musicdb's missing list), "Clear the decision";
+- on a file: "Preview from 0:00 / 0:30 / 1:00 / 2:00" and "Stop the preview" (mpv, else ffplay, outside MPD, so
+  listening to compare never scrobbles or counts as a skip; it stops when you leave the tab), "Label: original /
+  live / remix / edit / cover / other", "Same recording: keep this file, merge the others…" (asks first; the
+  others go to the quarantine with aliases, like `musicdb dedupe`), and for a shared id "These files are fine
+  (shared-ok)…".
+
+A decision whose file is gone, or whose group changed since (a download, a deletion), shows as "review" and is
+open again. At startup, when the hourly `musicdb update` found open items (`~/.cache/rormpc-tools/doctor.json`),
+the status bar says "doctor: N open (Versions pane)".
+
+```ron
+(name: "Versions", pane: Split(size: "100%", direction: Vertical, panes: [
+    (pane: Pane(Versions()), size: "100%", borders: "ALL", border_symbols: Rounded),
+])),
+```
+
 ## Not finished
 
 `musicdb sync` (rormpc-tools) writes the playlist "Not finished": songs I rarely play to the end lately (deletion
