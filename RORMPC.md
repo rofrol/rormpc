@@ -58,7 +58,9 @@ under 30 plays) / whole library (every song by my plays, or "rediscover") / my l
 artists similar to the ones I play most, from ListenBrainz Radio; no years, the details say which artists led to
 each song). Apply takes ~0.3 s once the chart songs were looked up: `hits` keeps its MusicBrainz lookups and
 matches and the ListenBrainz popularity (30 days; ListenBrainz down = not asked for 20 min) in one SQLite file,
-`~/.cache/hits/cache.sqlite3`. `musicdb chart` draws my yearly top 10 as an animated bar chart race. "+ other genre…"
+`~/.cache/hits/cache.sqlite3` (raw search results compressed; `hits compact` reclaims space). A new install
+starts from the seed in rormpc-tools (the matches of every chart year, ~0.8 MB), and the hourly `musicdb update`
+fills gaps such as a new chart year, 30 MusicBrainz lookups per run. `musicdb chart` draws my yearly top 10 as an animated bar chart race. "+ other genre…"
 under the genre checkboxes asks for genres that have no checkbox (`italo-disco, -schlager`: no sign includes,
 `-` excludes) and adds them as rows. The genre checkboxes are the ones pinned with `hits genres pin` (rormpc-tools,
 `~/.config/rormpc-tools/hits-genres.json`). "⋯ explore genres…" lists every genre of the library with its song
