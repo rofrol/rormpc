@@ -174,6 +174,7 @@ impl Default for KeyConfigFile {
             (s().char('D'),                       Q::DeleteAll),
             (s().cr(),                            Q::Play),
             (s().char('C'),                       Q::JumpToCurrent),
+            (s().char('o'),                       Q::TogglePlanView),
             (s().char('L'),                       Q::SelectAlbum()),
             (s().char('X'),                       Q::Shuffle),
         ]);

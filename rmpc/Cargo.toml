@@ -39,6 +39,7 @@ flate2 = { workspace = true }
 flexi_logger = { workspace = true }
 image = { workspace = true }
 itertools = { workspace = true }
+libc = { workspace = true }
 log = { workspace = true }
 notify-debouncer-full = { workspace = true }
 parking_lot = { workspace = true }

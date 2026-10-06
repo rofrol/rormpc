@@ -3290,6 +3290,7 @@ dependencies = [
  "flexi_logger",
  "image",
  "itertools 0.14.0",
+ "libc",
  "log",
  "notify-debouncer-full",
  "nucleo-matcher",

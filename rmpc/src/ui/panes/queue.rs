@@ -89,6 +89,7 @@ use crate::{
 #[derive(Debug)]
 pub struct QueuePane {
     queue: Dir<Song, TableState>,
+    plan: crate::ui::rormpc_queue_plan::PlanView,
     column_widths: Vec<Constraint>,
     column_formats: Vec<Property<SongProperty>>,
     areas: EnumMap<Areas, Rect>,
@@ -133,6 +134,7 @@ impl QueuePane {
 
         let mut s = Self {
             queue: Dir::new(ctx.queue.clone()),
+            plan: crate::ui::rormpc_queue_plan::PlanView::new(),
             column_widths,
             column_formats,
             areas: enum_map! {
@@ -173,6 +175,29 @@ impl QueuePane {
             .as_slice()
             .to_album_ranges()
             .map(|range| range.end.saturating_sub(1))
+            .collect();
+    }
+
+    /// rormpc: point the physical-order Dir at the plan view's selected and marked song IDs, so the
+    /// ordinary ID-based Queue actions act on the songs the plan view shows.
+    fn map_plan_selection(&mut self, ctx: &Ctx) {
+        self.queue.items.clone_from(&ctx.queue);
+        self.queue.state.set_content_len(Some(ctx.queue.len()));
+        let selected = self
+            .plan
+            .selected_for_action()
+            .and_then(|id| ctx.queue.iter().position(|s| s.id == id));
+        self.queue.state.select(selected, ctx.config.scrolloff);
+        self.map_plan_marks(ctx);
+    }
+
+    fn map_plan_marks(&mut self, ctx: &Ctx) {
+        *self.queue.marked_mut() = ctx
+            .queue
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| self.plan.marked.contains(&s.id))
+            .map(|(i, _)| i)
             .collect();
     }
 
@@ -482,6 +507,10 @@ impl QueuePane {
 
 impl Pane for QueuePane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> anyhow::Result<()> {
+        if ctx.queue_plan.get() {
+            self.plan.render(frame, area, ctx);
+            return Ok(());
+        }
         let Ctx { config, .. } = ctx;
         self.calculate_areas(area, ctx)?;
 
@@ -768,6 +797,7 @@ impl Pane for QueuePane {
                 }
             }
             UiEvent::Reconnected => {
+                crate::ui::rormpc_player::refresh_presence(ctx);
                 self.before_show(ctx)?;
                 self.recalculate_album_indices();
             }
@@ -787,6 +817,13 @@ impl Pane for QueuePane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
+        if ctx.queue_plan.get() {
+            if !self.plan.mouse(event, ctx)? {
+                self.map_plan_selection(ctx);
+                self.open_context_menu(ctx);
+            }
+            return Ok(());
+        }
         let position = event.into();
 
         // rormpc: the like cell. Hover shows a heart; a click toggles like <-> no rating and neither selects nor plays
@@ -975,6 +1012,9 @@ impl Pane for QueuePane {
     }
 
     fn handle_insert_mode(&mut self, kind: InputResultEvent, ctx: &mut Ctx) -> Result<()> {
+        if ctx.queue_plan.get() {
+            return self.plan.insert(&kind, ctx);
+        }
         if let Some(f) = self.find.as_mut().filter(|f| f.typing) {
             match kind {
                 InputResultEvent::Push | InputResultEvent::Pop => {
@@ -1010,6 +1050,10 @@ impl Pane for QueuePane {
     }
 
     fn handle_insert_nav(&mut self, down: bool, handled: &mut bool, ctx: &mut Ctx) -> Result<()> {
+        if ctx.queue_plan.get() && self.plan.typing {
+            *handled = true;
+            return self.plan.insert_nav(down, ctx);
+        }
         if self.find.as_ref().is_some_and(|f| f.typing) {
             if down {
                 self.queue.next(ctx.config.scrolloff, false);
@@ -1023,6 +1067,52 @@ impl Pane for QueuePane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        // rormpc: `o` switches between physical Queue order and the plan view, keeping the selected and
+        // marked songs by ID
+        if event
+            .actions
+            .iter()
+            .any(|a| matches!(a.as_queue(), Some(QueueActions::TogglePlanView)))
+        {
+            if event.claim_queue().is_none() {
+                return Ok(());
+            }
+            if ctx.queue_plan.get() {
+                let selected = self.plan.selected_id;
+                self.queue.items.clone_from(&ctx.queue);
+                let idx = selected.and_then(|id| ctx.queue.iter().position(|s| s.id == id));
+                self.queue.select_idx(idx.unwrap_or(0), ctx.config.scrolloff);
+                self.map_plan_marks(ctx);
+                self.recalculate_album_indices();
+                ctx.queue_plan.set(false);
+            } else {
+                let selected = self.queue.selected().map(|s| s.id);
+                let marked = self
+                    .queue
+                    .marked()
+                    .iter()
+                    .filter_map(|i| self.queue.items.get(*i))
+                    .map(|s| s.id)
+                    .collect();
+                if self.find.is_some() {
+                    self.end_find(ctx, false);
+                }
+                self.plan.select_id(selected);
+                self.plan.marked = marked;
+                ctx.queue_plan.set(true);
+                self.plan.refresh(ctx, false);
+                crate::ui::rormpc_player::refresh_presence(ctx);
+            }
+            return Ok(ctx.render()?);
+        }
+        if ctx.queue_plan.get() {
+            if self.plan.action(event, ctx)? {
+                return Ok(());
+            }
+            // Only file/ID-based actions reach the ordinary handler; its Dir stays in physical
+            // queue order.
+            self.map_plan_selection(ctx);
+        }
         if self.find.is_some() && self.filtered_action(event, ctx)? {
             return Ok(());
         }
@@ -1079,6 +1169,7 @@ impl Pane for QueuePane {
                         });
                     }
                 }
+                QueueActions::TogglePlanView => {} // handled before either Queue view claims input
                 QueueActions::Find => self.start_find(ctx),
                 QueueActions::JumpToCurrent => {
                     if let Some((idx, _)) = ctx.status.songid.and_then(|id| {
@@ -1677,7 +1768,7 @@ impl QueuePane {
 
 /// rormpc: rows of the queue matching the live filter (indices into `songs`): the exact matches in queue order,
 /// else the close matches (typos). Matches artist, title, album and the file name, diacritic-folded.
-fn find_matches(songs: &[Song], query: &str) -> crate::ui::rormpc_filter::Found {
+pub(crate) fn find_matches(songs: &[Song], query: &str) -> crate::ui::rormpc_filter::Found {
     crate::ui::rormpc_filter::find(
         songs.iter().map(|song| {
             let tag = |k: &str| song.metadata.get(k).map(|v| v.last().to_owned()).unwrap_or_default();

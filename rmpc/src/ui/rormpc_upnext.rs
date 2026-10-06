@@ -126,14 +126,16 @@ fn watch_path(path: PathBuf, tx: Sender<AppEvent>) -> Result<RecommendedWatcher>
     // notify reports canonical paths (on macOS /tmp is /private/tmp); compare in the same namespace.
     let parent = std::fs::canonicalize(parent)?;
     let target = parent.join(path.file_name().ok_or_else(|| anyhow::anyhow!("Up next state has no filename"))?);
+    let shuffle_target = parent.join("shuffle.json");
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         match event {
             Ok(event) if event.need_rescan() || event.paths.is_empty()
-                || event.paths.iter().any(|p| p == &target) => {
+                || event.paths.iter().any(|p| p == &target || p == &shuffle_target) => {
                 // An atomic replacement can have the same mtime: the event, not a timestamp, invalidates it.
                 if let Some(cache) = UP_NEXT_CACHE.get() && let Ok(mut cache) = cache.lock() {
-                    cache.0 = None;
+                    *cache = (None, UpNextFile::default()); // a deleted file also has mtime None
                 }
+                rormpc_player::invalidate_shuffle_state();
                 let _ = tx.send(AppEvent::RequestRender);
             }
             Ok(_) => {}

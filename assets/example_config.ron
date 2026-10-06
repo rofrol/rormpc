@@ -136,6 +136,7 @@
             "D":          DeleteAll,
             "<CR>":       Play,
             "C":          JumpToCurrent,
+            "o":          TogglePlanView,
             "L":          SelectAlbum(),
             "X":          Shuffle,
         },
