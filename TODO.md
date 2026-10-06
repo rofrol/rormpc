@@ -11,6 +11,11 @@
       "Play next" inside it. Hits and Queue get a key that opens it. Full plan: music-data TODO.md, entry
       "Playback annoyances".
 
+## Soon: playing-song indicator in Hits (design only)
+
+- [ ] Consult the models and prepare visual mockups of playing-song indicators in Hits (for example, a
+      `▶` beside `0` in the Next column). Show the variants to the user for review before implementing one.
+
 ## Soon: missing film score / soundtrack genre
 
 - [ ] Investigate why the film score / soundtrack genre is missing from songs such as "Cast Away Theme"
