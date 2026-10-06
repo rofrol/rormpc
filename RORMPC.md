@@ -52,8 +52,13 @@ the queue is not appended again (from any pane: Directories, Search, Find too): 
 one resumes), `a` only says so; the row's menu has "Add another copy" for a deliberate duplicate. The pane re-reads the file when it changes and when the MPD database changes.
 
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. Source cycles
-Billboard US (year-end charts) / my likes / recommended (songs of artists similar to the ones I play most,
-from ListenBrainz Radio; no years, the details say which artists led to each song). "+ other genre…"
+Billboard US (year-end charts) / my charts (songs by my plays in the chosen LISTENING years, "Listened:"
+instead of "Period:", the year in progress included; the weighted shuffle's own picks don't count; "thin data"
+under 30 plays) / whole library (every song by my plays, or "rediscover") / my likes / recommended (songs of
+artists similar to the ones I play most, from ListenBrainz Radio; no years, the details say which artists led to
+each song). Apply takes ~0.3 s once the chart songs were looked up: `hits` keeps its MusicBrainz lookups and
+matches and the ListenBrainz popularity (30 days; ListenBrainz down = not asked for 20 min) in one SQLite file,
+`~/.cache/hits/cache.sqlite3`. `musicdb chart` draws my yearly top 10 as an animated bar chart race. "+ other genre…"
 under the genre checkboxes asks for genres that have no checkbox (`italo-disco, -schlager`: no sign includes,
 `-` excludes) and adds them as rows. The genre checkboxes are the ones pinned with `hits genres pin` (rormpc-tools,
 `~/.config/rormpc-tools/hits-genres.json`). "⋯ explore genres…" lists every genre of the library with its song

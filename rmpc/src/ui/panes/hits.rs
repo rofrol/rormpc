@@ -1485,16 +1485,22 @@ enum Source {
     Billboard,
     Likes,
     Recs,
+    /// every library song, by my plays
+    Library,
+    /// my own charts: songs by my plays in the chosen listening years
+    Mine,
 }
 
 impl Source {
-    const ALL: [Source; 3] = [Source::Billboard, Source::Likes, Source::Recs];
+    const ALL: [Source; 5] = [Source::Billboard, Source::Mine, Source::Library, Source::Likes, Source::Recs];
 
     fn label(self) -> &'static str {
         match self {
             Source::Billboard => "Billboard US",
             Source::Likes => "my likes",
             Source::Recs => "recommended",
+            Source::Library => "whole library",
+            Source::Mine => "my charts",
         }
     }
 
@@ -1535,7 +1541,7 @@ impl Default for Filters {
 impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
         let mut rows = vec![FilterRow::Source];
-        if self.source == Source::Likes {
+        if matches!(self.source, Source::Likes | Source::Library) {
             rows.push(FilterRow::Sort);
         }
         // recommendations have no year to filter on
@@ -1662,9 +1668,17 @@ impl Filters {
                 args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
             }
             Source::Recs => args.extend(["--source".to_owned(), "recs".to_owned()]),
+            Source::Library => {
+                args.extend(["--source".to_owned(), "library".to_owned(), "--sort".to_owned()]);
+                args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
+            }
+            Source::Mine => args.extend(["--source".to_owned(), "mine".to_owned()]),
         }
-        // likes without any decade ticked = all years (a chart needs a period); recommendations have no year
-        let all_years = self.source == Source::Likes && !self.by_range && !self.decades.iter().any(|d| *d);
+        // likes, library and my charts without any decade ticked = all years (a chart needs a period);
+        // recommendations have no year
+        let all_years = matches!(self.source, Source::Likes | Source::Library | Source::Mine)
+            && !self.by_range
+            && !self.decades.iter().any(|d| *d);
         if self.source != Source::Recs && !all_years {
             args.extend(["--years".to_owned(), self.years()]);
         }
@@ -1738,10 +1752,12 @@ impl Filters {
         f.source = match args.source.as_deref() {
             Some("likes") => Source::Likes,
             Some("recs") => Source::Recs,
+            Some("library") => Source::Library,
+            Some("mine") => Source::Mine,
             _ => Source::Billboard,
         };
         f.rediscover = args.sort.as_deref() == Some("rediscover");
-        if f.source == Source::Likes && args.period.is_none() {
+        if matches!(f.source, Source::Likes | Source::Library | Source::Mine) && args.period.is_none() {
             f.decades = [false; 8]; // all years
         }
         f
@@ -1752,7 +1768,12 @@ impl Filters {
         match row {
             FilterRow::Source => format!("Source: ‹{}›", self.source.label()),
             FilterRow::Sort => format!("Sort:   {}", if self.rediscover { "‹rediscover›" } else { "‹by plays›" }),
-            FilterRow::Mode => format!("Period: {}", if self.by_range { "‹year range›" } else { "‹decades›" }),
+            // my charts filter the years I listened, the other sources the songs' release years
+            FilterRow::Mode => format!(
+                "{} {}",
+                if self.source == Source::Mine { "Listened:" } else { "Period:" },
+                if self.by_range { "‹year range›" } else { "‹decades›" }
+            ),
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
             FilterRow::From => format!("  from ‹ {} ›", self.from),
             FilterRow::To => format!("  to   ‹ {} ›", self.to),
@@ -1801,7 +1822,9 @@ impl Filters {
 
     /// h / l on a year row; false when the row has nothing to adjust.
     fn adjust(&mut self, row: FilterRow, delta: i32) -> bool {
-        let clamp = |y: i32| y.clamp(1959, 2025);
+        // up to this year: my charts can show the year in progress
+        let this_year = chrono::Datelike::year(&chrono::Local::now());
+        let clamp = |y: i32| y.clamp(1959, this_year);
         match row {
             FilterRow::From => self.from = clamp(self.from + delta),
             FilterRow::To => self.to = clamp(self.to + delta),
