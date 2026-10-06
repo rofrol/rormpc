@@ -270,3 +270,64 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       `push` to the upstream ci.yml here too.
 - Not automated: live ListenBrainz, MusicBrainz, Billboard and YouTube (OAuth) calls, and exact gap timing on
   shared runners.
+
+## Versions: delete a bad version, find versions from the Queue
+
+- [ ] Versions: delete a bad version, and find versions from the Queue (asked 2026-10-06: "in Versions I can't
+  delete a version of a song if I decide it is bad. Or in the Queue right-click find versions, or some marker on the
+  song that versions exist"). Facts: Versions file rows offer Preview, Label and "Same recording: keep this file,
+  merge the others…" (quarantine + aliases); deleting exists only in Queue/Hits ("Delete library file…", Ctrl-x:
+  `musicdb delete --preview`, then `musicdb delete`, Ctrl-y undo, Deleted pane). 63 groups today.
+  Consulted 2026-10-06 (GPT-6.1 Sol, MiMo; agreed unless noted):
+  - Delete: a "Delete this file…" item on a Versions file row that opens the same Delete library file… modal
+    (same preview, Trash, undo, Deleted pane; no second delete path), with its four items: Trash / Trash + delete
+    the history / Delete permanently / … + delete the history, where history = the ListenBrainz listens
+    (irreversible), the video in my YouTube playlists and the local plays. Plain Trash stays the default. Copy
+    keeps the two verbs apart: delete = an unwanted recording, merge = the same recording.
+  - Decided 2026-10-06: "Delete this file…" first asks what the file is. "A copy of <other file> (same recording)"
+    runs the existing merge for that pair: the copy goes to the quarantine with an alias, and its plays and
+    decisions move to the file that stays. "A different recording I don't want" runs the delete; its plays and
+    decisions stay with the deleted file, shown as "previously owned, deleted", never moved to a sibling (that
+    would claim it is the same recording); with "+ delete the history" they go too (asked 2026-10-06: "maybe ask
+    whether it should disappear from ListenBrainz and other places": that is this choice). Undo restores file,
+    references and group together, not deleted history.
+  - Deleting the last file of a group is allowed; the group leaves the active list (its history stays unless
+    "+ delete the history" was chosen); the cursor moves to the next group.
+  - Queue: both a context menu item "Find versions…" (plus a key) and a quiet marker. The marker shows only when
+    the song's group has more than one owned file (not on every name collision); blank otherwise; membership cached
+    once, not queried per row. Decided 2026-10-06: a narrow column with `≋`, blank when there are no versions.
+  - The jump opens Versions with the group and the originating file selected; Back/Esc returns to the Queue row
+    and scroll position. No autoplay.
+  - Pitfalls: re-check the preview before running (the queue or library may have changed), stale group
+    membership after a delete, the same file queued twice, background failures shown, never "done" early.
+
+## Lyrics: Polish translation next to the original
+
+- [ ] Asked 2026-10-07: show a Polish translation in the Lyrics tab, the original on the left and Polish on the
+      right, both left-aligned; what if there is no translation, the song is Polish, or in another language (e.g.
+      Czech)? Facts: lyrics come only from LRCLIB (`musicdb lyrics`, `.lrc`/`.txt` + `index.json` in `lyrics_dir`),
+      which has no translations; the pane shows one column, plain `.txt` scrolled by progress.
+      Consulted 2026-10-07 (GPT-6.1 Sol, MiMo); decided by the user: source tekstowo.pl first, then an LLM;
+      literal, line-by-line translation (for understanding, no rhyme); the current line highlighted.
+  - Layout: original left, Polish right, both left-aligned, for any non-Polish original (English, Czech, Italian
+    …). A Polish original: one full-width column, no translation. No translation yet: the original full width and
+    a short status with the action ("no Polish translation · t: translate"). Narrow terminal (below ~100
+    columns): one column and a key that switches original / translation.
+  - Current line highlighted in both columns. `.lrc`: the translation inherits the original's timestamps through
+    line ids. `.txt`: the line is estimated from the song's progress, as the scroll already is; say it is estimated.
+    Only highlight a paired line when the pairing is trustworthy (1:1); a translation whose lines do not match
+    (merged or reordered verses, typical for human translations) is aligned by stanza and shown without the
+    line highlight on the right.
+  - Sources: tekstowo.pl (human translations, no API: an HTML scraper, fragile, check its terms; personal use
+    only, never commit the fetched text to a public repo); when it has none, an LLM translates line by line with
+    the stanza as context (the lyrics go to an external model; label it "machine translation"); a translation I
+    paste or import wins over both. Musixmatch (partner API) and Genius (annotations, not translations) are out.
+  - Storage: keep the `.lrc`/`.txt` untouched; a sidecar per song and language, e.g. `<stem>.pl.json`, with the
+    source (tekstowo URL / model and version / mine), human or machine, fetch date, a hash of the original lyrics
+    (stale when the original changes) and per-line units pointing at the original's line ids (one-to-many
+    allowed). Never overwrite my own edits. Language of the original: detected once (whatlang/lingua) and stored,
+    with a manual override; short or mixed-language lyrics fool detection.
+  - When: on demand, asynchronously, when the Lyrics tab shows a song without one; cached for offline use;
+    batch only as an explicit command. Pitfalls: wrong song or version matched on tekstowo, instrumental tracks,
+    repeated choruses, timestamp offsets, invented lines from the LLM, and `index.json` having one writer
+    (`musicdb lyrics`); keep translations out of it or behind the same writer.
