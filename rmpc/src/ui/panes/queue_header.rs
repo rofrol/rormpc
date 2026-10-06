@@ -77,7 +77,8 @@ impl QueueHeaderPane {
             // ("10" before "2")
             if matches!(&format.kind, PropertyKindOrText::Property(SongProperty::ShuffleNext())) {
                 for (id, key) in &mut evald {
-                    *key = crate::ui::rormpc_player::next_rank(*id).map_or_else(|| "~".to_owned(), |r| format!("{r:06}"));
+                    *key = crate::ui::rormpc_player::next_rank(*id)
+                        .map_or_else(|| "~".to_owned(), |r| format!("{:08}", r + 1_000_000)); // past first
                 }
             }
             let cmp = StringCompare::builder().fold_case(true).build();
