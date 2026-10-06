@@ -1,8 +1,9 @@
 //! rormpc: Shuffle pane. What plays next with mpd-player's weighted shuffle, in play order: the song playing now,
 //! the Up next requests (they always come first), then the shuffle's plan (the next songs it drew ahead, with why).
 //! The plan changes only when a planned song leaves the queue, is requested, gets "heard enough" or is played by
-//! hand, and is topped up after every song. A view only: nothing here reorders the queue. Enter on a planned song
-//! asks for it with Play next, on a request plays it now; C (JumpToCurrent) goes to the playing song.
+//! hand, and is topped up after every song. Above them the last plays (-5..-1, ✓ played to the end, ⏭ skipped).
+//! A view only: nothing here reorders the queue. Enter on a planned or past song asks for it with Play next, on a
+//! request plays it now; C (JumpToCurrent) goes to the playing song.
 
 use anyhow::Result;
 use ratatui::{
@@ -28,11 +29,16 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Kind {
+    /// played before, n steps back, with how it ended ("finished", "early", "late")
+    Past(usize, String),
     Now,
     /// an Up next request, by queue id
     Request(u32),
     Planned,
 }
+
+/// how many past plays the timeline shows (mpd-player keeps 20)
+const HISTORY_SHOWN: usize = 5;
 
 #[derive(Debug, Clone)]
 struct Item {
@@ -67,7 +73,7 @@ impl ShufflePane {
 
     fn confirm(&self, ctx: &Ctx) {
         match self.selected().map(|i| (i.kind.clone(), i.file.clone())) {
-            Some((Kind::Planned, file)) => rormpc_upnext::play_next(ctx, vec![file]),
+            Some((Kind::Planned | Kind::Past(..), file)) => rormpc_upnext::play_next(ctx, vec![file]),
             Some((Kind::Request(id), _)) => rormpc_upnext::play_entry(ctx, id),
             _ => {}
         }
@@ -78,7 +84,7 @@ impl ShufflePane {
         let title = name(ctx, &item.file).0;
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
-                if item.kind == Kind::Planned {
+                if matches!(item.kind, Kind::Planned | Kind::Past(..)) {
                     let f = item.file.clone();
                     section.add_item("Play next (Up next)", move |ctx| {
                         rormpc_upnext::play_next(ctx, vec![f.clone()]);
@@ -104,9 +110,19 @@ impl Pane for ShufflePane {
         let dim = Style::default().add_modifier(Modifier::DIM);
         let key = ctx.config.theme.preview_label_style;
 
-        // play order: now, the requests, the plan
+        // a timeline: the last plays (-5..-1), the song playing (0), the requests, the plan
         let keep = self.selected().map(|i| (i.kind.clone(), i.file.clone()));
         let mut items = Vec::new();
+        let past: Vec<_> = sh.history.iter().rev().take(HISTORY_SHOWN).collect();
+        for (k, p) in past.iter().enumerate().rev() {
+            let why = match p.kind.as_str() {
+                "finished" => "played to the end",
+                "early" => "skipped early",
+                "late" => "skipped later",
+                _ => "",
+            };
+            items.push(Item { kind: Kind::Past(k + 1, p.kind.clone()), file: p.file.clone(), why: why.to_owned() });
+        }
         if let Some(cur) = ctx.current_song() {
             items.push(Item { kind: Kind::Now, file: cur.file.clone(), why: "playing now".to_owned() });
         }
@@ -122,7 +138,7 @@ impl Pane for ShufflePane {
             (false, _) => "Weighted shuffle is off (w turns it on): the queue plays in order, or MPD's random with x.".to_owned(),
             (true, false) => format!("Weighted shuffle waiting: {}", sh.reason),
             (true, true) => format!(
-                "In play order: the song playing, the Up next requests, then {} songs the shuffle drew ahead.",
+                "A timeline: the last plays (-), the song playing (0), the Up next requests (↑), then {} songs the shuffle drew ahead.",
                 sh.plan.len()
             ),
         };
@@ -135,15 +151,20 @@ impl Pane for ShufflePane {
         let idx = keep
             .and_then(|(k, f)| self.items.iter().position(|i| i.kind == k && i.file == f))
             .or_else(|| self.state.get_selected().map(|i| i.min(self.items.len().saturating_sub(1))))
+            .or_else(|| self.items.iter().position(|i| i.kind == Kind::Now))
             .unwrap_or(0);
         self.state.select((!self.items.is_empty()).then_some(idx), ctx.config.scrolloff);
 
         let mut n = 0;
         let rows = self.items.iter().map(|i| {
             let (title, artist) = name(ctx, &i.file);
-            let mark = match i.kind {
-                Kind::Now => "▶".to_owned(),
-                Kind::Request(_) => "↑".to_owned(),
+            let mark = match &i.kind {
+                Kind::Past(k, how) => format!("-{k} {}", if how == "finished" { "✓" } else { "⏭" }),
+                Kind::Now => "0 ▶".to_owned(),
+                Kind::Request(_) => {
+                    n += 1;
+                    format!("↑{n}")
+                }
                 Kind::Planned => {
                     n += 1;
                     n.to_string()
@@ -155,11 +176,15 @@ impl Pane for ShufflePane {
                 Cell::from(artist),
                 Cell::from(Span::styled(i.why.clone(), dim)),
             ]);
-            if i.kind == Kind::Now { row.style(Style::default().add_modifier(Modifier::BOLD)) } else { row }
+            match i.kind {
+                Kind::Now => row.style(Style::default().add_modifier(Modifier::BOLD)),
+                Kind::Past(..) => row.style(dim),
+                _ => row,
+            }
         });
         let header = Row::new(["", "Title", "Artist", "Why"]).style(key);
         let table = Table::new(rows, [
-            Constraint::Length(3),
+            Constraint::Length(4),
             Constraint::Percentage(30),
             Constraint::Percentage(20),
             Constraint::Min(20),
@@ -201,7 +226,9 @@ impl Pane for ShufflePane {
         // the Queue's JumpToCurrent (C) works here too: the playing song is the first row
         if event.actions.iter().any(|a| matches!(a.as_queue(), Some(QueueActions::JumpToCurrent))) {
             event.claim_queue();
-            self.state.first();
+            if let Some(i) = self.items.iter().position(|i| i.kind == Kind::Now) {
+                self.state.select(Some(i), ctx.config.scrolloff);
+            }
             ctx.render()?;
             return Ok(());
         }
