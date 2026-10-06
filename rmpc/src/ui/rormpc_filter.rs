@@ -1,7 +1,9 @@
 //! rormpc: live inline filtering, shared by the Queue and the Versions pane. Every typed word must appear in the
 //! row, in any order (fzf's --exact; whole-row fuzzy matching let "lodz" match l…o…d…z scattered over a long
 //! title, too loose for a filter that keeps the list's order). Matching is diacritic-folded, so "zolw" finds
-//! "żółw" and "lodz" finds "Łódź"; nucleo matches the needle as given, so both sides are folded here.
+//! "żółw" and "lodz" finds "Łódź"; nucleo matches the needle as given, so both sides are folded here. When no row
+//! matches exactly, `find` returns close matches: each typed word within a few Damerau-Levenshtein edits of a word
+//! of the row (never whole-row fuzzy), shown as "Close matches".
 
 use std::collections::HashMap;
 
@@ -62,6 +64,115 @@ impl Query {
         let h = fold(haystack);
         pattern.score(Utf32Str::new(&h, &mut self.buf), &mut self.matcher).is_some()
     }
+}
+
+/// The rows a query shows: the exact matches in list order; when there is none, the close matches (typos) ranked
+/// by (edits, typo words, list order). `close` tells which of the two it is.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Found {
+    pub rows: Vec<usize>,
+    pub close: bool,
+}
+
+/// Filter `haystacks` (one text per row) by `query`, both tiers in one synchronous pass.
+pub fn find<I, S>(haystacks: I, query: &str) -> Found
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let texts: Vec<String> = haystacks.into_iter().map(|h| h.as_ref().to_owned()).collect();
+    let mut exact = Query::new(query);
+    let rows: Vec<usize> = (0..texts.len()).filter(|&i| exact.matches(&texts[i])).collect();
+    if !rows.is_empty() || query.trim().is_empty() {
+        return Found { rows, close: false };
+    }
+    let words: Vec<String> = fold(query).split_whitespace().map(str::to_owned).collect();
+    let mut close: Vec<(u8, u8, usize)> =
+        (0..texts.len()).filter_map(|i| close_match(&fold(&texts[i]), &words).map(|(e, t)| (e, t, i))).collect();
+    close.sort_unstable();
+    Found { rows: close.into_iter().map(|(_, _, i)| i).collect(), close: true }
+}
+
+/// Edits allowed for a typed word: none below 4 letters (2-3 letter typos match noise), 1 up to 7, 2 from 8.
+fn allowed(word_len: usize) -> u8 {
+    match word_len {
+        0..=3 => 0,
+        4..=7 => 1,
+        _ => 2,
+    }
+}
+
+const MAX_QUERY_EDITS: u8 = 2;
+
+/// (total edits, typo words) when every word matches the folded text: as a substring, or within `allowed`
+/// Damerau-Levenshtein edits of one of its words (the last typed word also of a word's beginning, as it may be
+/// unfinished). None otherwise, or past MAX_QUERY_EDITS in total.
+fn close_match(text: &str, words: &[String]) -> Option<(u8, u8)> {
+    let tokens: Vec<Vec<char>> =
+        text.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()).map(|t| t.chars().collect()).collect();
+    let (mut edits, mut typos) = (0u8, 0u8);
+    for (n, word) in words.iter().enumerate() {
+        if text.contains(word.as_str()) {
+            continue;
+        }
+        let w: Vec<char> = word.chars().collect();
+        let bound = allowed(w.len());
+        if bound == 0 {
+            return None;
+        }
+        let last = n + 1 == words.len();
+        let best = tokens
+            .iter()
+            .flat_map(|t| {
+                let whole = std::iter::once(t.as_slice());
+                // an unfinished last word: compare with the token's beginning of about the same length
+                let prefixes = (w.len().saturating_sub(1)..=w.len() + 1)
+                    .filter(move |&k| last && k >= 4 && k < t.len())
+                    .map(move |k| &t[..k]);
+                whole.chain(prefixes)
+            })
+            .filter_map(|t| osa_distance(&w, t, bound))
+            .min()?;
+        edits += best;
+        typos += 1;
+        if edits > MAX_QUERY_EDITS {
+            return None;
+        }
+    }
+    Some((edits, typos))
+}
+
+/// Optimal string alignment distance (Damerau-Levenshtein where an adjacent swap is one edit), or None when it
+/// is above `bound`.
+fn osa_distance(a: &[char], b: &[char], bound: u8) -> Option<u8> {
+    let bound = usize::from(bound);
+    if a.len().abs_diff(b.len()) > bound {
+        return None;
+    }
+    let (n, m) = (a.len(), b.len());
+    let mut d = vec![vec![0usize; m + 1]; n + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for j in 0..=m {
+        d[0][j] = j;
+    }
+    for i in 1..=n {
+        let mut row_min = usize::MAX;
+        for j in 1..=m {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            let mut v = (d[i - 1][j] + 1).min(d[i][j - 1] + 1).min(d[i - 1][j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                v = v.min(d[i - 2][j - 2] + 1);
+            }
+            d[i][j] = v;
+            row_min = row_min.min(v);
+        }
+        if row_min > bound {
+            return None;
+        }
+    }
+    (d[n][m] <= bound).then(|| d[n][m] as u8)
 }
 
 /// Up/Down and Ctrl-n/Ctrl-p while a filter takes text: Some(true) moves down, Some(false) up.
@@ -141,5 +252,46 @@ mod tests {
         assert!(!Query::new("lodz").matches("Myslovitz - Długość dźwięku samotności")); // no scattered letters
         assert!(!Query::new("tiesto xyz").matches("Tiësto - Adagio For Strings"));
         assert!(Query::new("  ").matches("anything"));
+    }
+
+    const ROWS: [&str; 7] = [
+        "Beyoncé - Halo - I Am... Sasha Fierce - beyonce-halo.mp3",
+        "Metallica - Nothing Else Matters - Metallica - 01.flac",
+        "Kavinsky - Nightcall - OutRun - nightcall.mp3",
+        "Lady Pank - Zawsze tam gdzie ty - Tacy sami - 092.mp3",
+        "Myslovitz - Długość dźwięku samotności - Miłość w czasach popkultury - 07.mp3",
+        "Kygo - Firestone - Cloud Nine - 081.mp3",
+        "ABBA - SOS - ABBA - 03.mp3",
+    ];
+
+    fn close(q: &str) -> Found {
+        find(ROWS, q)
+    }
+
+    #[test]
+    fn typos_find_close_matches_when_nothing_matches_exactly() {
+        assert_eq!(close("beyonse"), Found { rows: vec![0], close: true });
+        assert_eq!(close("metalika"), Found { rows: vec![1], close: true });
+        assert_eq!(close("metallca"), Found { rows: vec![1], close: true });
+        assert_eq!(close("kawinsky"), Found { rows: vec![2], close: true });
+        assert_eq!(close("zaowsze"), Found { rows: vec![3], close: true });
+        assert_eq!(close("nigthcall"), Found { rows: vec![2], close: true }); // transposition
+        assert_eq!(close("kavinsky nigthc"), Found { rows: vec![2], close: true }); // unfinished last word
+    }
+
+    #[test]
+    fn close_matches_stay_strict() {
+        assert_eq!(close("lodz"), Found { rows: vec![], close: true }); // no scattered letters, no "lody"
+        assert_eq!(close("sus"), Found { rows: vec![], close: true }); // 3 letters: strict ("sos" is one edit)
+        assert_eq!(close("metalika nithgcal"), Found { rows: vec![], close: true }); // 4 edits in total: too many
+        assert_eq!(close("halo"), Found { rows: vec![0], close: false }); // exact matches suppress the typos
+        assert_eq!(close(""), Found { rows: (0..ROWS.len()).collect(), close: false });
+    }
+
+    #[test]
+    fn close_matches_rank_by_edits_then_list_order() {
+        let rows = ["Kygo - Firestome", "Kygo - Firestone"];
+        assert_eq!(find(rows, "firestonr"), Found { rows: vec![1, 0], close: true }); // 1 edit before 2 edits
+        assert_eq!(osa_distance(&['a', 'b'], &['b', 'a'], 1), Some(1));
     }
 }

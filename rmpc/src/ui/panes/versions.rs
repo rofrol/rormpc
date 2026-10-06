@@ -40,7 +40,7 @@ use crate::{
             confirm_modal::{Action, ConfirmModal},
             menu::modal::MenuModal,
         },
-        rormpc_filter::{Query, binding},
+        rormpc_filter::{binding, find},
     },
 };
 
@@ -209,6 +209,8 @@ pub struct VersionsPane {
     typing: bool,
     query: String,
     unresolved_only: bool,
+    /// no exact match: the listed entries are close matches (typos)
+    close: bool,
     /// the selected entry before filtering began, restored by Esc
     before_filter: Option<String>,
 }
@@ -315,18 +317,23 @@ fn group_plays(g: &Group) -> u32 {
 }
 
 /// Open groups first, most plays first; then the shared ids. Shared ids are always unresolved.
-fn entries_filtered(report: &Report, query: &str, unresolved_only: bool) -> Vec<Entry> {
-    let mut fuzzy = Query::new(query);
-    entries(report)
+/// The second value: no exact match, the entries are close matches (typos).
+fn entries_filtered(report: &Report, query: &str, unresolved_only: bool) -> (Vec<Entry>, bool) {
+    let candidates: Vec<Entry> = entries(report)
         .into_iter()
         .filter(|e| match *e {
-            Entry::Group(i) => {
-                let g = &report.groups[i];
-                (!unresolved_only || !g.pending.is_empty()) && fuzzy.matches(&g.name.replace('|', " - "))
-            }
-            Entry::Shared(i) => fuzzy.matches(&report.shared[i].id),
+            Entry::Group(i) => !unresolved_only || !report.groups[i].pending.is_empty(),
+            Entry::Shared(_) => true,
         })
-        .collect()
+        .collect();
+    let found = find(
+        candidates.iter().map(|e| match *e {
+            Entry::Group(i) => report.groups[i].name.replace('|', " - "),
+            Entry::Shared(i) => report.shared[i].id.clone(),
+        }),
+        query,
+    );
+    (found.rows.into_iter().map(|i| candidates[i]).collect(), found.close)
 }
 
 /// Open groups first, most plays first; then the shared ids.
@@ -440,6 +447,7 @@ impl VersionsPane {
             typing: false,
             query: String::new(),
             unresolved_only: false,
+            close: false,
             before_filter: None,
         }
     }
@@ -458,7 +466,7 @@ impl VersionsPane {
     /// Recompute the visible entries; keep `keep` (an entry key) selected when it is still visible, else the
     /// first entry. Files and tracks inside a group are never filtered.
     fn refilter(&mut self, keep: Option<String>) {
-        self.entries = entries_filtered(&self.report, &self.query, self.unresolved_only);
+        (self.entries, self.close) = entries_filtered(&self.report, &self.query, self.unresolved_only);
         self.state.set_content_and_viewport_len(self.entries.len(), self.list_area.height.into());
         let idx = keep
             .and_then(|k| self.entries.iter().position(|&e| self.entry_key(e).as_deref() == Some(k.as_str())))
@@ -977,7 +985,14 @@ impl Pane for VersionsPane {
             if self.unresolved_only {
                 text.push_str(" · unresolved only");
             }
-            let count = format!(" {}/{total}", self.entries.len());
+            if self.close {
+                text.push_str(&format!("   Close matches ({})", self.entries.len()));
+            }
+            let count = if self.close {
+                format!(" 0 exact · {} close", self.entries.len())
+            } else {
+                format!(" {}/{total}", self.entries.len())
+            };
             let [text_area, count_area] =
                 Layout::horizontal([Constraint::Min(1), Constraint::Length(count.chars().count() as u16)]).areas(filter_area);
             let style = if self.typing { ctx.config.theme.highlight_border_style } else { ctx.config.as_text_style() };
@@ -1210,11 +1225,12 @@ mod tests {
     #[test]
     fn filter_keeps_order_and_unresolved_only() {
         let r: Report = serde_json::from_str(JSON).unwrap();
-        assert_eq!(entries_filtered(&r, "", false), entries(&r));
-        assert_eq!(entries_filtered(&r, "adagio", false), vec![Entry::Group(0)]);
-        assert_eq!(entries_filtered(&r, "tiesto", false), vec![Entry::Group(0)]); // "Tiësto" folded
-        assert_eq!(entries_filtered(&r, "", true), vec![Entry::Group(0), Entry::Shared(0)]);
-        assert_eq!(entries_filtered(&r, "song", true), Vec::<Entry>::new());
+        assert_eq!(entries_filtered(&r, "", false), (entries(&r), false));
+        assert_eq!(entries_filtered(&r, "adagio", false), (vec![Entry::Group(0)], false));
+        assert_eq!(entries_filtered(&r, "tiesto", false), (vec![Entry::Group(0)], false)); // "Tiësto" folded
+        assert_eq!(entries_filtered(&r, "", true), (vec![Entry::Group(0), Entry::Shared(0)], false));
+        assert_eq!(entries_filtered(&r, "song", true), (Vec::<Entry>::new(), true));
+        assert_eq!(entries_filtered(&r, "adagoi", false), (vec![Entry::Group(0)], true)); // a typo: close match
     }
 
     #[test]

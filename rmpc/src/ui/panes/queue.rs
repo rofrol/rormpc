@@ -110,6 +110,8 @@ struct QueueFind {
     /// the song under the cursor and the scroll when filtering began, restored by Esc
     saved_id: Option<u32>,
     saved_offset: usize,
+    /// no exact match: the rows shown are close matches (typos)
+    close: bool,
 }
 
 #[derive(Debug, Enum)]
@@ -1593,20 +1595,17 @@ impl QueuePane {
     }
 }
 
-/// rormpc: rows of the queue matching the live filter, in queue order (indices into `songs`). Matches artist,
-/// title, album and the file name: every typed word, diacritic-folded.
-fn find_matches(songs: &[Song], query: &str) -> Vec<usize> {
-    let mut fuzzy = crate::ui::rormpc_filter::Query::new(query);
-    songs
-        .iter()
-        .enumerate()
-        .filter(|(_, song)| {
+/// rormpc: rows of the queue matching the live filter (indices into `songs`): the exact matches in queue order,
+/// else the close matches (typos). Matches artist, title, album and the file name, diacritic-folded.
+fn find_matches(songs: &[Song], query: &str) -> crate::ui::rormpc_filter::Found {
+    crate::ui::rormpc_filter::find(
+        songs.iter().map(|song| {
             let tag = |k: &str| song.metadata.get(k).map(|v| v.last().to_owned()).unwrap_or_default();
             let file = song.file.rsplit('/').next().unwrap_or(&song.file);
-            fuzzy.matches(&format!("{} {} {} {file}", tag("artist"), tag("title"), tag("album")))
-        })
-        .map(|(i, _)| i)
-        .collect()
+            format!("{} {} {} {file}", tag("artist"), tag("title"), tag("album"))
+        }),
+        query,
+    )
 }
 
 /// rormpc: the Queue's live filter. Typing narrows the queue to the matching songs in queue order; Enter plays
@@ -1628,6 +1627,7 @@ impl QueuePane {
             query: String::new(),
             saved_id: self.queue.selected().map(|s| s.id),
             saved_offset: self.queue.state.offset(),
+            close: false,
         });
         self.apply_find(ctx, false);
     }
@@ -1637,7 +1637,11 @@ impl QueuePane {
     fn apply_find(&mut self, ctx: &Ctx, snap: bool) {
         let Some(query) = self.find.as_ref().map(|f| f.query.clone()) else { return };
         let keep = self.queue.selected().map(|s| s.id);
-        let rows: Vec<Song> = find_matches(&ctx.queue, &query).into_iter().map(|i| ctx.queue[i].clone()).collect();
+        let found = find_matches(&ctx.queue, &query);
+        if let Some(f) = &mut self.find {
+            f.close = found.close;
+        }
+        let rows: Vec<Song> = found.rows.into_iter().map(|i| ctx.queue[i].clone()).collect();
         let marked = crate::ui::rormpc_actions::remap_marks(&self.queue.items, self.queue.marked(), &rows);
         self.queue.items = rows;
         *self.queue.marked_mut() = marked;
@@ -1765,8 +1769,15 @@ impl QueuePane {
         if area.height == 0 {
             return;
         }
-        let count = format!("{:>11}", format!("{}/{}", self.queue.len(), ctx.queue.len()));
-        let text = format!("FILTER / {}{}", f.query, if f.typing { "▏" } else { "" });
+        let count = if f.close {
+            format!("0 exact · {} close", self.queue.len())
+        } else {
+            format!("{:>11}", format!("{}/{}", self.queue.len(), ctx.queue.len()))
+        };
+        let mut text = format!("FILTER / {}{}", f.query, if f.typing { "▏" } else { "" });
+        if f.close {
+            text.push_str(&format!("   Close matches ({})", self.queue.len()));
+        }
         let [left, right] = Layout::horizontal([Constraint::Min(1), Constraint::Length(count.chars().count() as u16)])
             .areas(area);
         let style = if f.typing { ctx.config.theme.highlight_border_style } else { ctx.config.as_text_style() };
@@ -1844,11 +1855,14 @@ mod rormpc_find_tests {
             song(9, "Lao Che", "Żółw", "a/3.mp3"),
             song(1, "Kult", "Polska", "b/Łódź nocą.mp3"),
         ];
-        assert_eq!(find_matches(&q, ""), vec![0, 1, 2, 3]);
-        assert_eq!(find_matches(&q, "zolw"), vec![2]);
-        assert_eq!(find_matches(&q, "dlugosc"), vec![1]);
-        assert_eq!(find_matches(&q, "lodz"), vec![3]); // the file name counts
-        assert_eq!(find_matches(&q, "kult"), vec![0, 3]); // queue order, not score order
-        assert!(find_matches(&q, "qqq").is_empty());
+        let rows = |query: &str| find_matches(&q, query).rows;
+        assert_eq!(rows(""), vec![0, 1, 2, 3]);
+        assert_eq!(rows("zolw"), vec![2]);
+        assert_eq!(rows("dlugosc"), vec![1]);
+        assert_eq!(rows("lodz"), vec![3]); // the file name counts
+        assert_eq!(rows("kult"), vec![0, 3]); // queue order, not score order
+        assert!(rows("qqq").is_empty());
+        let typo = find_matches(&q, "myslowitz");
+        assert_eq!((typo.rows, typo.close), (vec![1], true)); // close match: one typo
     }
 }
