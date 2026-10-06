@@ -41,7 +41,10 @@ use crate::{
             read_config_file,
             read_config_for_debuginfo,
         },
-        dependencies::{DEPENDENCIES, FFMPEG, FFPROBE, PYTHON3, PYTHON3MUTAGEN, UEBERZUGPP, YTDLP},
+        dependencies::{
+            DEPENDENCIES, FFMPEG, FFPROBE, HITS, MUSICDB, PYTHON3, PYTHON3MUTAGEN, RORMPC_TOOLS_TAG,
+            UEBERZUGPP, YTDLP,
+        },
         events::{AppEvent, ClientRequest, WorkRequest},
         logging,
         mpd_query::{MpdCommand, MpdQuery, MpdQueryResult},
@@ -296,6 +299,10 @@ fn main() -> Result<()> {
 
             println!("\nVisualizer:");
             println!("{}", CAVA.display());
+
+            println!("\nrormpc-tools (expected {}):", *RORMPC_TOOLS_TAG);
+            println!("{}", MUSICDB.display());
+            println!("{}", HITS.display());
         }
         Some(Command::Version) => {
             print_version();

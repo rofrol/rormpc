@@ -31,7 +31,7 @@ fn run(args: &[String]) -> Result<String, String> {
             .find(|l| !l.trim().is_empty())
             .unwrap_or("musicdb failed")
             .to_owned()),
-        Err(err) => Err(format!("cannot run {MUSICDB}: {err}")),
+        Err(err) => Err(crate::shared::dependencies::cannot_run(MUSICDB, &err)),
     }
 }
 

@@ -43,7 +43,12 @@ The hourly `musicdb update` runs at background priority (launchd `ProcessType Ba
 systemd `Nice=10`, `IOSchedulingClass=idle`): about a second of CPU per run. The always-on services stay at
 standard priority, since background priority lets macOS stretch timers (mpd-player's silence).
 `companions --local` installs both from checkouts instead (`$RORMPC_TOOLS_DIR`, `$RO_LB_DIR`), rormpc-tools editable.
-Without rormpc-tools those features report that the command cannot be run; the rest works.
+Without rormpc-tools those features say the command was not found and print the `uv tool install` command for
+the expected tag (`RORMPC_TOOLS_TAG` in `scripts/rormpc_install.sh`, which rormpc reads at build time); the rest
+works. `rormpc debuginfo` lists `musicdb` and `hits` with their `--version` and the expected tag. JSON that rormpc
+reads carries a version it checks: `hits --json` files and `musicdb delete --preview` (`{"version": 1, "songs":
+[...]}`; the older bare list is still read). Change such a format in both repositories together, with the tests on
+both sides (rormpc-tools `tests/test_rormpc_contract.py`, rormpc `delete_menu.rs`).
 
 ## Hits pane
 
