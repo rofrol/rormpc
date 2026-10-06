@@ -22,7 +22,10 @@ rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and 
   installed with cargo at a pinned tag. `companions` adds my rule to its config (a listen is 90% of the song played
   without a seek; the `listen_*` lines, change them there) and starts it once the ListenBrainz token is in the config.
   It also records skipped songs for musicdb.
-- `mpd-gap` (rormpc-tools): seconds of silence between songs, default 3, `--gap 0` removes it.
+- `mpd-player` (rormpc-tools, replaced `mpd-gap`): the playback daemon. Seconds of silence between songs, chosen in
+  rormpc (`og`, ShowGapMenu, or the Queue menu "Silence between songs…") and remembered; `--gap` is only the
+  default before that. rormpc sends it commands as MPD messages on channel `rormpc` (`gap set 5`) and reads its
+  state from `$XDG_STATE_HOME/rormpc/gap.json`; a change counts once that file shows it.
 
 On Linux, building the scrobbler needs a C toolchain, OpenSSL and SQLite headers (Debian/Ubuntu:
 `sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev`), and the services need a systemd user
@@ -32,7 +35,7 @@ They run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/
 `rormpc-*.service` (musicdb with a `.timer`) on Linux; the installer writes them, so edits there are overwritten.
 The hourly `musicdb update` runs at background priority (launchd `ProcessType Background` + `LowPriorityIO`;
 systemd `Nice=10`, `IOSchedulingClass=idle`): about a second of CPU per run. The always-on services stay at
-standard priority, since background priority lets macOS stretch timers (mpd-gap's silence).
+standard priority, since background priority lets macOS stretch timers (mpd-player's silence).
 `companions --local` installs both from checkouts instead (`$RORMPC_TOOLS_DIR`, `$RO_LB_DIR`), rormpc-tools editable.
 Without rormpc-tools those features report that the command cannot be run; the rest works.
 
@@ -241,7 +244,7 @@ Consume (MPD deletes every played song from the queue) breaks "Playing from" and
 it on. The global action `ConsumeOff` only turns it off (my config binds it to `c` instead of `ToggleConsume`);
 the ones already removed don't come back. When another client turns consume on, the status line says so. My
 theme shows the modes as labelled badges with their keys (`z rep x rnd v single consume off`; single armed by
-mpd-gap shows as `gap`), consume on as a red ` CONSUME c=off `.
+mpd-player shows as `gap`), consume on as a red ` CONSUME c=off `.
 
 ## Build revision
 

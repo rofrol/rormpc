@@ -78,6 +78,7 @@ pub mod panes;
 pub mod rormpc_actions;
 pub mod rormpc_filter;
 pub mod rormpc_lyrics;
+pub mod rormpc_player;
 pub mod rormpc_playlists;
 pub mod rormpc_tags;
 pub mod rormpc_upnext;
@@ -563,6 +564,7 @@ impl<'ui> Ui<'ui> {
                         Ok(())
                     });
                 }
+                GlobalAction::ShowGapMenu => crate::ui::rormpc_player::open_gap_menu(ctx),
                 GlobalAction::ConsumeOff => {
                     if matches!(ctx.status.consume, OnOffOneshot::Off) {
                         status_info!("Consume is off (rormpc never turns it on)");

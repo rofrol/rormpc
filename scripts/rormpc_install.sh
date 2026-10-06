@@ -8,9 +8,10 @@ usage="usage: rormpc_install.sh install|rollback|list|companions [--local] [--ga
   rollback    put back the most recent backup (the current binary becomes a backup too)
   list        show the installed build and the backups, newest first
   companions  what rormpc's Hits pane, play counts and delete menu run, and services that work with it closed
-              (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-gap; uv tool install at a pinned tag), musicdb update
-              hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-gap, seconds of
-              silence between songs (--gap, default 3; 0 removes it). --local: both from checkouts in
+              (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install at a pinned tag), musicdb
+              update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
+              playback daemon (silence between songs: --gap is the default until rormpc chooses one, 0 = none;
+              Up next). --local: both from checkouts in
               \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
   status      what of the above is installed and running, and the tools rormpc's features run
@@ -63,7 +64,7 @@ service() {
     for a in "$@"; do args="$args<string>$a</string>"; done
     local run="<key>KeepAlive</key><true/>" priority="<key>ProcessType</key><string>Standard</string>"
     [ -n "$interval" ] && run="<key>StartInterval</key><integer>$interval</integer>"
-    # always-on services: ProcessType Standard, since Background lets macOS coalesce timers (mpd-gap's silence
+    # always-on services: ProcessType Standard, since Background lets macOS coalesce timers (mpd-player's silence
     # would stretch); periodic jobs (musicdb update) run at background priority with low-priority disk I/O
     [ -n "$interval" ] && priority="<key>ProcessType</key><string>Background</string>
 	<key>LowPriorityIO</key><true/>"
@@ -173,11 +174,10 @@ companions() {
   for other in $(cargo install --list | sed -n 's/^\(listenbrainz-mpd\) .*/\1/p'); do
     echo "warning: upstream $other is installed too; if it runs, every listen is sent twice" >&2
   done
-  if [ "$gap" = 0 ]; then
-    remove_service mpd-gap; echo "removed mpd-gap"
-  else
-    service mpd-gap "" "$tools/mpd-gap" --seconds "$gap"
-  fi
+  # mpd-player replaced mpd-gap (it does the silence and more); --gap is only its default until the length is
+  # chosen in rormpc, which it remembers
+  remove_service mpd-gap
+  service mpd-player "" "$tools/mpd-player" --seconds "$gap"
 }
 
 status() {
@@ -186,7 +186,7 @@ status() {
   cargo install --list 2>/dev/null | grep -E '^(ro-listenbrainz-mpd|listenbrainz-mpd) ' || echo "ro-listenbrainz-mpd: not installed"
   echo "musicdb update service: $(service_state musicdb)"
   echo "scrobbler service: $(service_state ro-listenbrainz-mpd)"
-  echo "mpd-gap service: $(service_state mpd-gap)"
+  echo "mpd-player service: $(service_state mpd-player)"
   grep -qE '^[[:space:]]*token(_file)?[[:space:]]*=' "$lb_config" 2>/dev/null && echo "ListenBrainz token: set" || echo "ListenBrainz token: missing in $lb_config"
   echo "listen rule: $(grep -E '^listen_' "$lb_config" 2>/dev/null | tr '\n' ' ')"
   local tool
