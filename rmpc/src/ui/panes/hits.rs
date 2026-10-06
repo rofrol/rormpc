@@ -58,6 +58,15 @@ struct HitsFile {
     #[serde(default)]
     rank_note: Option<String>,
     rows: Vec<HitsRow>,
+    /// the artists of the whole cohort (before the Top % cut), for the artist picker
+    #[serde(default)]
+    artists: Vec<ArtistCount>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ArtistCount {
+    name: String,
+    songs: u32,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -68,6 +77,8 @@ struct HitsArgs {
     top: Option<String>,
     #[serde(default)]
     genre: Option<String>,
+    #[serde(default)]
+    artist: Option<String>,
     #[serde(default)]
     owned: bool,
     #[serde(default)]
@@ -230,6 +241,9 @@ pub struct HitsPane {
     applied_args: Option<Vec<String>>,
     /// text typed into the "other genre" input, picked up on the next render
     genre_input: Arc<Mutex<Option<String>>>,
+    /// artists of the last result's cohort, and the one picked in "+ artist…", taken on the next render
+    cohort_artists: Vec<ArtistCount>,
+    artist_input: Arc<Mutex<Option<String>>>,
     explorer: Arc<Mutex<Explorer>>,
     fetch: Vec<FetchItem>,
     fetch_mtime: Option<SystemTime>,
@@ -248,6 +262,8 @@ impl HitsPane {
             apply_area: Rect::default(),
             applied_args: None,
             genre_input: Arc::new(Mutex::new(None)),
+            cohort_artists: Vec::new(),
+            artist_input: Arc::new(Mutex::new(None)),
             explorer: Arc::new(Mutex::new(Explorer::default())),
             fetch: Vec::new(),
             fetch_mtime: None,
@@ -285,6 +301,7 @@ impl HitsPane {
                 }
                 let keep = self.selected().map(|r| r.rank);
                 self.all_rows = file.rows;
+                self.cohort_artists = file.artists;
                 self.label = file.label;
                 self.generated_at = file.generated_at;
                 self.rank_note = file.rank_note.unwrap_or_default();
@@ -527,6 +544,10 @@ impl HitsPane {
                 self.ask_genre(ctx);
                 return true;
             }
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::AddArtist => {
+                self.pick_artist(ctx);
+                return true;
+            }
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Explore => {
                 self.count_genres(ctx);
                 return true;
@@ -675,6 +696,35 @@ impl HitsPane {
                     Ok(())
                 })
         );
+    }
+
+    /// "+ artist…": the artists of the result's whole cohort (before the Top % cut) with their song counts, most
+    /// songs first; `/` in the menu searches it. The pick is added as "+artist" (Space then cycles it).
+    fn pick_artist(&self, ctx: &Ctx) {
+        if self.cohort_artists.is_empty() {
+            return status_info!("No artists in this result yet (Apply first)");
+        }
+        let input = Arc::clone(&self.artist_input);
+        let sender = ctx.app_event_sender.clone();
+        let artists = self.cohort_artists.clone();
+        let title = format!("{} artists in this cohort · / searches", artists.len());
+        let menu = MenuModal::new(ctx)
+            .width(60)
+            .list_section(ctx, move |mut section| {
+                section.add_item(title, |_| Ok(()));
+                for a in artists {
+                    let (input, sender) = (Arc::clone(&input), sender.clone());
+                    section.add_item(format!("{:>3}  {}", a.songs, a.name), move |_| {
+                        *input.lock().expect("artist input lock") = Some(a.name.clone());
+                        let _ = sender.send(AppEvent::RequestRender);
+                        Ok(())
+                    });
+                }
+                Some(section)
+            })
+            .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
+            .build();
+        modal!(ctx, menu);
     }
 
     fn render_filters(&self, frame: &mut Frame, area: Rect, ctx: &Ctx) {
@@ -1061,6 +1111,12 @@ impl Pane for HitsPane {
         if let Some(args) = self.job.lock().expect("hits job lock").ok_args.take() {
             self.applied_args = Some(args);
         }
+        let picked = self.artist_input.lock().expect("artist input lock").take();
+        if let (Some(name), Some(filters)) = (picked, self.filters.as_mut()) {
+            let i = filters.add_artist(&name, 1);
+            let rows = filters.rows();
+            self.filter_sel = rows.iter().position(|r| *r == FilterRow::Artist(i)).unwrap_or(self.filter_sel);
+        }
         let typed = self.genre_input.lock().expect("genre input lock").take();
         if let (Some(spec), Some(filters)) = (typed, self.filters.as_mut()) {
             if let Some(first) = filters.add_genres(&spec) {
@@ -1409,6 +1465,11 @@ enum FilterRow {
     AddGenre,
     /// the genre explorer: every genre of the library with counts
     Explore,
+    /// three-state like a genre: +include / -exclude / off
+    Artist(usize),
+    ClearArtists,
+    /// opens the artist picker
+    AddArtist,
     Owned,
     ShowHidden,
     Apply,
@@ -1453,6 +1514,8 @@ struct Filters {
     tops: [bool; 3],
     /// the pinned genres (or GENRES) first, then typed ones; -1 exclude, 0 off, 1 include
     genres: Vec<(String, i8)>,
+    /// artists picked in "+ artist…": -1 exclude, 0 off, 1 include
+    artists: Vec<(String, i8)>,
     owned: bool,
     show_hidden: bool,
 }
@@ -1461,7 +1524,7 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { source: Source::Billboard, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), owned: false, show_hidden: false }
+        Self { source: Source::Billboard, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_hidden: false }
     }
 }
 
@@ -1487,6 +1550,12 @@ impl Filters {
         rows.extend([FilterRow::Heading("Genres"), FilterRow::ClearGenres]);
         rows.extend((0..self.genres.len()).map(FilterRow::Genre));
         rows.extend([FilterRow::AddGenre, FilterRow::Explore]);
+        rows.push(FilterRow::Heading("Artists"));
+        if !self.artists.is_empty() {
+            rows.push(FilterRow::ClearArtists);
+        }
+        rows.extend((0..self.artists.len()).map(FilterRow::Artist));
+        rows.push(FilterRow::AddArtist);
         rows.push(FilterRow::Heading("Options"));
         rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
         rows
@@ -1514,6 +1583,40 @@ impl Filters {
             .map(|(n, sign)| format!("{sign}{n}"))
             .collect();
         format!("Genres: {}", if parts.is_empty() { "all".to_owned() } else { parts.join(" ") })
+    }
+
+    /// "Artists: all", "Artists: +2 -1".
+    fn artists_heading(&self) -> String {
+        let count = |sign: i8| self.artists.iter().filter(|(_, s)| *s == sign).count();
+        let parts: Vec<String> = [(count(1), '+'), (count(-1), '-')]
+            .into_iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, sign)| format!("{sign}{n}"))
+            .collect();
+        format!("Artists: {}", if parts.is_empty() { "all".to_owned() } else { parts.join(" ") })
+    }
+
+    /// Semicolon-separated: a name may hold a comma ("Earth, Wind & Fire").
+    fn artist_spec(&self) -> String {
+        self.artists
+            .iter()
+            .filter(|(_, s)| *s != 0)
+            .map(|(a, s)| format!("{}{a}", if *s > 0 { '+' } else { '-' }))
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
+    /// Set an artist's state, adding its row when it has none; returns its index.
+    fn add_artist(&mut self, name: &str, sign: i8) -> usize {
+        let i = match self.artists.iter().position(|(a, _)| a.eq_ignore_ascii_case(name)) {
+            Some(i) => i,
+            None => {
+                self.artists.push((name.to_owned(), 0));
+                self.artists.len() - 1
+            }
+        };
+        self.artists[i].1 = sign;
+        i
     }
 
     /// Comma-separated, so names with spaces ("hip hop") survive the round trip through `hits`.
@@ -1568,6 +1671,10 @@ impl Filters {
             // one token: argparse takes a separate value starting with '-' ("-country") for an option
             args.push(format!("--genre={genres}"));
         }
+        let artists = self.artist_spec();
+        if !artists.is_empty() {
+            args.push(format!("--artist={artists}"));
+        }
         if self.owned {
             args.push("--owned".to_owned());
         }
@@ -1613,6 +1720,15 @@ impl Filters {
             }
         }
         f.add_genres(args.genre.as_deref().unwrap_or_default());
+        for tok in args.artist.as_deref().unwrap_or_default().split(';') {
+            let tok = tok.trim();
+            match tok.chars().next() {
+                Some('-') => _ = f.add_artist(tok[1..].trim(), -1),
+                Some('+') => _ = f.add_artist(tok[1..].trim(), 1),
+                Some(_) => _ = f.add_artist(tok, 1),
+                None => {}
+            }
+        }
         f.owned = args.owned;
         f.show_hidden = args.show_hidden;
         f.source = match args.source.as_deref() {
@@ -1639,6 +1755,13 @@ impl Filters {
             // every box sits at the same 2-cell indent under its heading: a hanging label per group made the
             // columns step like an expandable tree
             FilterRow::Heading("Genres") => self.genres_heading(),
+            FilterRow::Heading("Artists") => self.artists_heading(),
+            FilterRow::Artist(i) => {
+                let mark = match self.artists[i].1 { 1 => "+", -1 => "-", _ => " " };
+                format!("  [{mark}] {}", self.artists[i].0)
+            }
+            FilterRow::ClearArtists => "  × clear artists".to_owned(),
+            FilterRow::AddArtist => "  + artist…".to_owned(),
             FilterRow::Heading(title) => title.to_owned(),
             FilterRow::Top(i) => format!("  {} {}-{}%", check(self.tops[i]), TOPS[i].0, TOPS[i].1),
             FilterRow::Genre(i) => {
@@ -1664,9 +1787,11 @@ impl Filters {
             FilterRow::Top(i) => self.tops[i] = !self.tops[i],
             FilterRow::Genre(i) => self.genres[i].1 = match self.genres[i].1 { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::ClearGenres => self.genres.iter_mut().for_each(|(_, s)| *s = 0),
+            FilterRow::Artist(i) => self.artists[i].1 = match self.artists[i].1 { 0 => 1, 1 => -1, _ => 0 },
+            FilterRow::ClearArtists => self.artists.clear(),
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
-            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::Apply => {}
+            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
         }
     }
 
@@ -1765,6 +1890,23 @@ mod tests {
         f.toggle(FilterRow::ClearGenres);
         assert_eq!(f.genres_heading(), "Genres: all");
         assert_eq!(f.genre_spec(), "");
+    }
+
+    #[test]
+    fn artists_round_trip_through_args() {
+        let mut f = Filters::default();
+        assert_eq!(f.artists_heading(), "Artists: all");
+        f.add_artist("Earth, Wind & Fire", 1);
+        f.add_artist("Madonna", -1);
+        assert_eq!(f.artists_heading(), "Artists: +1 -1");
+        let args = f.args("x.json");
+        let spec = args.iter().find_map(|a| a.strip_prefix("--artist=")).unwrap().to_owned();
+        assert_eq!(spec, "+Earth, Wind & Fire; -Madonna");
+        let back = Filters::from_args(&HitsArgs { artist: Some(spec), ..Default::default() });
+        assert_eq!(back.artists, vec![("Earth, Wind & Fire".to_owned(), 1), ("Madonna".to_owned(), -1)]);
+        let mut cleared = back;
+        cleared.toggle(FilterRow::ClearArtists);
+        assert!(cleared.artists.is_empty() && !cleared.args("x").iter().any(|a| a.starts_with("--artist")));
     }
 
     #[test]

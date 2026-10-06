@@ -307,7 +307,7 @@ impl<'a> MenuModal<'a> {
 
             for label_idx in start..sect.len() {
                 let label = &self.sections_labels[sect_i][label_idx];
-                if label.contains(filter) {
+                if crate::ui::rormpc_filter::Query::new(filter).matches(label) {
                     if sect_i != self.current_section_idx {
                         self.sections[self.current_section_idx].unselect(ctx);
                     }
@@ -323,7 +323,7 @@ impl<'a> MenuModal<'a> {
         let sect = &self.sections[self.current_section_idx];
         for label_idx in 0..sect.len() {
             let label = &self.sections_labels[self.current_section_idx][label_idx];
-            if label.contains(filter) {
+            if crate::ui::rormpc_filter::Query::new(filter).matches(label) {
                 self.sections[self.current_section_idx].select(label_idx);
                 break;
             }
@@ -345,7 +345,7 @@ impl<'a> MenuModal<'a> {
 
             for label_idx in (0..end).rev() {
                 let label = &self.sections_labels[sect_i][label_idx];
-                if label.contains(filter) {
+                if crate::ui::rormpc_filter::Query::new(filter).matches(label) {
                     if sect_i != self.current_section_idx {
                         self.sections[self.current_section_idx].unselect(ctx);
                     }
@@ -361,7 +361,7 @@ impl<'a> MenuModal<'a> {
         let sect = &self.sections[self.current_section_idx];
         for label_idx in (0..sect.len()).rev() {
             let label = &self.sections_labels[self.current_section_idx][label_idx];
-            if label.contains(filter) {
+            if crate::ui::rormpc_filter::Query::new(filter).matches(label) {
                 self.sections[self.current_section_idx].select(label_idx);
                 break;
             }
@@ -376,7 +376,7 @@ impl<'a> MenuModal<'a> {
         for sect_i in 0..self.sections_labels.len() {
             for label_idx in 0..self.sections_labels[sect_i].len() {
                 let label = &self.sections_labels[sect_i][label_idx];
-                if label.contains(filter) {
+                if crate::ui::rormpc_filter::Query::new(filter).matches(label) {
                     if sect_i != self.current_section_idx {
                         self.sections[self.current_section_idx].unselect(ctx);
                     }
