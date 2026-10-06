@@ -1,5 +1,30 @@
 # TODO
 
+## Next, in order
+
+Triaged 2026-10-07 from the sections below; each item points at its section for the details.
+
+- [ ] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the
+      classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
+- [ ] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a
+      decision" which one to build ("Soon: playing-song indicator in Hits").
+- [ ] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral
+      outcome, prev transitions logged for `musicdb import-skips`, Hammerspoon and rormpc sending it through the
+      daemon with the `mpc prev` fallback. Without the "restart in the first seconds" rule until it is decided.
+      Test on a scratch MPD ("Previous in the weighted shuffle").
+- [ ] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
+      `≋` marker, "Find versions…" with a key and Back to the Queue row ("Versions: delete a bad version…").
+- [ ] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
+      to keep, rename "Remove duplicate entries" ("Versions: audio fingerprint finds copies").
+- [ ] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
+      The LLM fallback waits for its decision below ("Lyrics: Polish translation next to the original").
+- [ ] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item).
+- [ ] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…").
+- [ ] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
+      locally ("Tests and GitHub Actions…", first two items).
+- [ ] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
+      an Up next song plays ("Test report of 2026-10-06").
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two
@@ -404,3 +429,32 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
   - Compare only the overlapping part at the best offset; a short intro or a trimmed end must not lower the score.
   - The Queue item "Remove duplicate entries (N)" stays about the same file queued twice; rename it to "Remove
     repeated entries (N)" so it is not read as "copies of a recording".
+
+## Needs a decision
+
+- [ ] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
+      its first ~3 s?
+      Checked: Sol says leave it out (it fights walking back), MiMo says restart; the TODO marks it undecided.
+- [ ] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch
+      MPD, or will you test the fix live with the media keys?
+      Checked: both talk to the real MPD on this Mac; AGENTS.md forbids playback tests on the user's MPD.
+- [ ] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)?
+      Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
+- [ ] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper?
+      Checked: the plan makes it conditional ("if a helper is still wanted").
+- [ ] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now?
+      Checked: needs those machines and a live test of the keys; nothing on this Mac to verify it.
+- [ ] Start the Rust Now Playing port (`rormpc-now-playable`), or keep mpd-now-playable?
+      Checked: Sol and MiMo both said keep the Python tool; the plan is complete if it is wanted.
+- [ ] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc
+      pane)?
+      Checked: a multi-repository feature with downloads; the plan is agreed but not ordered.
+- [ ] CI: push GitHub Actions workflows (rormpc-tools, ro-listenbrainz-mpd, rormpc installer smoke test, `push`
+      trigger in ci.yml)?
+      Checked: they only matter once pushed to GitHub; the local tests are in "Next, in order".
+- [ ] Mute: build "Pause for…"?
+      Checked: listed as "maybe later".
+- [ ] Mute: has a queue replaced by Sources… unmuted you in use?
+      Checked: only observable in your use; the code path passes through a stop, which unmutes.
+- [ ] Does the modal DIM backdrop look right in Ghostty?
+      Checked: the DIM cells were verified through herdr; the strength in Ghostty needs your eyes.
