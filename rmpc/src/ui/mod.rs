@@ -252,9 +252,10 @@ impl<'ui> Ui<'ui> {
             return Ok(());
         }
 
-        // Panes have no hover, and each event they get triggers a render.
+        // Panes have no hover, and each event they get triggers a render. rormpc: the active tab's panes get moves
+        // (the like cell's heart), without the render: a pane renders when its hover changed.
         if matches!(event.kind, MouseEventKind::Moved) {
-            return Ok(());
+            return active_tab_call!(self, ctx, handle_mouse_event(event, ctx));
         }
         if self.modal_click.take().is_some_and(|pos| pos == Position::from(event))
             && matches!(event.kind, MouseEventKind::DoubleClick)
@@ -565,6 +566,14 @@ impl<'ui> Ui<'ui> {
                     });
                 }
                 GlobalAction::ShowGapMenu => crate::ui::rormpc_player::open_gap_menu(ctx),
+                GlobalAction::ToggleWeightedShuffle => crate::ui::rormpc_player::toggle_shuffle(ctx),
+                GlobalAction::HeardEnough => match ctx.current_song() {
+                    Some(song) => {
+                        let title = song.metadata.get("title").map_or(song.file.as_str(), |t| t.last()).to_owned();
+                        crate::ui::rormpc_player::heard_enough(ctx, song.file.clone(), title);
+                    }
+                    None => status_info!("No song is playing"),
+                },
                 GlobalAction::ConsumeOff => {
                     if matches!(ctx.status.consume, OnOffOneshot::Off) {
                         status_info!("Consume is off (rormpc never turns it on)");

@@ -123,3 +123,155 @@ pub fn open_gap_menu(ctx: &Ctx) {
         .build();
     modal!(ctx, menu);
 }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Nominee {
+    pub id: u32,
+    pub file: String,
+    #[serde(default)]
+    pub why: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Round {
+    #[serde(default)]
+    pub heard: Vec<String>,
+    #[serde(default)]
+    pub total: usize,
+    #[serde(default)]
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Cooldown {
+    pub until: f64,
+}
+
+/// mpd-player's shuffle.json: the weighted shuffle's state.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ShuffleState {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub nominee: Option<Nominee>,
+    #[serde(default)]
+    pub round: Option<Round>,
+    #[serde(default)]
+    pub cooldown: std::collections::HashMap<String, Cooldown>,
+}
+
+/// shuffle.json, read again only when the file changed (it is looked at while rendering).
+pub fn shuffle_state() -> ShuffleState {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<(Option<std::time::SystemTime>, ShuffleState)>> = OnceLock::new();
+    let p = state_path("shuffle");
+    let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
+    let cache = CACHE.get_or_init(|| Mutex::new((None, ShuffleState::default())));
+    let Ok(mut c) = cache.lock() else { return ShuffleState::default() };
+    if c.0 != mtime || mtime.is_none() {
+        c.1 = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        c.0 = mtime;
+    }
+    c.1.clone()
+}
+
+/// Days left of a "heard enough" cooldown (None: not cooling down).
+pub fn cooldown_days(file: &str) -> Option<f64> {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs_f64();
+    let c = shuffle_state().cooldown.get(file).cloned()?;
+    (c.until > now).then(|| (c.until - now) / 86400.0)
+}
+
+/// Send one command, then report `ok()` once `done()` holds (mpd-player wrote its state), or that it did not answer.
+fn send_and_confirm(
+    ctx: &Ctx,
+    msg: String,
+    done: impl Fn() -> bool + Send + 'static,
+    ok: impl Fn() -> String + Send + 'static,
+) {
+    ctx.command(move |_, client| {
+        if !client.channels()?.0.iter().any(|c| c == CHANNEL) {
+            status_error!("mpd-player is not running (rormpc_install.sh companions starts it)");
+            return Ok(());
+        }
+        client.send_message(CHANNEL, &msg)?;
+        std::thread::spawn(move || {
+            let start = Instant::now();
+            loop {
+                if done() {
+                    status_info!("{}", ok());
+                    return;
+                }
+                if start.elapsed() > ANSWER_TIMEOUT {
+                    status_error!("mpd-player did not confirm: {msg}");
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        });
+        Ok(())
+    });
+}
+
+/// Turn the weighted shuffle on or off.
+pub fn toggle_shuffle(ctx: &Ctx) {
+    let on = !shuffle_state().enabled;
+    send_and_confirm(
+        ctx,
+        format!("shuffle {}", if on { "on" } else { "off" }),
+        move || shuffle_state().enabled == on,
+        move || {
+            if on {
+                let s = shuffle_state();
+                if s.active {
+                    "Weighted shuffle on: the next song is drawn by plays and likes".to_owned()
+                } else {
+                    format!("Weighted shuffle on, waiting: {}", s.reason)
+                }
+            } else {
+                "Weighted shuffle off: MPD's plain random".to_owned()
+            }
+        },
+    );
+}
+
+/// "Heard enough" for a song (the playing one also skips to the next): the weighted shuffle leaves it out for
+/// 1, 3, 7, then 14 days; Enter and Play next still play it.
+pub fn heard_enough(ctx: &Ctx, file: String, title: String) {
+    let before = cooldown_days(&file).unwrap_or(0.0);
+    let f = file.clone();
+    send_and_confirm(
+        ctx,
+        format!("shuffle heardenough {file}"),
+        move || cooldown_days(&f).is_some_and(|d| d > before + 0.5),
+        move || {
+            let days = cooldown_days(&file).unwrap_or(0.0).round();
+            format!("Heard enough: {title} rests {days:.0} days (Enter and Play next still play it)")
+        },
+    );
+}
+
+/// Undo "heard enough".
+pub fn unheard_enough(ctx: &Ctx, file: String) {
+    let f = file.clone();
+    send_and_confirm(
+        ctx,
+        format!("shuffle unheardenough {file}"),
+        move || cooldown_days(&f).is_none(),
+        || "Back in the weighted shuffle".to_owned(),
+    );
+}
+
+/// Start the next round of a Hits source (every song once more).
+pub fn new_round(ctx: &Ctx) {
+    send_and_confirm(
+        ctx,
+        "shuffle newround".to_owned(),
+        || shuffle_state().round.is_none_or(|r| !r.done),
+        || "New round: every song of the source once more".to_owned(),
+    );
+}

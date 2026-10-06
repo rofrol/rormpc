@@ -38,11 +38,25 @@ struct State {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Source {
-    /// "library" or "playlist"
+    /// "library", "playlist" or "hits" (a Hits result, played as a snapshot of its owned songs)
     kind: String,
     name: String,
     /// songs the source put in the queue (without the added Up next songs)
     len: usize,
+    /// a Hits snapshot: its files in ranking order (mpd-player plays it in rounds)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    files: Vec<String>,
+}
+
+/// The source being played: (kind, name, snapshot files for a Hits source).
+pub fn source_info() -> Option<(String, String, Vec<String>)> {
+    let s = state().lock().ok()?;
+    s.source.as_ref().map(|src| (src.kind.clone(), src.name.clone(), src.files.clone()))
+}
+
+/// Hits "Play these results": the owned rows replace the queue as the source, after a confirmation.
+pub fn play_hits_source(ctx: &Ctx, name: String, files: Vec<String>) {
+    confirm_replace_with(ctx, "hits".into(), name, files);
 }
 
 fn path() -> PathBuf {
@@ -121,7 +135,11 @@ pub fn header(ctx: &Ctx) -> Option<String> {
     let src = s.source.as_ref().map(|src| {
         let added = up.entries.iter().chain(up.playing.iter()).filter(|e| e.added).count();
         let modified = ctx.queue.len().saturating_sub(added) != src.len;
-        let name = if src.kind == "library" { "Whole library".to_owned() } else { src.name.clone() };
+        let name = match src.kind.as_str() {
+            "library" => "Whole library".to_owned(),
+            "hits" => format!("Hits · {}", src.name),
+            _ => src.name.clone(),
+        };
         format!("Playing from: {name}{}", if modified { " (modified)" } else { "" })
     });
     match (src, n) {
@@ -262,7 +280,15 @@ pub fn open_sources(ctx: &Ctx) {
 }
 
 fn confirm_replace(ctx: &Ctx, kind: String, name: String) {
-    let what = if kind == "library" { "the whole library".to_owned() } else { format!("playlist {name}") };
+    confirm_replace_with(ctx, kind, name, Vec::new());
+}
+
+fn confirm_replace_with(ctx: &Ctx, kind: String, name: String, files: Vec<String>) {
+    let what = match kind.as_str() {
+        "library" => "the whole library".to_owned(),
+        "hits" => format!("{} songs of {name} (shuffled in rounds: each once)", files.len()),
+        _ => format!("playlist {name}"),
+    };
     let waiting = upnext_file().entries;
     let up = waiting.len();
     let message = vec![format!(
@@ -270,17 +296,21 @@ fn confirm_replace(ctx: &Ctx, kind: String, name: String) {
         if up > 0 { format!("\nUp next ({up}) is kept and plays first.") } else { String::new() }
     )];
     let go = move |ctx: &Ctx| -> anyhow::Result<()> {
-        let (kind, name) = (kind.clone(), name.clone());
+        let (kind, name, files) = (kind.clone(), name.clone(), files.clone());
         let first = waiting.first().map(|e| e.file.clone());
         ctx.command(move |_, client| {
             client.clear()?;
-            if kind == "library" {
-                client.add("/", None)?;
-            } else {
-                client.load_playlist(&name, None)?;
+            match kind.as_str() {
+                "library" => client.add("/", None)?,
+                "hits" => {
+                    for f in &files {
+                        client.add(f, None)?;
+                    }
+                }
+                _ => client.load_playlist(&name, None)?,
             }
             let len = client.playlist_info()?.map_or(0, |q| q.len());
-            let st = State { source: Some(Source { kind, name, len }) };
+            let st = State { source: Some(Source { kind, name, len, files }) };
             if let Ok(mut g) = state().lock() {
                 *g = st.clone();
             }
@@ -292,7 +322,11 @@ fn confirm_replace(ctx: &Ctx, kind: String, name: String) {
                 }
                 _ => client.play()?,
             }
-            status_info!("Playing from {}", if st.source.as_ref().is_some_and(|s| s.kind == "library") { "the whole library" } else { "the playlist" });
+            status_info!("Playing from {}", match st.source.as_ref().map(|s| s.kind.as_str()) {
+                Some("library") => "the whole library",
+                Some("hits") => "the Hits result",
+                _ => "the playlist",
+            });
             Ok(())
         });
         Ok(())

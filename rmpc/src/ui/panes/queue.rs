@@ -98,6 +98,9 @@ pub struct QueuePane {
     new_album_indices: HashSet<usize>,
     /// rormpc: the live filter (`/`); while set, `queue.items` holds only the matching songs, in queue order
     find: Option<QueueFind>,
+    /// rormpc: the like column (x, width) of the last render, and the row whose like cell the mouse is over
+    like_col: Option<(u16, u16)>,
+    hover_like: Option<usize>,
 }
 
 /// rormpc: state of the Queue's live filter.
@@ -140,6 +143,8 @@ impl QueuePane {
             highlight_enabled: true,
             new_album_indices: HashSet::new(),
             find: None,
+            like_col: None,
+            hover_like: None,
         };
 
         s.recalculate_album_indices();
@@ -326,6 +331,25 @@ impl QueuePane {
                     crate::ui::rormpc_playlists::open_add_to_playlist(ctx, targets, what);
                     Ok(())
                 });
+                // weighted shuffle (mpd-player): rest the song, or bring it back
+                let shuffle_file = file.clone();
+                let shuffle_title = self.queue.selected().map(|s| s.metadata.get("title").map_or(s.file.as_str(), |t| t.last()).to_owned()).unwrap_or_default();
+                if crate::ui::rormpc_player::cooldown_days(&shuffle_file).is_some() {
+                    section.add_item("Back in the weighted shuffle (undo heard enough)", move |ctx| {
+                        crate::ui::rormpc_player::unheard_enough(ctx, shuffle_file.clone());
+                        Ok(())
+                    });
+                } else {
+                    section.add_item("Heard enough (rests in the weighted shuffle, e)", move |ctx| {
+                        crate::ui::rormpc_player::heard_enough(ctx, shuffle_file.clone(), shuffle_title.clone());
+                        Ok(())
+                    });
+                }
+                let on = crate::ui::rormpc_player::shuffle_state().enabled;
+                section.add_item(format!("Weighted shuffle: {} (w)", if on { "on → off" } else { "off → on" }), |ctx| {
+                    crate::ui::rormpc_player::toggle_shuffle(ctx);
+                    Ok(())
+                });
                 let gap = crate::ui::rormpc_player::gap_seconds()
                     .map_or_else(String::new, |g| if g > 0.0 { format!(" (now {g} s)") } else { " (now off)".to_owned() });
                 section.add_item(format!("Silence between songs…{gap}"), |ctx| {
@@ -469,6 +493,10 @@ impl Pane for QueuePane {
             .split(self.areas[Areas::Table]);
 
         let formats = &config.theme.song_table_format;
+        // rormpc: the column showing rmpc's like sticker gets a clickable heart (hover shows ♡ on an unrated song)
+        let like_idx = formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
+        self.like_col = like_idx.and_then(|i| widths.get(i)).map(|r| (r.x, r.width.max(1)));
+        let hover_like = self.hover_like;
 
         let marker_symbol_len = config.theme.symbols.marker.chars().count();
         // rormpc: a file queued more than once gets a dim badge in the first column
@@ -557,6 +585,9 @@ impl Pane for QueuePane {
                     if let (Some(badge), 0) = (&up_badge, i) {
                         let badge = Span::styled(badge.clone(), Style::default().add_modifier(Modifier::BOLD));
                         line.spans.insert(usize::from(is_marked), badge);
+                    }
+                    if Some(i) == like_idx && hover_like == Some(idx) && line.width() == 0 {
+                        line = Line::from(Span::styled("♡", Style::default().add_modifier(Modifier::BOLD)));
                     }
 
                     line
@@ -736,6 +767,28 @@ impl Pane for QueuePane {
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
         let position = event.into();
+
+        // rormpc: the like cell. Hover shows a heart; a click toggles like <-> no rating and neither selects nor plays
+        let table = self.areas[Areas::Table];
+        let on_like = self.like_col.is_some_and(|(x, w)| event.x >= x && event.x < x + w) && table.contains(position);
+        let like_row = || self.queue.state.get_at_rendered_row(event.y.saturating_sub(table.y).into());
+        if matches!(event.kind, MouseEventKind::Moved) {
+            let hover = if on_like { like_row() } else { None };
+            if hover != self.hover_like {
+                self.hover_like = hover;
+                ctx.render()?;
+            }
+            return Ok(());
+        }
+        if on_like && matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
+            if let Some(song) = like_row().and_then(|i| self.queue.items.get(i)) {
+                let liked = ctx.song_stickers(&song.file).and_then(|st| st.get("like")).is_some_and(|v| v == "2");
+                crate::ui::rormpc_actions::set_like(ctx, song.file.clone(), if liked { "1" } else { "2" });
+                let title = song.metadata.get("title").map_or(song.file.as_str(), |t| t.last()).to_owned();
+                status_info!("{}: {title}", if liked { "Like removed" } else { "Liked ♥" });
+            }
+            return Ok(());
+        }
 
         if let Some(scrollbar_area) = self.scrollbar_area()
             && ctx.config.theme.scrollbar.is_some()

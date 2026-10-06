@@ -38,6 +38,7 @@ use crate::{
     ui::{
         UiEvent,
         dirstack::DirState,
+        input::{BufferId, InputResultEvent},
         modals::{
             confirm_modal::{Action, ConfirmModal},
             input_modal::InputModal,
@@ -199,7 +200,16 @@ fn fetch_mark(state: &str) -> &'static str {
 #[derive(Debug)]
 pub struct HitsPane {
     path: PathBuf,
+    /// the rows shown: the result, narrowed by the `/` search
     rows: Vec<HitsRow>,
+    /// the whole result of the last `hits` run
+    all_rows: Vec<HitsRow>,
+    /// `/` search over artist and title (client-side, never changes ranks)
+    search: BufferId,
+    typing: bool,
+    query: String,
+    /// the row whose like cell the mouse is over (shows a heart to click)
+    hover_like: Option<usize>,
     label: String,
     generated_at: String,
     rank_note: String,
@@ -244,6 +254,11 @@ impl HitsPane {
             job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
             rows: Vec::new(),
+            all_rows: Vec::new(),
+            search: BufferId::new(),
+            typing: false,
+            query: String::new(),
+            hover_like: None,
             label: String::new(),
             generated_at: String::new(),
             rank_note: String::new(),
@@ -268,16 +283,13 @@ impl HitsPane {
                     self.applied_args = Some(filters.args(&self.path.to_string_lossy()));
                     self.filters = Some(filters);
                 }
-                self.rows = file.rows;
+                let keep = self.selected().map(|r| r.rank);
+                self.all_rows = file.rows;
                 self.label = file.label;
                 self.generated_at = file.generated_at;
                 self.rank_note = file.rank_note.unwrap_or_default();
                 self.error = None;
-                self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
-                if !self.rows.is_empty() {
-                    let keep = self.state.get_selected().filter(|i| *i < self.rows.len()).unwrap_or(0);
-                    self.state.select(Some(keep), 0);
-                }
+                self.refilter(keep);
             }
             Err(err) => self.error = Some(format!("{err:#}")),
         }
@@ -405,6 +417,44 @@ impl HitsPane {
 
     fn selected(&self) -> Option<&HitsRow> {
         self.state.get_selected().and_then(|i| self.rows.get(i))
+    }
+
+    /// Narrow the result to the `/` search (every word in artist or title, diacritics folded, any order); keep the
+    /// row of rank `keep` selected when it is still shown.
+    fn refilter(&mut self, keep: Option<u32>) {
+        let found = crate::ui::rormpc_filter::find(
+            self.all_rows.iter().map(|r| format!("{} {}", r.artist, r.title)),
+            &self.query,
+        );
+        self.rows = found.rows.into_iter().map(|i| self.all_rows[i].clone()).collect();
+        self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
+        let idx = keep.and_then(|k| self.rows.iter().position(|r| r.rank == k)).unwrap_or(0);
+        self.state.select((!self.rows.is_empty()).then_some(idx), 0);
+    }
+
+    /// x of the ♥ column: after Rank (5), % (4) and the owned mark (1), each followed by one space.
+    fn like_x(&self) -> u16 {
+        self.table_area.x + 5 + 1 + 4 + 1 + 1 + 1
+    }
+
+    /// Like <-> no rating for an owned song (a disliked one becomes liked); dislike stays in the menu.
+    fn toggle_like(&self, idx: usize, ctx: &Ctx) {
+        let Some(r) = self.rows.get(idx) else { return };
+        let Some(file) = r.file.clone() else {
+            return status_info!("No local file: nothing to like (missing song)");
+        };
+        let liked = ctx.song_stickers(&file).and_then(|st| st.get("like")).is_some_and(|v| v == "2");
+        rormpc_actions::set_like(ctx, file, if liked { "1" } else { "2" });
+        status_info!("{}: {}", if liked { "Like removed" } else { "Liked ♥" }, r.title);
+    }
+
+    /// Esc: the whole result again.
+    fn clear_search(&mut self, ctx: &Ctx) {
+        ctx.input.clear_buffer(self.search);
+        self.query.clear();
+        self.typing = false;
+        let keep = self.selected().map(|r| r.rank);
+        self.refilter(keep);
     }
 
     /// Queue the selected owned song, optionally playing it; one already queued is not appended again.
@@ -794,8 +844,19 @@ impl HitsPane {
             });
         }
         // the whole result as a playlist: owned rows in ranking order, missing ones skipped (and said so)
-        let owned: Vec<String> = self.rows.iter().filter_map(|x| x.file.clone()).collect();
-        let missing = self.rows.len() - owned.len();
+        let owned: Vec<String> = self.all_rows.iter().filter_map(|x| x.file.clone()).collect();
+        let missing = self.all_rows.len() - owned.len();
+        if !owned.is_empty() {
+            let (name, files) = (self.label.clone(), owned.clone());
+            let label = format!("Play these {} songs (as the source)…", owned.len());
+            menu = menu.list_section(ctx, move |mut section| {
+                section.add_item(label, move |ctx| {
+                    crate::ui::rormpc_upnext::play_hits_source(ctx, name.clone(), files.clone());
+                    Ok(())
+                });
+                Some(section)
+            });
+        }
         if !owned.is_empty() {
             let what = format!("{} owned songs of this result ({missing} missing skipped)", owned.len());
             let label = format!("Add all {} owned rows to playlist…", owned.len());
@@ -1032,36 +1093,79 @@ impl Pane for HitsPane {
         self.apply_area = apply_area;
         self.scroll_filters(0); // the pane may have been resized
         self.render_filters(frame, list_area, ctx);
-        let [table_area, footer] =
-            Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(main);
+        let searching = self.typing || !self.query.is_empty();
+        let [search_area, table_area, footer] = Layout::vertical([
+            Constraint::Length(u16::from(searching)),
+            Constraint::Min(1),
+            Constraint::Length(2),
+        ])
+        .areas(main);
+        if searching {
+            let text = format!(" Search: {}{}", self.query, if self.typing { "▏" } else { "" });
+            let count = format!("{} shown / {} results ", self.rows.len(), self.all_rows.len());
+            let [t, c] = Layout::horizontal([Constraint::Min(1), Constraint::Length(count.chars().count() as u16)])
+                .areas(search_area);
+            let style = if self.typing { ctx.config.theme.highlight_border_style } else { ctx.config.as_text_style() };
+            frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), t);
+            frame.render_widget(Paragraph::new(Line::from(count)), c);
+        }
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
 
         self.reload_fetch();
         let dim = Style::default().add_modifier(Modifier::DIM);
-        let rows = self.rows.iter().map(|r| {
+        // the source being played, when it is a Hits snapshot: rows outside it and rows heard in this round
+        let source = crate::ui::rormpc_upnext::source_info().filter(|(kind, _, _)| kind == "hits");
+        let snapshot: std::collections::HashSet<&str> =
+            source.as_ref().map(|(_, _, f)| f.iter().map(String::as_str).collect()).unwrap_or_default();
+        let shuffle = crate::ui::rormpc_player::shuffle_state();
+        let heard: std::collections::HashSet<&str> =
+            shuffle.round.as_ref().map(|r| r.heard.iter().map(String::as_str).collect()).unwrap_or_default();
+        let hover = self.hover_like;
+        let rows = self.rows.iter().enumerate().map(|(i, r)| {
             let owned = r.file.is_some();
             let missing_mark = self.fetch_for(r).map_or("✗", |f| fetch_mark(&f.state));
+            let like = r.file.as_deref().and_then(|f| ctx.song_stickers(f)).and_then(|st| st.get("like").cloned());
+            let like_cell = match (owned, like.as_deref()) {
+                (false, _) => Cell::from(Span::styled("·", dim)),
+                (true, Some("2")) => Cell::from("♥"),
+                (true, Some("0")) => Cell::from("✗"),
+                (true, _) if hover == Some(i) => Cell::from(Span::styled("♡", Style::default().add_modifier(Modifier::BOLD))),
+                (true, _) => Cell::from(""),
+            };
+            let state = match r.file.as_deref() {
+                None => String::new(),
+                Some(f) => match crate::ui::rormpc_player::cooldown_days(f) {
+                    Some(d) => format!("⏳{:.0}d", d.ceil()),
+                    None if source.is_some() && !snapshot.contains(f) => "·".to_owned(),
+                    None if source.is_some() && heard.contains(f) => "heard".to_owned(),
+                    None => String::new(),
+                },
+            };
             Row::new(vec![
                 Cell::from(format!("#{}", r.rank)),
                 Cell::from(format!("{:.0}%", r.pct.ceil())),
                 Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
+                like_cell,
                 Cell::from(r.artist.clone()),
                 Cell::from(r.title.clone()),
                 Cell::from(if r.year > 0 { r.year.to_string() } else { String::new() }),
                 Cell::from(if owned && r.plays > 0 { r.plays.to_string() } else { String::new() }),
+                Cell::from(Span::styled(state, dim)),
             ])
             .style(if owned && !r.hidden { Style::default() } else { dim })
         });
-        let header = Row::new(["Rank", "%", "", "Artist", "Title", "Year", "Plays"])
+        let header = Row::new(["Rank", "%", "", "♥", "Artist", "Title", "Year", "Plays", "State"])
             .style(ctx.config.theme.preview_label_style);
         let table = Table::new(rows, [
             Constraint::Length(5),
             Constraint::Length(4),
             Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Percentage(35),
             Constraint::Percentage(65),
             Constraint::Length(4),
+            Constraint::Length(5),
             Constraint::Length(5),
         ])
         .header(header)
@@ -1090,7 +1194,18 @@ impl Pane for HitsPane {
                 dim,
             ),
         };
-        frame.render_widget(Paragraph::new(Line::from(status)), footer);
+        // what plays vs what is browsed: the snapshot is never changed by moving a filter
+        let playing = match &source {
+            Some((_, name, files)) => {
+                let round = shuffle.round.as_ref().map_or(String::new(), |r| {
+                    if r.done { " · round done (Up next menu: new round)".to_owned() } else { format!(" · heard {}/{}", r.heard.len(), r.total) }
+                });
+                let browsing = if *name == self.label { String::new() } else { " · browsing other results (Ctrl-z: Play these results)".to_owned() };
+                format!(" Playing: Hits · {name} · {} playable{round}{browsing}", files.len())
+            }
+            None => " Ctrl-z: Play these results (as the source) · / search · click ♥ or r to like".to_owned(),
+        };
+        frame.render_widget(Paragraph::new(vec![Line::from(status), Line::from(Span::styled(playing, dim))]), footer);
         frame.render_widget(Paragraph::new(self.details(ctx)).wrap(Wrap { trim: false }), details);
         Ok(())
     }
@@ -1148,9 +1263,24 @@ impl Pane for HitsPane {
         if !self.table_area.contains(event.into()) {
             return Ok(());
         }
-        self.focus_filters = false;
         let row = usize::from(event.y.saturating_sub(self.table_area.y + 1)); // +1: header row
+        let on_like = event.x == self.like_x() && event.y > self.table_area.y;
+        if matches!(event.kind, MouseEventKind::Moved) {
+            let hover = if on_like { self.state.get_at_rendered_row(row) } else { None };
+            if hover != self.hover_like {
+                self.hover_like = hover;
+                ctx.render()?;
+            }
+            return Ok(());
+        }
+        self.focus_filters = false;
         match event.kind {
+            // a click on the ♥ cell only toggles the like: it neither selects nor plays
+            MouseEventKind::LeftClick | MouseEventKind::DoubleClick if on_like => {
+                if let Some(idx) = self.state.get_at_rendered_row(row) {
+                    self.toggle_like(idx, ctx);
+                }
+            }
             MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
                 if let Some(idx) = self.state.get_at_rendered_row(row) {
                     self.state.select(Some(idx), ctx.config.scrolloff);
@@ -1168,6 +1298,31 @@ impl Pane for HitsPane {
             _ => return Ok(()),
         }
         ctx.render()?;
+        Ok(())
+    }
+
+    fn handle_insert_mode(&mut self, kind: InputResultEvent, ctx: &mut Ctx) -> Result<()> {
+        match kind {
+            InputResultEvent::Push | InputResultEvent::Pop => {
+                self.query = ctx.input.value(self.search);
+                let keep = self.selected().map(|r| r.rank);
+                self.refilter(keep);
+            }
+            InputResultEvent::Confirm => self.typing = false, // Enter keeps the search
+            InputResultEvent::Cancel => self.clear_search(ctx),
+            InputResultEvent::NoChange => {}
+        }
+        ctx.render()?;
+        Ok(())
+    }
+
+    fn handle_insert_nav(&mut self, down: bool, handled: &mut bool, ctx: &mut Ctx) -> Result<()> {
+        if self.typing {
+            let (scrolloff, wrap) = (ctx.config.scrolloff, ctx.config.wrap_navigation);
+            if down { self.state.next(scrolloff, wrap) } else { self.state.prev(scrolloff, wrap) }
+            *handled = true;
+            ctx.render()?;
+        }
         Ok(())
     }
 
@@ -1197,6 +1352,16 @@ impl Pane for HitsPane {
             CommonAction::Bottom => self.state.last(),
             CommonAction::Confirm => self.enqueue_selected(true, ctx),
             CommonAction::AddOptions { .. } => self.enqueue_selected(false, ctx), // the "a" key
+            CommonAction::EnterSearch => {
+                self.typing = true;
+                ctx.input.insert_mode(self.search);
+            }
+            CommonAction::Close if !self.query.is_empty() => self.clear_search(ctx),
+            CommonAction::Rate { .. } => {
+                if let Some(i) = self.state.get_selected() {
+                    self.toggle_like(i, ctx);
+                }
+            }
             _ => {
                 event.abandon(); // not ours: let global keys (tabs, playback) handle it
                 return Ok(());
