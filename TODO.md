@@ -1,15 +1,20 @@
 # TODO
 
-## Next: Hits works like Queue, Up next as its own tab
+## Done: Hits works like Queue, Up next as its own tab (2026-10-06)
 
-- [ ] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the
+- [x] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the
       Hits table.
-- [ ] Hits is the first tab.
-- [ ] Up next is one top-level tab "Up next" (the menu action stays "Play next"), not a sub-tab of Hits and
+- [x] Hits is the first tab.
+- [x] Up next is one top-level tab "Up next" (the menu action stays "Play next"), not a sub-tab of Hits and
       Queue (user decided 2026-10-06; Sol and MiMo: a view embedded twice means two cursors on one list). It
       lists the songs waiting in Up next: J/K reorder, remove, clear with a confirmation, Enter plays now; no
       "Play next" inside it. Hits and Queue get a key that opens it. Full plan: music-data TODO.md, entry
       "Playback annoyances".
+
+Verified: `cargo test` (934 tests), `uv run pytest` (107 tests), pyflakes, and the TUI on a null-output scratch
+MPD. Covered current-song jumps and custom bindings, search preservation, numeric tabs and `gu`, request
+reorder/remove/confirmed clear, and failed `playid` while paused: requests remain, the error redraws without
+another key, and a later explicit successful play clears it. No playback retry or added polling delay.
 
 ## Soon: playing-song indicator in Hits (design only)
 

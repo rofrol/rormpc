@@ -1014,6 +1014,23 @@ impl Default for TabsFile {
     fn default() -> Self {
         Self(vec![
             TabFile {
+                name: "Hits".to_string(),
+                border_type: BorderTypeFile::None,
+                pane: PaneOrSplitFile::Split {
+                    direction: DirectionFile::Vertical,
+                    borders: BordersFile::NONE,
+                    panes: vec![SubPaneFile {
+                        size: "100%".to_string(),
+                        borders: BordersFile::ALL,
+                        border_symbols: BorderSymbolsFile::Rounded,
+                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Hits {
+                            path: None, command: None,
+                        }),
+                        ..Default::default()
+                    }],
+                },
+            },
+            TabFile {
                 name: "Queue".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
@@ -1218,6 +1235,21 @@ impl Default for TabsFile {
                 },
             },
             TabFile {
+                name: "Up next".to_string(),
+                border_type: BorderTypeFile::None,
+                pane: PaneOrSplitFile::Split {
+                    direction: DirectionFile::Vertical,
+                    borders: BordersFile::NONE,
+                    panes: vec![SubPaneFile {
+                        size: "100%".to_string(),
+                        borders: BordersFile::ALL,
+                        border_symbols: BorderSymbolsFile::Rounded,
+                        pane: PaneOrSplitFile::Pane(PaneTypeFile::UpNext()),
+                        ..Default::default()
+                    }],
+                },
+            },
+            TabFile {
                 name: "Directories".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
@@ -1390,4 +1422,23 @@ pub(crate) fn validate_tabs(layout: &SizedPaneOrSplit, tabs: &Tabs) -> Result<()
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod rormpc_tests {
+    use super::*;
+
+    #[test]
+    fn hits_first_and_one_top_level_up_next() {
+        let tabs = TabsFile::default();
+        assert_eq!(tabs.0[0].name, "Hits");
+        assert_eq!(tabs.0[1].name, "Queue");
+        assert_eq!(tabs.0[2].name, "Up next");
+        let converted = tabs.convert(&HashMap::new(), &BorderSetLib::default()).unwrap();
+        let up_next_tabs = converted.tabs.values().filter(|tab| {
+            tab.panes.panes_iter().any(|pane| matches!(pane.pane, PaneType::UpNext))
+        }).collect_vec();
+        assert_eq!(up_next_tabs.len(), 1);
+        assert_eq!(up_next_tabs[0].name, TabName::from("Up next"));
+    }
 }

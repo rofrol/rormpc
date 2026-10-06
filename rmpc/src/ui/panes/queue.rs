@@ -323,7 +323,7 @@ impl QueuePane {
                     format!("{} marked songs", targets.len())
                 };
                 let next_targets = targets.clone();
-                section.add_item("Play next (Up next)", move |ctx| {
+                section.add_item("Play next", move |ctx| {
                     crate::ui::rormpc_upnext::play_next(ctx, next_targets);
                     Ok(())
                 });
