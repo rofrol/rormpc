@@ -498,19 +498,15 @@ impl<'ui> Ui<'ui> {
                     let elapsed_sec = ctx.status.elapsed.as_secs();
                     let keep_state = ctx.config.keep_state_on_song_change;
                     let state = ctx.status.state;
+                    // rormpc: through mpd-player's `shuffle prev` when it runs and handles it
                     ctx.command(move |_, client| {
-                        match rewind_to_start {
-                            Some(value) if elapsed_sec >= value => {
-                                client.seek_current(ValueChange::Set(0))?;
-                            }
-                            Some(_value) => {
-                                client.prev_keep_state(keep_state, state)?;
-                            }
-                            None => {
-                                client.prev_keep_state(keep_state, state)?;
-                            }
-                        }
-                        Ok(())
+                        rormpc_player::previous(
+                            client,
+                            rewind_to_start,
+                            elapsed_sec,
+                            keep_state,
+                            state,
+                        )
                     });
                 }
                 GlobalAction::Stop if matches!(ctx.status.state, State::Play | State::Pause) => {

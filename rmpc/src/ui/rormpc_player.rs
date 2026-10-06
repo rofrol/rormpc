@@ -8,12 +8,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rmpc_mpd::mpd_client::MpdClient;
+use rmpc_mpd::{
+    commands::State,
+    mpd_client::{MpdClient, ValueChange},
+};
 use serde::Deserialize;
 
 use crate::{
     ctx::Ctx,
-    shared::macros::{modal, status_error, status_info, status_warn},
+    shared::{
+        macros::{modal, status_error, status_info, status_warn},
+        mpd_client_ext::MpdClientExt,
+    },
     ui::modals::{input_modal::InputModal, menu::modal::MenuModal},
 };
 
@@ -210,6 +216,9 @@ pub struct ShuffleState {
     pub ack: Option<PlanAck>,
     #[serde(default)]
     pub publish_error: Option<String>,
+    /// the played-songs trail behind `shuffle prev`; only an mpd-player that handles `shuffle prev` writes it
+    #[serde(default)]
+    pub trail: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -268,6 +277,51 @@ fn shuffle_state_from_file() -> ShuffleState {
         c.0 = mtime;
     }
     c.1.clone()
+}
+
+/// Where Previous goes.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrevRoute {
+    /// `rewind_to_start_sec` reached: seek the playing song to 0:00
+    Rewind,
+    /// `shuffle prev` to mpd-player: back through the songs that really played, no skip counted
+    Daemon,
+    /// MPD's own `previous` (with random on it follows MPD's random order, not what played)
+    Mpd,
+}
+
+/// Previous goes through mpd-player only while it is subscribed to its channel and its shuffle.json has the
+/// `trail` (an mpd-player older than `shuffle prev` ignores the message, so Previous would do nothing).
+pub fn prev_route(
+    rewind_to_start: Option<u64>,
+    elapsed_sec: u64,
+    subscribed: bool,
+    has_trail: bool,
+) -> PrevRoute {
+    match rewind_to_start {
+        Some(value) if elapsed_sec >= value => PrevRoute::Rewind,
+        _ if subscribed && has_trail => PrevRoute::Daemon,
+        _ => PrevRoute::Mpd,
+    }
+}
+
+/// Previous (the key, `rmpc remote`-style `prev`): see `prev_route`. Runs on the MPD command thread, so the
+/// subscription is asked of MPD now, not taken from the cached presence (a crashed daemon sends no event).
+pub fn previous<C: MpdClient + MpdClientExt>(
+    client: &mut C,
+    rewind_to_start: Option<u64>,
+    elapsed_sec: u64,
+    keep_state: bool,
+    state: State,
+) -> anyhow::Result<()> {
+    let has_trail = shuffle_state().trail.is_some();
+    let subscribed = has_trail && client.channels()?.0.iter().any(|c| c == CHANNEL);
+    match prev_route(rewind_to_start, elapsed_sec, subscribed, has_trail) {
+        PrevRoute::Rewind => client.seek_current(ValueChange::Set(0))?,
+        PrevRoute::Daemon => client.send_message(CHANNEL, "shuffle prev")?,
+        PrevRoute::Mpd => client.prev_keep_state(keep_state, state)?,
+    }
+    Ok(())
 }
 
 /// Days left of a "heard enough" cooldown (None: not cooling down).
@@ -419,4 +473,36 @@ pub fn next_marker(id: u32) -> Option<String> {
 /// The ShuffleNext marker of a library file (Hits rows know files, not queue ids): its first queue entry's turn.
 pub fn next_marker_for_file(ctx: &crate::ctx::Ctx, file: &str) -> Option<String> {
     ctx.queue.iter().filter(|s| s.file == file).find_map(|s| next_marker(s.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn previous_goes_through_mpd_player_only_when_it_handles_shuffle_prev() {
+        assert_eq!(prev_route(None, 30, true, true), PrevRoute::Daemon);
+        // an older mpd-player (no trail in shuffle.json) would ignore `shuffle prev`
+        assert_eq!(prev_route(None, 30, true, false), PrevRoute::Mpd);
+        // a trail left by a daemon that no longer runs
+        assert_eq!(prev_route(None, 30, false, true), PrevRoute::Mpd);
+        assert_eq!(prev_route(None, 30, false, false), PrevRoute::Mpd);
+        // rewinding the playing song comes first, below the threshold the song changes
+        assert_eq!(prev_route(Some(5), 30, true, true), PrevRoute::Rewind);
+        assert_eq!(prev_route(Some(5), 5, false, false), PrevRoute::Rewind);
+        assert_eq!(prev_route(Some(5), 4, true, true), PrevRoute::Daemon);
+        assert_eq!(prev_route(Some(5), 4, true, false), PrevRoute::Mpd);
+    }
+
+    #[test]
+    fn trail_key_marks_an_mpd_player_that_handles_shuffle_prev() {
+        let old: ShuffleState = serde_json::from_str(r#"{"enabled": true, "pid": 7}"#).unwrap();
+        assert!(old.trail.is_none());
+        let new: ShuffleState =
+            serde_json::from_str(r#"{"enabled": true, "trail": {"ids": [3, 9], "cursor": null}}"#)
+                .unwrap();
+        assert!(new.trail.is_some());
+        let list: ShuffleState = serde_json::from_str(r#"{"trail": []}"#).unwrap();
+        assert!(list.trail.is_some());
+    }
 }
