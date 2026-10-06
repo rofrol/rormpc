@@ -523,11 +523,16 @@ impl<'ui> Ui<'ui> {
                     });
                 }
                 GlobalAction::ToggleRandom => {
-                    let random = !ctx.status.random;
-                    ctx.command(move |_, client| {
-                        client.random(random)?;
-                        Ok(())
-                    });
+                    // rormpc: while the weighted shuffle owns MPD's random, x switches to plain random
+                    if ctx.status.random && crate::ui::rormpc_player::shuffle_state().enabled {
+                        crate::ui::rormpc_player::release_shuffle(ctx);
+                    } else {
+                        let random = !ctx.status.random;
+                        ctx.command(move |_, client| {
+                            client.random(random)?;
+                            Ok(())
+                        });
+                    }
                 }
                 GlobalAction::ToggleSingle => {
                     let single = ctx.status.single;

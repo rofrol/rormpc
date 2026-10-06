@@ -228,14 +228,24 @@ pub fn toggle_shuffle(ctx: &Ctx) {
             if on {
                 let s = shuffle_state();
                 if s.active {
-                    "Weighted shuffle on (random off): the next song is drawn by plays and likes".to_owned()
+                    "Weighted shuffle on: the next song is drawn by plays and likes".to_owned()
                 } else {
                     format!("Weighted shuffle on, waiting: {}", s.reason)
                 }
             } else {
-                "Weighted shuffle off: the queue plays in order (x for MPD's random)".to_owned()
+                "Weighted shuffle off: the queue plays in order (x for plain random)".to_owned()
             }
         },
+    );
+}
+
+/// x while the weighted shuffle owns MPD's random: plain random instead (random stays on, the shuffle turns off).
+pub fn release_shuffle(ctx: &Ctx) {
+    send_and_confirm(
+        ctx,
+        "shuffle release".to_owned(),
+        || !shuffle_state().enabled,
+        || "Plain random (weighted shuffle off)".to_owned(),
     );
 }
 

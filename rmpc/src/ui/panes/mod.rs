@@ -652,9 +652,11 @@ impl Property<PropertyKind> {
                     )))
                 }
                 StatusProperty::Random { on_label, off_label, on_style, off_style } => {
+                    // rormpc: random owned by the weighted shuffle shows as off (the w badge shows the mode)
+                    let random = status.random && !crate::ui::rormpc_player::shuffle_state().enabled;
                     Some(Either::Left(Span::styled(
-                        if status.random { on_label } else { off_label },
-                        if status.random { on_style } else { off_style }.unwrap_or(style),
+                        if random { on_label } else { off_label },
+                        if random { on_style } else { off_style }.unwrap_or(style),
                     )))
                 }
                 StatusProperty::Consume {
