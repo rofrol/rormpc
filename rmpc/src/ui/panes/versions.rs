@@ -35,10 +35,12 @@ use crate::{
     ui::{
         UiEvent,
         dirstack::DirState,
+        input::{BufferId, InputResultEvent},
         modals::{
             confirm_modal::{Action, ConfirmModal},
             menu::modal::MenuModal,
         },
+        rormpc_filter::{Query, binding},
     },
 };
 
@@ -202,6 +204,13 @@ pub struct VersionsPane {
     track_idx: usize,
     job: Arc<Mutex<Job>>,
     preview: Arc<Mutex<Preview>>,
+    /// the live filter of the group list: its text, whether it takes keys now, "unresolved only"
+    filter: BufferId,
+    typing: bool,
+    query: String,
+    unresolved_only: bool,
+    /// the selected entry before filtering began, restored by Esc
+    before_filter: Option<String>,
 }
 
 fn run(args: &[&str]) -> Result<String, String> {
@@ -270,12 +279,54 @@ fn mmss(s: u64) -> String {
     format!("{}:{:02}", s / 60, s % 60)
 }
 
+/// musicdb's suggestion reason for people: "longest play 207 s, file 218 s; 443 s does not fit" ->
+/// "longest listen 3:27, file 3:38; 7:23 does not fit".
+fn human_reason(reason: &str) -> String {
+    let reason = reason.replace("longest play", "longest listen");
+    let mut out = String::new();
+    let mut rest = reason.as_str();
+    while let Some(pos) = rest.find(|c: char| c.is_ascii_digit()) {
+        out.push_str(&rest[..pos]);
+        rest = &rest[pos..];
+        let digits = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+        let (num, after) = rest.split_at(digits);
+        let is_seconds = after.strip_prefix(" s").is_some_and(|a| a.chars().next().is_none_or(|c| !c.is_alphanumeric()));
+        match (is_seconds, num.parse::<u64>()) {
+            (true, Ok(n)) => {
+                out.push_str(&mmss(n));
+                rest = &after[2..];
+            }
+            _ => {
+                out.push_str(num);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn base(f: &str) -> &str {
     f.rsplit('/').next().unwrap_or(f)
 }
 
 fn group_plays(g: &Group) -> u32 {
     g.tracks.iter().map(|t| t.plays).sum()
+}
+
+/// Open groups first, most plays first; then the shared ids. Shared ids are always unresolved.
+fn entries_filtered(report: &Report, query: &str, unresolved_only: bool) -> Vec<Entry> {
+    let mut fuzzy = Query::new(query);
+    entries(report)
+        .into_iter()
+        .filter(|e| match *e {
+            Entry::Group(i) => {
+                let g = &report.groups[i];
+                (!unresolved_only || !g.pending.is_empty()) && fuzzy.matches(&g.name.replace('|', " - "))
+            }
+            Entry::Shared(i) => fuzzy.matches(&report.shared[i].id),
+        })
+        .collect()
 }
 
 /// Open groups first, most plays first; then the shared ids.
@@ -294,7 +345,7 @@ fn open_items(report: &Report) -> usize {
 
 fn decision_text(t: &Track, files: &[VFile]) -> String {
     match &t.decision {
-        None => "OPEN".to_owned(),
+        None => "Unresolved".to_owned(),
         Some(d) if d.stale => "review: file gone".to_owned(),
         Some(d) if d.group_changed => "review: group changed".to_owned(),
         Some(d) if d.action == "none" => "not owned".to_owned(),
@@ -385,7 +436,87 @@ impl VersionsPane {
             track_idx: 0,
             job: Arc::new(Mutex::new(Job::default())),
             preview: Arc::new(Mutex::new(Preview::default())),
+            filter: BufferId::new(),
+            typing: false,
+            query: String::new(),
+            unresolved_only: false,
+            before_filter: None,
         }
+    }
+
+    fn entry_key(&self, e: Entry) -> Option<String> {
+        match e {
+            Entry::Group(i) => self.report.groups.get(i).map(|g| format!("g:{}", g.name)),
+            Entry::Shared(i) => self.report.shared.get(i).map(|s| format!("s:{}", s.id)),
+        }
+    }
+
+    fn filter_active(&self) -> bool {
+        self.typing || !self.query.trim().is_empty() || self.unresolved_only
+    }
+
+    /// Recompute the visible entries; keep `keep` (an entry key) selected when it is still visible, else the
+    /// first entry. Files and tracks inside a group are never filtered.
+    fn refilter(&mut self, keep: Option<String>) {
+        self.entries = entries_filtered(&self.report, &self.query, self.unresolved_only);
+        self.state.set_content_and_viewport_len(self.entries.len(), self.list_area.height.into());
+        let idx = keep
+            .and_then(|k| self.entries.iter().position(|&e| self.entry_key(e).as_deref() == Some(k.as_str())))
+            .unwrap_or(0);
+        self.state.select((!self.entries.is_empty()).then_some(idx), 0);
+        self.file_idx = 0;
+        self.track_idx = 0;
+        self.clamp();
+    }
+
+    fn start_filter(&mut self, ctx: &Ctx) {
+        if !self.filter_active() {
+            self.before_filter = self.entry().and_then(|e| self.entry_key(e));
+        }
+        self.focus = Focus::List;
+        self.typing = true;
+        ctx.input.insert_mode(self.filter);
+    }
+
+    /// Esc: no filter, the selection from before it.
+    fn clear_filter(&mut self, ctx: &Ctx) {
+        ctx.input.clear_buffer(self.filter);
+        self.query.clear();
+        self.typing = false;
+        self.unresolved_only = false;
+        let keep = self.before_filter.take();
+        self.refilter(keep);
+    }
+
+    /// The hint line: the keys that work where the cursor is, from the real bindings.
+    fn hints(&self, ctx: &Ctx) -> String {
+        let nav = &ctx.config.keybinds.navigation;
+        let key = |want: fn(&CommonAction) -> bool, fallback: &str| binding(nav, want).unwrap_or_else(|| fallback.to_owned());
+        let enter = key(|a| matches!(a, CommonAction::Confirm), "Enter");
+        let close = key(|a| matches!(a, CommonAction::Close), "Esc");
+        if self.typing {
+            return format!("type to filter groups · ↑/↓ move · {enter} keep the filter · {close} clear it");
+        }
+        let left = key(|a| matches!(a, CommonAction::Left), "h");
+        let right = key(|a| matches!(a, CommonAction::Right), "l");
+        let search = key(|a| matches!(a, CommonAction::EnterSearch), "/");
+        let select = key(|a| matches!(a, CommonAction::Select), "Space");
+        let mut h = match self.focus {
+            Focus::List => format!(
+                "{enter} open the group · {right} files · {search} filter · {select} unresolved only ({})",
+                if self.unresolved_only { "on" } else { "off" }
+            ),
+            Focus::Files => {
+                format!("{enter} actions: preview, label, same recording · {left}/{right} switch list · {search} filter")
+            }
+            Focus::Tracks => format!(
+                "{enter} actions: accept the suggestion, which file it is, not owned · {left} files · {search} filter"
+            ),
+        };
+        if self.filter_active() && self.focus == Focus::List {
+            h.push_str(&format!(" · {close} clear the filter"));
+        }
+        h
     }
 
     fn load(&self, ctx: &Ctx) {
@@ -448,24 +579,17 @@ impl VersionsPane {
 
     /// Take a new report, keeping the selected entry (by name / id) and the positions inside it.
     fn take_report(&mut self, report: Report) {
-        let keep = self.entry().map(|e| match e {
-            Entry::Group(i) => self.report.groups.get(i).map(|g| g.name.clone()),
-            Entry::Shared(i) => self.report.shared.get(i).map(|s| s.id.clone()),
-        });
+        let keep = self.entry().map(|e| self.entry_key(e));
+        let (file_idx, track_idx) = (self.file_idx, self.track_idx);
         self.report = report;
-        self.entries = entries(&self.report);
-        self.state.set_content_and_viewport_len(self.entries.len(), self.list_area.height.into());
-        let idx = keep
-            .flatten()
-            .and_then(|k| {
-                self.entries.iter().position(|e| match *e {
-                    Entry::Group(i) => self.report.groups[i].name == k,
-                    Entry::Shared(i) => self.report.shared[i].id == k,
-                })
-            })
-            .unwrap_or(0);
-        self.state.select((!self.entries.is_empty()).then_some(idx), 0);
-        self.clamp();
+        let keep = keep.flatten();
+        let same = keep.is_some();
+        self.refilter(keep);
+        if same {
+            self.file_idx = file_idx;
+            self.track_idx = track_idx;
+            self.clamp();
+        }
     }
 
     fn clamp(&mut self) {
@@ -658,7 +782,7 @@ impl VersionsPane {
                 let open = t.decision.as_ref().is_none_or(|d| d.stale || d.group_changed);
                 let sug = match (&t.suggest, &t.decision) {
                     (Some(s), None) => {
-                        g.files.iter().position(|f| f.file == s.file).map_or_else(String::new, |i| format!("? {}", i + 1))
+                        g.files.iter().position(|f| f.file == s.file).map_or_else(String::new, |i| format!("file {}", i + 1))
                     }
                     _ => String::new(),
                 };
@@ -706,7 +830,15 @@ impl VersionsPane {
         let field = |name: &str, value: String| Line::from(vec![Span::styled(format!("{name}: "), key), Span::raw(value)]);
         let mut lines = vec![field("Track", format!("{} - {}  ({})", t.artist, t.title, t.track))];
         if let Some(s) = t.suggest.as_ref().filter(|_| t.decision.is_none()) {
-            lines.push(field("Suggestion", format!("{} — {}", base(&s.file), s.reason)));
+            lines.push(field("Suggested", base(&s.file).to_owned()));
+            lines.push(field("Why", human_reason(&s.reason)));
+        }
+        if t.longest_s > 0 {
+            lines.push(Line::from(Span::styled(
+                "Spotify records how long you listened each time; the longest listen is about the song's length if \
+                 you ever played it to the end.",
+                Style::default().add_modifier(Modifier::DIM),
+            )));
         }
         lines
     }
@@ -805,8 +937,11 @@ impl Pane for VersionsPane {
         if let Some(r) = fresh {
             self.take_report(r);
         }
-        let [left, right] = Layout::horizontal([Constraint::Percentage(30), Constraint::Min(40)]).spacing(2).areas(area);
-        let [list_area, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(left);
+        let [body, hint_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(area);
+        let [left, right] = Layout::horizontal([Constraint::Percentage(30), Constraint::Min(40)]).spacing(2).areas(body);
+        let filter_rows = u16::from(self.filter_active());
+        let [filter_area, list_area, footer] =
+            Layout::vertical([Constraint::Length(filter_rows), Constraint::Min(1), Constraint::Length(1)]).areas(left);
         self.list_area = list_area;
         self.state.set_content_and_viewport_len(self.entries.len(), list_area.height.saturating_sub(1).into());
 
@@ -836,6 +971,20 @@ impl Pane for VersionsPane {
             .row_highlight_style(focused(Focus::List).add_modifier(Modifier::REVERSED));
         frame.render_stateful_widget(table, list_area, self.state.as_render_state_ref());
 
+        if filter_rows > 0 {
+            let total = self.report.groups.len() + self.report.shared.len();
+            let mut text = format!("Filter: {}{}", self.query, if self.typing { "▏" } else { "" });
+            if self.unresolved_only {
+                text.push_str(" · unresolved only");
+            }
+            let count = format!(" {}/{total}", self.entries.len());
+            let [text_area, count_area] =
+                Layout::horizontal([Constraint::Min(1), Constraint::Length(count.chars().count() as u16)]).areas(filter_area);
+            let style = if self.typing { ctx.config.theme.highlight_border_style } else { ctx.config.as_text_style() };
+            frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), text_area);
+            frame.render_widget(Paragraph::new(Line::from(count)).style(ctx.config.as_text_style()), count_area);
+        }
+
         let open = open_items(&self.report);
         let mut preview = self.preview.lock().expect("preview lock");
         let preview_text = if preview.playing() { format!(" · preview: {}", preview.what) } else { String::new() };
@@ -855,7 +1004,7 @@ impl Pane for VersionsPane {
             Constraint::Length(head.len().max(1) as u16 + 1),
             Constraint::Length(files.len() as u16 + 2),
             Constraint::Min(3),
-            Constraint::Length(3),
+            Constraint::Length(9), // track, suggested file and why (both wrap), the listen-length note
         ])
         .areas(right);
         frame.render_widget(Paragraph::new(head).wrap(Wrap { trim: false }), head_area);
@@ -882,24 +1031,17 @@ impl Pane for VersionsPane {
                 Constraint::Length(21),
                 Constraint::Length(7),
                 Constraint::Length(21),
-                Constraint::Length(4),
+                Constraint::Length(9),
             ])
-            .header(Row::new(["Source", "Plays", "Album", "Played", "Longest", "Decision", "Sugg"]).style(label))
+            .header(Row::new(["Source", "Plays", "Album", "Played", "Longest", "Decision", "Suggested"]).style(label))
             .column_spacing(1)
             .row_highlight_style(focused(Focus::Tracks).add_modifier(Modifier::REVERSED));
             let mut ts = TableState::default().with_selected((self.focus == Focus::Tracks).then_some(self.track_idx));
             frame.render_stateful_widget(tracks_table, tracks_area, &mut ts);
         }
-        let mut info = if self.focus == Focus::Tracks { self.selected_track_lines(ctx) } else { Vec::new() };
-        info.push(Line::from(Span::styled(
-            match self.focus {
-                Focus::List => "Enter/l: into the group · j/k: move",
-                Focus::Files => "Enter: preview, label, same recording · h/l: lists",
-                Focus::Tracks => "Enter: which file this track is · h/l: lists",
-            },
-            dim,
-        )));
+        let info = if self.focus == Focus::Tracks { self.selected_track_lines(ctx) } else { Vec::new() };
         frame.render_widget(Paragraph::new(info).wrap(Wrap { trim: false }), info_area);
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(self.hints(ctx), dim))), hint_area);
         Ok(())
     }
 
@@ -917,6 +1059,30 @@ impl Pane for VersionsPane {
         // a download or a deletion changes the groups
         if matches!(event, UiEvent::Database | UiEvent::Reconnected) && is_visible {
             self.load(ctx);
+        }
+        Ok(())
+    }
+
+    fn handle_insert_mode(&mut self, kind: InputResultEvent, ctx: &mut Ctx) -> Result<()> {
+        match kind {
+            InputResultEvent::Push | InputResultEvent::Pop => {
+                self.query = ctx.input.value(self.filter);
+                let keep = self.entry().and_then(|e| self.entry_key(e));
+                self.refilter(keep);
+            }
+            InputResultEvent::Confirm => self.typing = false, // Enter keeps the filter
+            InputResultEvent::Cancel => self.clear_filter(ctx),
+            InputResultEvent::NoChange => {}
+        }
+        ctx.render()?;
+        Ok(())
+    }
+
+    fn handle_insert_nav(&mut self, down: bool, handled: &mut bool, ctx: &mut Ctx) -> Result<()> {
+        if self.typing {
+            self.move_in(down, ctx);
+            *handled = true;
+            ctx.render()?;
         }
         Ok(())
     }
@@ -972,6 +1138,16 @@ impl Pane for VersionsPane {
             CommonAction::Bottom if self.focus == Focus::List => self.state.last(),
             CommonAction::Confirm | CommonAction::ContextMenu => self.open_menu(ctx),
             CommonAction::Close if self.focus != Focus::List => self.focus = Focus::List,
+            CommonAction::EnterSearch | CommonAction::FocusInput => self.start_filter(ctx),
+            CommonAction::Select if self.focus == Focus::List => {
+                self.unresolved_only = !self.unresolved_only;
+                if self.unresolved_only && self.before_filter.is_none() && self.query.trim().is_empty() {
+                    self.before_filter = self.entry().and_then(|e| self.entry_key(e));
+                }
+                let keep = self.entry().and_then(|e| self.entry_key(e));
+                self.refilter(keep);
+            }
+            CommonAction::Close if self.filter_active() => self.clear_filter(ctx),
             _ => {
                 event.abandon(); // not ours: let global keys (tabs, playback) handle it
                 return Ok(());
@@ -1003,7 +1179,7 @@ mod tests {
         assert_eq!(r.version, 1);
         assert_eq!(open_items(&r), 3);
         assert_eq!(entries(&r), vec![Entry::Group(0), Entry::Group(1), Entry::Shared(0)]);
-        assert_eq!(decision_text(&r.groups[0].tracks[0], &r.groups[0].files), "OPEN");
+        assert_eq!(decision_text(&r.groups[0].tracks[0], &r.groups[0].files), "Unresolved");
         assert_eq!(music_dir(&r), PathBuf::from("/m"));
     }
 
@@ -1029,6 +1205,26 @@ mod tests {
         assert_eq!(args_label("Mix/a.mp3", "live"), ["versions", "label", "Mix/a.mp3", "live"]);
         assert_eq!(args_same("Mix/b.mp3", &["Mix/a.mp3".into()]), ["versions", "same", "Mix/b.mp3", "Mix/a.mp3"]);
         assert_eq!(args_shared_ok("mb:1"), ["versions", "shared-ok", "mb:1"]);
+    }
+
+    #[test]
+    fn filter_keeps_order_and_unresolved_only() {
+        let r: Report = serde_json::from_str(JSON).unwrap();
+        assert_eq!(entries_filtered(&r, "", false), entries(&r));
+        assert_eq!(entries_filtered(&r, "adagio", false), vec![Entry::Group(0)]);
+        assert_eq!(entries_filtered(&r, "tiesto", false), vec![Entry::Group(0)]); // "Tiësto" folded
+        assert_eq!(entries_filtered(&r, "", true), vec![Entry::Group(0), Entry::Shared(0)]);
+        assert_eq!(entries_filtered(&r, "song", true), Vec::<Entry>::new());
+    }
+
+    #[test]
+    fn reasons_read_as_minutes() {
+        assert_eq!(
+            human_reason("no live/remix/edit marker in the title; longest play 207 s, file 218 s; 443 s does not fit"),
+            "no live/remix/edit marker in the title; longest listen 3:27, file 3:38; 7:23 does not fit"
+        );
+        assert_eq!(human_reason("title says live"), "title says live");
+        assert_eq!(human_reason("12 songs"), "12 songs");
     }
 
     #[test]

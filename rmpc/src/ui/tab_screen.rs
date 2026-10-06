@@ -141,6 +141,21 @@ impl TabScreen {
         Ok(())
     }
 
+    /// rormpc: Up/Down while the focused pane's live filter takes text.
+    pub(in crate::ui) fn handle_insert_nav(
+        &mut self,
+        panes: &mut PaneContainer,
+        down: bool,
+        handled: &mut bool,
+        ctx: &mut Ctx,
+    ) -> Result<()> {
+        let Some(focused) = self.panes.panes_iter().find(|pane| pane.id == self.focused) else {
+            return Ok(());
+        };
+        let mut pane = panes.get_mut(&focused.pane, ctx)?;
+        pane_call!(pane, handle_insert_nav(down, handled, ctx))
+    }
+
     pub(in crate::ui) fn handle_action(
         &mut self,
         panes: &mut PaneContainer,

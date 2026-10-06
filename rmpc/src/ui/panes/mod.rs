@@ -433,6 +433,11 @@ pub(crate) trait Pane {
         Ok(())
     }
 
+    /// rormpc: Up/Down (Ctrl-n/Ctrl-p) while this pane's live filter takes text; set `handled` when used.
+    fn handle_insert_nav(&mut self, down: bool, handled: &mut bool, ctx: &mut Ctx) -> Result<()> {
+        Ok(())
+    }
+
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()>;
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
