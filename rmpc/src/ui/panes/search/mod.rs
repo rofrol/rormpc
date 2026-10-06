@@ -26,11 +26,9 @@ use crate::{
             GlobalAction,
             actions::{
                 AddKind,
-                AutoplayKind,
                 CopyContent,
                 CopyContentsKind,
                 DeleteKind,
-                Position,
                 RateKind,
                 SaveKind,
             },
@@ -729,20 +727,10 @@ impl SearchPane {
                 CommonAction::Rename => {}
                 CommonAction::Close => {}
                 CommonAction::Confirm if self.songs_dir.marked().is_empty() => {
-                    let (hovered_song_idx, items) = self.enqueue(true);
-                    let current_song_idx = ctx.current_song_index();
-
-                    if !items.is_empty() {
-                        Client::resolve_and_enqueue(
-                            ctx,
-                            items,
-                            Position::Replace,
-                            AutoplayKind::Hovered,
-                            current_song_idx,
-                            hovered_song_idx,
-                        );
+                    // rormpc: play the song now without replacing the queue (upstream replaced it with all results)
+                    if let Some(song) = self.songs_dir.selected() {
+                        crate::ui::rormpc_upnext::play_now(ctx, song.file.clone());
                     }
-
                     ctx.render()?;
                 }
                 CommonAction::Confirm => {}
@@ -924,6 +912,14 @@ impl SearchPane {
                 if !self.songs_dir.items.is_empty() {
                     let (_, enqueue) = self.enqueue(true);
                     if !enqueue.is_empty() {
+                        // rormpc: marked songs, else the one under the cursor, before the rest of the source
+                        let files: Vec<String> = self.items(false).map(|(_, song)| song.file.clone()).collect();
+                        if !files.is_empty() {
+                            section.add_item("Play next (Up next)", move |ctx| {
+                                crate::ui::rormpc_upnext::play_next(ctx, files.clone());
+                                Ok(())
+                            });
+                        }
                         let enqueue_clone = enqueue.clone();
                         section.add_item("Add all to queue", move |ctx| {
                             ctx.command(move |_, client| {
