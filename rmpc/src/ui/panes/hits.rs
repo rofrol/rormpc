@@ -1529,9 +1529,9 @@ impl Pane for HitsPane {
 
 const DECADES: [i32; 8] = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
 const TOPS: [(u32, u32); 3] = [(1, 10), (11, 20), (21, 50)];
-const GENRES: [&str; 18] = [
+const GENRES: [&str; 19] = [
     "rock", "pop", "hip hop", "r&b", "soul", "dance", "electronic", "disco", "funk", "country", "metal",
-    "folk", "latin", "jazz", "blues", "punk", "reggae", "classical",
+    "folk", "latin", "jazz", "blues", "punk", "reggae", "classical", "soundtrack",
 ];
 
 /// Nearest row at or after (`forward`) / before `i` the cursor may stop on: headings are skipped, and at either
