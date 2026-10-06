@@ -76,7 +76,11 @@ why), `+` arrived (the result reruns to show it as owned); the status line count
 `/` in the Queue (QueueActions `Find`) filters it as you type, inline, no window: the header line shows
 `FILTER / query  12/779`, rows that don't match are hidden and the rest keep their queue order. Every typed word
 must appear in artist, title, album or file name, in any order, diacritics folded ("zolw" finds "Żółw", "lodz"
-finds "Łódź"). While typing: ↑/↓ or Ctrl-n/Ctrl-p move among the shown rows (the cursor starts on the first match
+finds "Łódź"). When nothing matches exactly, typos are forgiven: the header says `Close matches (N)` and
+`0 exact · N close`, and each typed word may be a few edits (Damerau-Levenshtein, a swap of two letters counts as
+one) away from a word of the row: none for words of up to 3 letters, 1 for 4-7, 2 for 8 and more, at most 2 in the
+whole query; the last word may be unfinished. "beyonse" finds Beyoncé, "nigthcall" Nightcall; close matches are
+ranked by edits, then queue order. While typing: ↑/↓ or Ctrl-n/Ctrl-p move among the shown rows (the cursor starts on the first match
 after each keystroke), Backspace, Ctrl-w and Ctrl-u edit. Enter plays the selected song (by MPD song id), clears
 the filter and shows it in the whole queue; Esc clears the filter and puts the cursor and the scroll back where
 they were. The filtered rows are a view rebuilt from MPD's queue by song id whenever it changes, so nothing acts
@@ -126,7 +130,8 @@ Spotify album, first and last play, longest play, decision, suggestion). The foo
 says "clean".
 
 A hint line at the bottom shows the keys for where the cursor is, from the actual bindings. `/` filters the
-group list as you type (every typed word, diacritics folded; files and tracks inside a group are never hidden),
+group list as you type (every typed word, diacritics folded, close matches for typos as in the Queue; files and
+tracks inside a group are never hidden),
 ↑/↓ move while typing, Enter keeps the filter, Esc clears it and restores the selection; Space (Select) toggles
 "unresolved only". A suggestion reads "Suggested: <file>" and "Why: … longest listen 3:27, file 3:38": Spotify
 records how long you listened each time, so the longest listen is about the song's length if you ever played it
