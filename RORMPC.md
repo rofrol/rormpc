@@ -260,8 +260,8 @@ A mode of its own, independent of MPD's random: mpd-player draws the next song b
 nominates it with priority 1, below Up next (2-255); with random off it moves it right after the current song and
 the Up next requests (the queue's order changes as it plays). Either way a request always plays first. It
 excludes MPD's random: `w` turns random off, and random turned on (`x`, a phone, mpc) turns it off. Weights come from `musicdb sync` (hourly,
-`$XDG_STATE_HOME/rormpc/weights.json`): 1 for a song never played, up to 3 for songs played a lot lately (a play
-counts half after 60 days, log-compressed) or liked; a dislike makes it rare. One pick in five ignores the weights.
+`$XDG_STATE_HOME/rormpc/weights.json`): (1 + all its plays) ** 0.75, doubled for a like: 1 for a song never
+played, about 13 for one played 30 times; a dislike makes it rare. One pick in five ignores the weights.
 Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
 or off; `e` (HeardEnough) rests the playing song for 1, 3, 7, then 14 days and skips to the next (the Queue menu
 has it for the selected song, and "Back in the weighted shuffle"). Enter and Play next still play a resting song.
