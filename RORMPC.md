@@ -261,10 +261,14 @@ below Up next (2-255), so a request always plays first. Priorities steer MPD onl
 MPD's random (other clients see random on): `w` turns both on, or both off (the queue plays in order); `x` while
 it runs switches to plain random (random stays on, the mode turns off, `shuffle release`); random turned off by
 a phone or mpc turns the mode off. Nothing in the queue is moved. While the mode runs, the `x rnd` badge shows
-off and `w shuf` on. Weights come from `musicdb sync` (hourly,
-`$XDG_STATE_HOME/rormpc/weights.json`): (1 + all its plays) ** 0.75, doubled for a like: 1 for a song never
-played, about 13 for one played 30 times; a dislike makes it rare. One pick in five ignores the weights.
-Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
+off and `w shuf` on. How a song is chosen (mpd-player's shuffle module has the details): every 10 picks are
+a shuffled cycle of 7 familiar (heard in the last year: by plays, a like, skips, and how overdue the song is for
+its own usual gap between plays), 2 rediscovery (the heard songs that played longest ago) and 1 new (never heard,
+at most 5 a day). Skips lower a song's weight (early skip x0.6, late x0.85, fading over months) and rest it (48 h
+after an early skip, 12 h after a late one or a full play); a new song skipped early on two days rests 30 days.
+The shuffle's own picks don't raise a song's play count used for weights, so it does not feed on itself. Data:
+`musicdb sync` (hourly) writes `$XDG_STATE_HOME/rormpc/weights.json` from the play history and the scrobbler's
+skips; mpd-player adds what it saw since and logs its own picks to `auto.jsonl`. `w` (ToggleWeightedShuffle) turns it on
 or off; `e` (HeardEnough) rests the playing song for 1, 3, 7, then 14 days and skips to the next (the Queue menu
 has it for the selected song, and "Back in the weighted shuffle"). Enter and Play next still play a resting song.
 The Up next pane's second footer line shows the pick ("Then likely: … · may change") or why there is none. The theme
