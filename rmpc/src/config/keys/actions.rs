@@ -41,6 +41,8 @@ pub enum GlobalAction {
     ToggleConsume,
     ToggleSingleOnOff,
     ToggleConsumeOnOff,
+    /// rormpc: only turns consume off (it deletes played songs, which breaks the source and Up next)
+    ConsumeOff,
     TogglePause,
     Pause,
     Unpause,
@@ -92,6 +94,8 @@ pub enum GlobalActionFile {
     ToggleConsume,
     ToggleSingleOnOff,
     ToggleConsumeOnOff,
+    /// rormpc: only turns consume off (it deletes played songs, which breaks the source and Up next)
+    ConsumeOff,
     TogglePause,
     Pause,
     Unpause,
@@ -178,6 +182,7 @@ impl From<GlobalActionFile> for GlobalAction {
             GlobalActionFile::AddRandom => GlobalAction::AddRandom,
             GlobalActionFile::ToggleSingleOnOff => GlobalAction::ToggleSingleOnOff,
             GlobalActionFile::ToggleConsumeOnOff => GlobalAction::ToggleConsumeOnOff,
+            GlobalActionFile::ConsumeOff => GlobalAction::ConsumeOff,
             GlobalActionFile::Partition { name, autocreate } => {
                 GlobalAction::Partition { name, autocreate }
             }
@@ -230,6 +235,7 @@ impl ToDescription for GlobalAction {
             GlobalAction::AddRandom => "Add random songs to the queue".into(),
             GlobalAction::ToggleSingleOnOff => "Toggle single mode on or off, skipping oneshot".into(),
             GlobalAction::ToggleConsumeOnOff => "Toggle consume mode on or off, skipping oneshot".into(),
+            GlobalAction::ConsumeOff => "Turn consume off (never on: it deletes played songs from the queue)".into(),
             GlobalAction::Partition { name: Some(name), .. }=> format!("Switch to '{name}' partition").into(),
             GlobalAction::Partition { name: None, .. }=> "Open partition management modal".into(),
         }

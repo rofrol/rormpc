@@ -19,7 +19,7 @@ use ratatui::{
     widgets::Block,
 };
 use rmpc_mpd::{
-    commands::{State, idle::IdleEvent},
+    commands::{State, idle::IdleEvent, status::OnOffOneshot},
     errors::{ErrorCode, MpdError, MpdFailureResponse},
     mpd_client::{MpdClient, MpdCommand, ValueChange},
     proto_client::ProtoClient,
@@ -562,6 +562,17 @@ impl<'ui> Ui<'ui> {
                         client.consume(consume.cycle_skip_oneshot())?;
                         Ok(())
                     });
+                }
+                GlobalAction::ConsumeOff => {
+                    if matches!(ctx.status.consume, OnOffOneshot::Off) {
+                        status_info!("Consume is off (rormpc never turns it on)");
+                    } else {
+                        ctx.command(move |_, client| {
+                            client.consume(OnOffOneshot::Off)?;
+                            status_info!("Consume off: played songs stay in the queue (the ones already removed don't come back)");
+                            Ok(())
+                        });
+                    }
                 }
                 GlobalAction::TogglePause => {
                     if matches!(ctx.status.state, State::Play | State::Pause) {
