@@ -369,3 +369,28 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     uses the same record. No blanket "ignore the next change" flag: a natural end, Next or a queue edit can race
     with Previous. Persist the intent, then confirm the observed transition before marking it neutral; debounce
     key repeat.
+
+## Versions: audio fingerprint finds copies
+
+- [ ] Asked 2026-10-07 (screenshot): "Love Story (Disco Lines remix)" (official upload, 139 s) and "Love Story (Disco
+      Lines full remix)" (a re-upload by a "Central Bass Boost" channel, 137 s) are not detected as a copy. Facts:
+      they share a Versions group with no decision; dedupe only merges the same md5 or YouTube id; no MBIDs; the
+      Queue's "Remove duplicate entries (N)" only finds the same file queued twice. fpcalc is already used by
+      mbtag (AcoustID), not to compare files with each other.
+      Measured 2026-10-07: raw chromaprint (`fpcalc -raw`, first 120 s), share of equal bits at the best offset
+      within ±60 frames (~±7 s), over the 72 file pairs of the Versions groups: the same recording 0.87-0.99 (Love
+      Story 0.929, Nightcall 0.989, Take Five 0.979, 30 pairs at 0.88 or more); live, remix, edit and other
+      performances 0.51-0.69 (Rolling in the Deep live 0.53, Somebody That I Used to Know live 0.69); 0.75-0.83 in
+      between (Lucy Pearl, Oh Laura, Marvin Gaye, Wyclef Jean: maybe another master or edit). A bass-boosted
+      re-upload still matched; sped-up / nightcore (pitch and tempo change) is expected to break chromaprint and
+      is out of scope.
+      Consulted 2026-10-07 (MiMo; GPT-6.1 Sol was at its usage limit):
+  - In `musicdb versions`: compare files within a group only (never library-wide), fingerprints cached per (path,
+    size, mtime). A pair at 0.88 or more gets the suggestion "Same recording? audio match 93%" with the reason; one
+    key confirms the existing "Same recording: keep this file, merge the others…"; never merged by itself. 0.72-0.88:
+    "similar audio (another master or edit?)", no suggestion to merge. Recalibrate when the library grows.
+  - Default file to keep: the official channel / an MBID, then the longer (untrimmed) one, then the higher bitrate,
+    then more plays; shown with the reason, changeable before merging.
+  - Compare only the overlapping part at the best offset; a short intro or a trimmed end must not lower the score.
+  - The Queue item "Remove duplicate entries (N)" stays about the same file queued twice; rename it to "Remove
+    repeated entries (N)" so it is not read as "copies of a recording".
