@@ -326,6 +326,12 @@ impl QueuePane {
                     crate::ui::rormpc_playlists::open_add_to_playlist(ctx, targets, what);
                     Ok(())
                 });
+                let gap = crate::ui::rormpc_player::gap_seconds()
+                    .map_or_else(String::new, |g| if g > 0.0 { format!(" (now {g} s)") } else { " (now off)".to_owned() });
+                section.add_item(format!("Silence between songs…{gap}"), |ctx| {
+                    crate::ui::rormpc_player::open_gap_menu(ctx);
+                    Ok(())
+                });
                 section.add_item("Sources… (play the library or a playlist)", |ctx| {
                     crate::ui::rormpc_upnext::open_sources(ctx);
                     Ok(())

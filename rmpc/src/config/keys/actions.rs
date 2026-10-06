@@ -43,6 +43,8 @@ pub enum GlobalAction {
     ToggleConsumeOnOff,
     /// rormpc: only turns consume off (it deletes played songs, which breaks the source and Up next)
     ConsumeOff,
+    /// rormpc: choose the silence between songs (mpd-player)
+    ShowGapMenu,
     TogglePause,
     Pause,
     Unpause,
@@ -96,6 +98,8 @@ pub enum GlobalActionFile {
     ToggleConsumeOnOff,
     /// rormpc: only turns consume off (it deletes played songs, which breaks the source and Up next)
     ConsumeOff,
+    /// rormpc: choose the silence between songs (mpd-player)
+    ShowGapMenu,
     TogglePause,
     Pause,
     Unpause,
@@ -183,6 +187,7 @@ impl From<GlobalActionFile> for GlobalAction {
             GlobalActionFile::ToggleSingleOnOff => GlobalAction::ToggleSingleOnOff,
             GlobalActionFile::ToggleConsumeOnOff => GlobalAction::ToggleConsumeOnOff,
             GlobalActionFile::ConsumeOff => GlobalAction::ConsumeOff,
+            GlobalActionFile::ShowGapMenu => GlobalAction::ShowGapMenu,
             GlobalActionFile::Partition { name, autocreate } => {
                 GlobalAction::Partition { name, autocreate }
             }
@@ -236,6 +241,7 @@ impl ToDescription for GlobalAction {
             GlobalAction::ToggleSingleOnOff => "Toggle single mode on or off, skipping oneshot".into(),
             GlobalAction::ToggleConsumeOnOff => "Toggle consume mode on or off, skipping oneshot".into(),
             GlobalAction::ConsumeOff => "Turn consume off (never on: it deletes played songs from the queue)".into(),
+            GlobalAction::ShowGapMenu => "Choose the silence between songs (mpd-player)".into(),
             GlobalAction::Partition { name: Some(name), .. }=> format!("Switch to '{name}' partition").into(),
             GlobalAction::Partition { name: None, .. }=> "Open partition management modal".into(),
         }
