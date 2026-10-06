@@ -1,36 +1,32 @@
 //! rormpc: "Playing from" a source, plus a short "Up next" list that plays before the rest (TODO "Source + Up
-//! next", milestone 1). The whole queue stays in MPD, so phones, media keys and mpc keep working; rormpc only
-//! remembers what it did, in `$XDG_STATE_HOME/rormpc/source.json`:
+//! next"). The whole queue stays in MPD, so phones, media keys and mpc keep working.
 //!
 //! - the source: the whole library or a saved playlist, put in the queue by "Sources…" (it replaces the queue,
-//!   explicitly, and keeps Up next). When the queue no longer has the source's length, the header says
-//!   "modified": another client changed it, and nothing is rebuilt behind its back.
-//! - Up next: songs asked for with "Play next". With random on they get MPD priorities (distinct, decreasing, so
-//!   the first asked plays first; MPD resets a song's priority when it starts); with random off they are moved
-//!   right after the current song, in order. A song that was not in the queue is added, and deleted again after
-//!   it has played, so the source stays as it was; a song from the source keeps its place. Consume must be off.
-//!
-//! MPD song ids do not survive an MPD restart: entries whose id is gone are dropped.
+//!   explicitly, and keeps Up next). rormpc remembers it in `$XDG_STATE_HOME/rormpc/source.json`; when the queue no
+//!   longer has the source's length, the header says "modified": another client changed it, and nothing is
+//!   rebuilt behind its back.
+//! - Up next belongs to mpd-player (rormpc-tools), so it works with rormpc closed: rormpc sends it commands over
+//!   MPD messages (`upnext add FILE`, see rormpc_player) and shows its `upnext.json`. Without mpd-player, Enter
+//!   still plays a song (added after the current one, not removed afterwards) and Play next reports it.
 
 use std::{
     path::PathBuf,
     sync::{Mutex, OnceLock},
+    time::SystemTime,
 };
 
-use rmpc_mpd::{
-    commands::status::OnOffOneshot,
-    mpd_client::MpdClient,
-    proto_client::ProtoClient,
-    queue_position::QueuePosition,
-};
+use rmpc_mpd::{commands::status::OnOffOneshot, mpd_client::MpdClient, queue_position::QueuePosition};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     ctx::Ctx,
     shared::macros::{modal, status_error, status_info, status_warn},
-    ui::modals::{
-        confirm_modal::{Action, ConfirmModal},
-        menu::modal::MenuModal,
+    ui::{
+        modals::{
+            confirm_modal::{Action, ConfirmModal},
+            menu::modal::MenuModal,
+        },
+        rormpc_player,
     },
 };
 
@@ -38,8 +34,6 @@ use crate::{
 struct State {
     #[serde(default)]
     source: Option<Source>,
-    #[serde(default)]
-    up_next: Vec<Entry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,14 +43,6 @@ struct Source {
     name: String,
     /// songs the source put in the queue (without the added Up next songs)
     len: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Entry {
-    id: u32,
-    file: String,
-    /// added to the queue for Up next (deleted after it played), not part of the source
-    added: bool,
 }
 
 fn path() -> PathBuf {
@@ -86,108 +72,8 @@ fn save(s: &State) {
     }
 }
 
-/// Queue ids that are waiting in Up next, in play order (for the badge).
-pub fn up_next_ids() -> Vec<u32> {
-    state().lock().map(|s| s.up_next.iter().map(|e| e.id).collect()).unwrap_or_default()
-}
-
-/// "Playing from: Hits 1980s top100 · Up next 2", or None before any source was chosen.
-pub fn header(ctx: &Ctx) -> Option<String> {
-    let s = state().lock().ok()?;
-    let up = s.up_next.len();
-    let src = s.source.as_ref().map(|src| {
-        let added = s.up_next.iter().filter(|e| e.added).count();
-        let modified = ctx.queue.len().saturating_sub(added) != src.len;
-        let name = if src.kind == "library" { "Whole library".to_owned() } else { src.name.clone() };
-        format!("Playing from: {name}{}", if modified { " (modified)" } else { "" })
-    });
-    match (src, up) {
-        (None, 0) => None,
-        (None, n) => Some(format!(" Up next {n} ")),
-        (Some(src), 0) => Some(format!(" {src} ")),
-        (Some(src), n) => Some(format!(" {src} · Up next {n} ")),
-    }
-}
-
-/// Put songs into Up next (marked rows, else the cursor row), after the ones already waiting.
-pub fn play_next(ctx: &Ctx, files: Vec<String>) {
-    if files.is_empty() {
-        return;
-    }
-    if !matches!(ctx.status.consume, OnOffOneshot::Off) {
-        return status_warn!("Up next needs consume off (consume would delete the source as it plays)");
-    }
-    ctx.command(move |_, client| {
-        let random = client.get_status()?.random;
-        let queue = client.playlist_info()?.unwrap_or_default();
-        let current = client.get_status()?.songid;
-        let mut st = state().lock().map_err(|_| anyhow::anyhow!("Up next state poisoned"))?.clone();
-        st.up_next.retain(|e| queue.iter().any(|s| s.id == e.id) && Some(e.id) != current);
-        let mut added_now = 0;
-        let mut moved = 0;
-        for file in files {
-            if let Some(pos) = st.up_next.iter().position(|e| e.file == file) {
-                // asked again: it goes to the top (a no-op when it is already first)
-                if pos > 0 {
-                    let e = st.up_next.remove(pos);
-                    st.up_next.insert(0, e);
-                    moved += 1;
-                }
-                continue;
-            }
-            let existing = queue.iter().find(|s| s.file == file && Some(s.id) != current).map(|s| s.id);
-            let (id, added) = match existing {
-                Some(id) => (id, false),
-                None => {
-                    client.add(&file, None)?;
-                    let q = client.playlist_info()?.unwrap_or_default();
-                    let Some(song) = q.iter().rev().find(|s| s.file == file) else { continue };
-                    (song.id, true)
-                }
-            };
-            st.up_next.push(Entry { id, file, added });
-            added_now += 1;
-        }
-        apply_order(client, &st, random)?;
-        let n = st.up_next.len();
-        if let Ok(mut g) = state().lock() {
-            *g = st.clone();
-        }
-        save(&st);
-        if moved > 0 && added_now == 0 {
-            status_info!("Already in Up next: moved to next ({n} waiting)");
-        } else {
-            status_info!("Up next: {added_now} added, {n} waiting");
-        }
-        Ok(())
-    });
-}
-
-/// Enter on a song in a browser pane: play it now without touching the rest of the queue. A song already in the
-/// queue plays from its entry; another one is added and played, and (as an Up next entry marked `added`) leaves
-/// the queue again after it played, so the source stays as it was.
-pub fn play_now(ctx: &Ctx, file: String) {
-    if crate::ui::rormpc_actions::use_existing_entry(ctx, &file, true) {
-        return;
-    }
-    let after_current = ctx.current_song().is_some();
-    ctx.command(move |_, client| {
-        // right after the current song, so with random off the source goes on from there afterwards
-        client.add(&file, after_current.then_some(QueuePosition::RelativeAdd(0)))?;
-        let queue = client.playlist_info()?.unwrap_or_default();
-        let Some(id) = queue.iter().rev().find(|s| s.file == file).map(|s| s.id) else { return Ok(()) };
-        client.play_id(id)?;
-        if let Ok(mut st) = state().lock() {
-            st.up_next.retain(|e| e.file != file);
-            st.up_next.insert(0, Entry { id, file, added: true });
-            save(&st);
-        }
-        Ok(())
-    });
-}
-
-/// One waiting Up next entry, for the Up next pane.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One Up next entry from mpd-player's upnext.json.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Waiting {
     pub id: u32,
     pub file: String,
@@ -195,149 +81,138 @@ pub struct Waiting {
     pub added: bool,
 }
 
-/// The songs waiting in Up next, in play order (the playing one is not waiting any more).
-pub fn waiting(ctx: &Ctx) -> Vec<Waiting> {
-    let current = ctx.current_song().map(|s| s.id);
-    state()
-        .lock()
-        .map(|s| {
-            s.up_next
-                .iter()
-                .filter(|e| Some(e.id) != current)
-                .map(|e| Waiting { id: e.id, file: e.file.clone(), added: e.added })
-                .collect()
-        })
-        .unwrap_or_default()
+#[derive(Debug, Clone, Default, Deserialize)]
+struct UpNextFile {
+    #[serde(default)]
+    entries: Vec<Waiting>,
+    #[serde(default)]
+    playing: Option<Waiting>,
 }
 
-/// Change Up next in MPD's command thread: `f` edits the list and returns the entries it dropped. A dropped entry
-/// that was added only for Up next leaves the queue; a source song loses its priority and stays in the source.
-fn edit(ctx: &Ctx, f: impl FnOnce(&mut Vec<Entry>) -> Vec<Entry> + Send + 'static) {
+/// mpd-player's upnext.json, read again only when the file changed (it is looked at on every render).
+fn upnext_file() -> UpNextFile {
+    static CACHE: OnceLock<Mutex<(Option<SystemTime>, UpNextFile)>> = OnceLock::new();
+    let p = rormpc_player::state_path("upnext");
+    let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
+    let cache = CACHE.get_or_init(|| Mutex::new((None, UpNextFile::default())));
+    let Ok(mut c) = cache.lock() else { return UpNextFile::default() };
+    if c.0 != mtime || mtime.is_none() {
+        c.1 = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        c.0 = mtime;
+    }
+    c.1.clone()
+}
+
+/// The songs waiting in Up next, in play order.
+pub fn waiting(_ctx: &Ctx) -> Vec<Waiting> {
+    upnext_file().entries
+}
+
+/// Queue ids that are waiting in Up next, in play order (for the badge).
+pub fn up_next_ids() -> Vec<u32> {
+    upnext_file().entries.iter().map(|e| e.id).collect()
+}
+
+/// "Playing from: Hits 1980s top100 · Up next 2", or None before any source was chosen.
+pub fn header(ctx: &Ctx) -> Option<String> {
+    let s = state().lock().ok()?;
+    let up = upnext_file();
+    let n = up.entries.len();
+    let src = s.source.as_ref().map(|src| {
+        let added = up.entries.iter().chain(up.playing.iter()).filter(|e| e.added).count();
+        let modified = ctx.queue.len().saturating_sub(added) != src.len;
+        let name = if src.kind == "library" { "Whole library".to_owned() } else { src.name.clone() };
+        format!("Playing from: {name}{}", if modified { " (modified)" } else { "" })
+    });
+    match (src, n) {
+        (None, 0) => None,
+        (None, n) => Some(format!(" Up next {n} ")),
+        (Some(src), 0) => Some(format!(" {src} ")),
+        (Some(src), n) => Some(format!(" {src} · Up next {n} ")),
+    }
+}
+
+/// Send Up next commands to mpd-player, in order; say so when it is not running.
+fn send(ctx: &Ctx, msgs: Vec<String>) {
     ctx.command(move |_, client| {
-        let random = client.get_status()?.random;
-        let current = client.get_status()?.songid;
-        let mut st = state().lock().map_err(|_| anyhow::anyhow!("Up next state poisoned"))?.clone();
-        // the playing entry stays (it leaves when the song changes); only waiting ones are edited
-        let playing: Vec<Entry> = st.up_next.iter().filter(|e| Some(e.id) == current).cloned().collect();
-        let mut list: Vec<Entry> = st.up_next.into_iter().filter(|e| Some(e.id) != current).collect();
-        for e in f(&mut list) {
-            if client.playlist_id(e.id).ok().flatten().is_some_and(|s| s.file == e.file) {
-                if e.added {
-                    client.delete_id(e.id)?;
-                } else if random {
-                    client.prio_id(0, e.id)?;
-                }
-            }
+        if !client.channels()?.0.iter().any(|c| c == rormpc_player::CHANNEL) {
+            status_error!("Up next needs mpd-player, which is not running (rormpc_install.sh companions starts it)");
+            return Ok(());
         }
-        st.up_next = playing.into_iter().chain(list).collect();
-        let waiting: Vec<Entry> = st.up_next.iter().filter(|e| Some(e.id) != current).cloned().collect();
-        apply_order(client, &State { source: None, up_next: waiting }, random)?;
-        if let Ok(mut g) = state().lock() {
-            *g = st.clone();
+        for m in &msgs {
+            client.send_message(rormpc_player::CHANNEL, m)?;
         }
-        save(&st);
+        Ok(())
+    });
+}
+
+/// Put songs into Up next (marked rows, else the cursor row), after the ones already waiting; a song already
+/// waiting moves to the top.
+pub fn play_next(ctx: &Ctx, files: Vec<String>) {
+    if files.is_empty() {
+        return;
+    }
+    if !matches!(ctx.status.consume, OnOffOneshot::Off) {
+        return status_warn!("Up next needs consume off (consume would delete the source as it plays). c turns it off");
+    }
+    let waiting = up_next_ids().len();
+    let n = files.len();
+    let already = files.iter().filter(|f| upnext_file().entries.iter().any(|e| &e.file == *f)).count();
+    send(ctx, files.into_iter().map(|f| format!("upnext add {f}")).collect());
+    if already == n {
+        status_info!("Already in Up next: moved to next");
+    } else {
+        status_info!("Up next: {} added, {} waiting", n - already, waiting + n - already);
+    }
+}
+
+/// Enter on a song in a browser pane: play it now without touching the rest of the queue. A song already in the
+/// queue plays from its entry; another one is added right after the current song, played, and leaves the queue
+/// again after it played (mpd-player), so the source stays as it was.
+pub fn play_now(ctx: &Ctx, file: String) {
+    if crate::ui::rormpc_actions::use_existing_entry(ctx, &file, true) {
+        return;
+    }
+    let after_current = ctx.current_song().is_some();
+    ctx.command(move |_, client| {
+        if client.channels()?.0.iter().any(|c| c == rormpc_player::CHANNEL) {
+            client.send_message(rormpc_player::CHANNEL, &format!("upnext playnow {file}"))?;
+            return Ok(());
+        }
+        // no mpd-player: play it anyway, it just stays in the queue
+        client.add(&file, after_current.then_some(QueuePosition::RelativeAdd(0)))?;
+        let queue = client.playlist_info()?.unwrap_or_default();
+        if let Some(id) = queue.iter().rev().find(|s| s.file == file).map(|s| s.id) {
+            client.play_id(id)?;
+        }
+        status_warn!("mpd-player is not running: the song stays in the queue after it played");
         Ok(())
     });
 }
 
 /// Move the waiting entry `id` by `delta` places (negative: earlier).
 pub fn move_entry(ctx: &Ctx, id: u32, delta: isize) {
-    edit(ctx, move |list| {
-        if let Some(pos) = list.iter().position(|e| e.id == id) {
-            let to = (pos as isize + delta).clamp(0, list.len() as isize - 1) as usize;
-            let e = list.remove(pos);
-            list.insert(to, e);
-        }
-        Vec::new()
-    });
+    send(ctx, vec![format!("upnext move {id} {delta}")]);
 }
 
 /// Make the waiting entry `id` the next one.
 pub fn make_next(ctx: &Ctx, id: u32) {
-    edit(ctx, move |list| {
-        if let Some(pos) = list.iter().position(|e| e.id == id) {
-            let e = list.remove(pos);
-            list.insert(0, e);
-        }
-        Vec::new()
-    });
+    send(ctx, vec![format!("upnext first {id}")]);
 }
 
 /// Drop the waiting entry `id` from Up next.
 pub fn remove(ctx: &Ctx, id: u32) {
-    edit(ctx, move |list| {
-        let (gone, keep): (Vec<Entry>, Vec<Entry>) = std::mem::take(list).into_iter().partition(|e| e.id == id);
-        *list = keep;
-        gone
-    });
+    send(ctx, vec![format!("upnext remove {id}")]);
 }
 
 /// Drop every waiting entry.
 pub fn clear(ctx: &Ctx) {
-    edit(ctx, std::mem::take);
+    send(ctx, vec!["upnext clear".to_owned()]);
 }
 
-/// Play the waiting entry `id` now; it leaves Up next when the next song starts.
+/// Play the waiting entry `id` now.
 pub fn play_entry(ctx: &Ctx, id: u32) {
-    edit(ctx, move |list| {
-        if let Some(pos) = list.iter().position(|e| e.id == id) {
-            let e = list.remove(pos);
-            list.insert(0, e);
-        }
-        Vec::new()
-    });
-    ctx.command(move |_, client| Ok(client.play_id(id)?));
-}
-
-/// Random on: priorities 255, 254, … in Up next order. Random off: the entries right after the current song.
-fn apply_order(client: &mut impl ClientLike, st: &State, random: bool) -> anyhow::Result<()> {
-    for (k, e) in st.up_next.iter().enumerate() {
-        if random {
-            client.prio_id(255u32.saturating_sub(k as u32).max(1), e.id)?;
-        } else {
-            client.move_id(e.id, QueuePosition::RelativeAdd(k))?;
-        }
-    }
-    Ok(())
-}
-
-/// The few client calls this module needs, so `prioid` (not in rmpc-mpd) is one raw command.
-trait ClientLike {
-    fn prio_id(&mut self, prio: u32, id: u32) -> anyhow::Result<()>;
-    fn move_id(&mut self, id: u32, to: QueuePosition) -> anyhow::Result<()>;
-}
-
-impl<T: MpdClient + ProtoClient> ClientLike for T {
-    fn prio_id(&mut self, prio: u32, id: u32) -> anyhow::Result<()> {
-        self.execute(&format!("prioid {prio} {id}"))?;
-        self.read_ok()?;
-        Ok(())
-    }
-
-    fn move_id(&mut self, id: u32, to: QueuePosition) -> anyhow::Result<()> {
-        MpdClient::move_id(self, id, to)?;
-        Ok(())
-    }
-}
-
-/// Called when the playing song changes: the previous song, if it was an Up next entry, has played; one that
-/// was added only for Up next leaves the queue again.
-pub fn song_changed(ctx: &Ctx, previous: Option<u32>) {
-    let Some(prev) = previous else { return };
-    let Ok(mut st) = state().lock() else { return };
-    let Some(pos) = st.up_next.iter().position(|e| e.id == prev) else { return };
-    let entry = st.up_next.remove(pos);
-    save(&st);
-    drop(st);
-    if entry.added {
-        ctx.command(move |_, client| {
-            // re-check: another client may have removed or reused it
-            if client.playlist_id(entry.id).ok().flatten().is_some_and(|s| s.file == entry.file) {
-                client.delete_id(entry.id)?;
-            }
-            Ok(())
-        });
-    }
+    send(ctx, vec![format!("upnext play {id}")]);
 }
 
 /// "Sources…": the whole library or a saved playlist, played now (it replaces the queue; Up next stays).
@@ -388,16 +263,16 @@ pub fn open_sources(ctx: &Ctx) {
 
 fn confirm_replace(ctx: &Ctx, kind: String, name: String) {
     let what = if kind == "library" { "the whole library".to_owned() } else { format!("playlist {name}") };
-    let up = state().lock().map(|s| s.up_next.len()).unwrap_or(0);
+    let waiting = upnext_file().entries;
+    let up = waiting.len();
     let message = vec![format!(
         "Play {what} now?\n\nThe queue is replaced by it and playback starts (the current song is cut).{}",
         if up > 0 { format!("\nUp next ({up}) is kept and plays first.") } else { String::new() }
     )];
     let go = move |ctx: &Ctx| -> anyhow::Result<()> {
         let (kind, name) = (kind.clone(), name.clone());
+        let first = waiting.first().map(|e| e.file.clone());
         ctx.command(move |_, client| {
-            let random = client.get_status()?.random;
-            let old = state().lock().map(|s| s.clone()).unwrap_or_default();
             client.clear()?;
             if kind == "library" {
                 client.add("/", None)?;
@@ -405,29 +280,18 @@ fn confirm_replace(ctx: &Ctx, kind: String, name: String) {
                 client.load_playlist(&name, None)?;
             }
             let len = client.playlist_info()?.map_or(0, |q| q.len());
-            let mut st = State { source: Some(Source { kind, name, len }), up_next: Vec::new() };
-            // Up next survives: same files, new ids (the clear dropped the old ones)
-            let queue = client.playlist_info()?.unwrap_or_default();
-            for e in old.up_next {
-                match queue.iter().find(|s| s.file == e.file) {
-                    Some(s) => st.up_next.push(Entry { id: s.id, file: e.file, added: false }),
-                    None => {
-                        client.add(&e.file, None)?;
-                        if let Some(s) = client.playlist_info()?.unwrap_or_default().iter().rev().find(|s| s.file == e.file) {
-                            st.up_next.push(Entry { id: s.id, file: e.file, added: true });
-                        }
-                    }
-                }
-            }
-            apply_order(client, &st, random)?;
-            match st.up_next.first() {
-                Some(e) => client.play_id(e.id)?,
-                None => client.play()?,
-            }
+            let st = State { source: Some(Source { kind, name, len }) };
             if let Ok(mut g) = state().lock() {
                 *g = st.clone();
             }
             save(&st);
+            // mpd-player keeps Up next across the replaced queue (same files, new ids); its first song plays first
+            match first {
+                Some(f) if client.channels()?.0.iter().any(|c| c == rormpc_player::CHANNEL) => {
+                    client.send_message(rormpc_player::CHANNEL, &format!("upnext playnow {f}"))?;
+                }
+                _ => client.play()?,
+            }
             status_info!("Playing from {}", if st.source.as_ref().is_some_and(|s| s.kind == "library") { "the whole library" } else { "the playlist" });
             Ok(())
         });

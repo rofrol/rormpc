@@ -22,7 +22,7 @@ pub const CHANNEL: &str = "rormpc";
 /// runs; this only bounds the wait when it does not
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
 
-fn state_path(module: &str) -> PathBuf {
+pub fn state_path(module: &str) -> PathBuf {
     let base = std::env::var("XDG_STATE_HOME").map(PathBuf::from).unwrap_or_else(|_| {
         PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/state")
     });
