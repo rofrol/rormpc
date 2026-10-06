@@ -228,12 +228,12 @@ pub fn toggle_shuffle(ctx: &Ctx) {
             if on {
                 let s = shuffle_state();
                 if s.active {
-                    "Weighted shuffle on: the next song is drawn by plays and likes".to_owned()
+                    "Weighted shuffle on (random off): the next song is drawn by plays and likes".to_owned()
                 } else {
                     format!("Weighted shuffle on, waiting: {}", s.reason)
                 }
             } else {
-                "Weighted shuffle off: MPD's plain random".to_owned()
+                "Weighted shuffle off: the queue plays in order (x for MPD's random)".to_owned()
             }
         },
     );

@@ -258,7 +258,8 @@ mpd-player shows as `gap`), consume on as a red ` CONSUME c=off `.
 
 A mode of its own, independent of MPD's random: mpd-player draws the next song by weight. With random on it
 nominates it with priority 1, below Up next (2-255); with random off it moves it right after the current song and
-the Up next requests (the queue's order changes as it plays). Either way a request always plays first. Weights come from `musicdb sync` (hourly,
+the Up next requests (the queue's order changes as it plays). Either way a request always plays first. It
+excludes MPD's random: `w` turns random off, and random turned on (`x`, a phone, mpc) turns it off. Weights come from `musicdb sync` (hourly,
 `$XDG_STATE_HOME/rormpc/weights.json`): 1 for a song never played, up to 3 for songs played a lot lately (a play
 counts half after 60 days, log-compressed) or liked; a dislike makes it rare. One pick in five ignores the weights.
 Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
