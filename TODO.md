@@ -6,7 +6,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 
 - [x] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the
       classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
-- [ ] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a
+- [x] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a
       decision" which one to build ("Soon: playing-song indicator in Hits").
 - [ ] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral
       outcome, prev transitions logged for `musicdb import-skips`, Hammerspoon and rormpc sending it through the
@@ -67,8 +67,27 @@ another key, and a later explicit successful play clears it. No playback retry o
 
 ## Soon: playing-song indicator in Hits (design only)
 
-- [ ] Consult the models and prepare visual mockups of playing-song indicators in Hits (for example, a
+- [x] Consult the models and prepare visual mockups of playing-song indicators in Hits (for example, a
       `▶` beside `0` in the Next column). Show the variants to the user for review before implementing one.
+
+Mockups 2026-10-07 (consulted MiMo; GPT-6.1 Sol was at its usage limit). Today the playing song shows only `0` in
+Next; the Queue paints its row in `highlighted_item_style` (#7aa0cd bold), the cursor row is black on #7aa0cd.
+`»` marks the row painted in #7aa0cd bold, `[...]` the cursor row:
+
+    A  row only (as in the Queue)            B  row + glyph                       C  glyph only
+     Rank  %  ✓ ♥ Next Artist   Title        Rank  %  ✓ ♥ Next Artist   Title     Rank  %  ✓ ♥ Next Artist   Title
+     #3   97% ✓   -1   Toto     Africa        #3   97% ✓   -1   Toto     Africa     #3   97% ✓   -1   Toto     Africa
+    »#4   96% ✓ ♥ 0    Queen    Flash        »#4   96% ✓ ♥ ▶0   Queen    Flash      #4   96% ✓ ♥ ▶0   Queen    Flash
+     #5   95% ✓   ↑1   Adele    Skyfall       #5   95% ✓   ↑1   Adele    Skyfall    #5   95% ✓   ↑1   Adele    Skyfall
+
+    D  B with a paused glyph                 E  cursor on the playing row (B)
+    »#4   96% ✓ ♥ ⏸0   Queen    Flash        [#4   96% ✓ ♥ ▶0   Queen    Flash]   the glyph keeps it visible
+
+  - MiMo ranks A first (same model as the Queue, no column change), B second (survives no-colour terminals and
+    the cursor sitting on the row, where A's colour disappears under the cursor style). My pick: B.
+  - Pitfalls: `▶` and `⏸` are East Asian ambiguous width (2 cells in some fonts) and would shift `↑10`/`-2`;
+    a hidden (dimmed) owned row can play, so the paint must override DIM; a playing song outside the filter
+    gets no phantom row (Shift+C and the footer already cover it); the same file in two rows lights both.
 
 ## Soon: missing film score / soundtrack genre
 
@@ -468,3 +487,5 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)?
       Checked: main is 5 commits ahead of origin (the plan view's mpd-player swaps and the soundtrack genre); the
       installed tools are v0.2.30, so neither works in the installed rormpc until a release.
+- [ ] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)?
+      Checked: mockups and MiMo's ranking in "Soon: playing-song indicator in Hits"; Sol was at its usage limit.
