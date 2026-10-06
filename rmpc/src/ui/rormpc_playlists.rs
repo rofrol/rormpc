@@ -1,6 +1,7 @@
 //! rormpc: "Add to playlist…" from the Queue and Hits. Unlike upstream's save modal it shows which stored playlists
 //! already have the songs: "✓" when all of them are there (Enter does nothing), "3/5" when some are (Enter adds
-//! the missing ones). Adding never turns into removing. Membership is matched on the exact MPD URI.
+//! the missing ones). Adding never turns into removing. Membership is matched on the exact MPD URI. The genres the
+//! songs share (`hits genres of`) are offered as names for a new playlist, unless a playlist has that name already.
 
 use std::collections::HashSet;
 
@@ -33,7 +34,16 @@ pub fn open_add_to_playlist(ctx: &Ctx, files: Vec<String>, what: String) {
         Err(err) => return status_error!("Cannot read the playlists: {err}"),
     };
     playlists.sort_by_key(|(name, _)| name.to_lowercase());
-    let (new_files, total) = (files.clone(), files.len());
+    let taken: HashSet<String> = playlists.iter().map(|(name, _)| name.to_lowercase()).collect();
+    // no suggestions when `hits` is missing or older: the menu works without them
+    let suggestions: Vec<String> = crate::ui::rormpc_genres::genres_of(&files)
+        .map(|songs| crate::ui::rormpc_genres::shared_genres(&songs))
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|g| !taken.contains(&g.to_lowercase()))
+        .take(5)
+        .collect();
+    let (new_files, genre_files, total) = (files.clone(), files.clone(), files.len());
     let menu = MenuModal::new(ctx)
         .width(70)
         .input_section(ctx, "New playlist", move |mut sect| {
@@ -48,6 +58,24 @@ pub fn open_add_to_playlist(ctx: &Ctx, files: Vec<String>, what: String) {
                 }
             });
             Some(sect)
+        })
+        .list_section(ctx, move |mut section| {
+            if suggestions.is_empty() {
+                return None;
+            }
+            section.add_item("New playlist named after a genre:", |_| Ok(()));
+            for genre in suggestions {
+                let files = genre_files.clone();
+                section.add_item(format!("  + {genre}"), move |ctx| {
+                    ctx.command(move |_, client| {
+                        client.create_playlist(&genre, files)?;
+                        status_info!("Created playlist {genre}");
+                        Ok(())
+                    });
+                    Ok(())
+                });
+            }
+            Some(section)
         })
         .list_section(ctx, move |mut section| {
             section.add_item(format!("Add {what} to:"), |_| Ok(()));
