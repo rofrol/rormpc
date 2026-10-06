@@ -1238,6 +1238,8 @@ enum FilterRow {
     To,
     Top(usize),
     Genre(usize),
+    /// sets every genre row back to off, including exclusions scrolled out of view
+    ClearGenres,
     /// opens an input for genres without a checkbox
     AddGenre,
     /// the genre explorer: every genre of the library with counts
@@ -1315,7 +1317,9 @@ impl Filters {
         }
         rows.push(FilterRow::Heading("Top %"));
         rows.extend((0..TOPS.len()).map(FilterRow::Top));
-        rows.push(FilterRow::Heading("Genres  +in  -out"));
+        // the heading counts the ticked rows (see `line`): the list is taller than the screen, and a "[-] country"
+        // below the fold kept filtering while the visible rows were all off
+        rows.extend([FilterRow::Heading("Genres"), FilterRow::ClearGenres]);
         rows.extend((0..self.genres.len()).map(FilterRow::Genre));
         rows.extend([FilterRow::AddGenre, FilterRow::Explore]);
         rows.push(FilterRow::Heading("Options"));
@@ -1334,6 +1338,17 @@ impl Filters {
             .map(|(d, _)| format!("{}-{}", d, d + 9))
             .collect();
         if ranges.is_empty() { "1980-1989".to_owned() } else { ranges.join(",") }
+    }
+
+    /// "Genres: all", "Genres: +2", "Genres: -1" or "Genres: +2 -1": counts, since names don't fit 24 columns.
+    fn genres_heading(&self) -> String {
+        let count = |sign: i8| self.genres.iter().filter(|(_, s)| *s == sign).count();
+        let parts: Vec<String> = [(count(1), '+'), (count(-1), '-')]
+            .into_iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, sign)| format!("{sign}{n}"))
+            .collect();
+        format!("Genres: {}", if parts.is_empty() { "all".to_owned() } else { parts.join(" ") })
     }
 
     /// Comma-separated, so names with spaces ("hip hop") survive the round trip through `hits`.
@@ -1458,12 +1473,14 @@ impl Filters {
             FilterRow::To => format!("  to   ‹ {} ›", self.to),
             // every box sits at the same 2-cell indent under its heading: a hanging label per group made the
             // columns step like an expandable tree
+            FilterRow::Heading("Genres") => self.genres_heading(),
             FilterRow::Heading(title) => title.to_owned(),
             FilterRow::Top(i) => format!("  {} {}-{}%", check(self.tops[i]), TOPS[i].0, TOPS[i].1),
             FilterRow::Genre(i) => {
                 let mark = match self.genres[i].1 { 1 => "+", -1 => "-", _ => " " };
                 format!("  [{mark}] {}", self.genres[i].0)
             }
+            FilterRow::ClearGenres => "  × clear genres".to_owned(),
             FilterRow::AddGenre => "  + other genre…".to_owned(),
             FilterRow::Explore => "  ⋯ explore genres…".to_owned(),
             FilterRow::Owned => format!("  {} owned only", check(self.owned)),
@@ -1481,6 +1498,7 @@ impl Filters {
             FilterRow::Decade(i) => self.decades[i] = !self.decades[i],
             FilterRow::Top(i) => self.tops[i] = !self.tops[i],
             FilterRow::Genre(i) => self.genres[i].1 = match self.genres[i].1 { 0 => 1, 1 => -1, _ => 0 },
+            FilterRow::ClearGenres => self.genres.iter_mut().for_each(|(_, s)| *s = 0),
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
             FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::Apply => {}
@@ -1569,6 +1587,19 @@ mod tests {
         let args = f.args("out.json");
         assert!(args.contains(&"--genre=-country".to_owned()));
         assert!(!args.contains(&"-g".to_owned()));
+    }
+
+    #[test]
+    fn genres_heading_counts_and_clear() {
+        let mut f = Filters::default();
+        assert_eq!(f.genres_heading(), "Genres: all");
+        f.add_genres("-country");
+        assert_eq!(f.genres_heading(), "Genres: -1");
+        f.add_genres("+rock, +pop, italo-disco");
+        assert_eq!(f.genres_heading(), "Genres: +3 -1");
+        f.toggle(FilterRow::ClearGenres);
+        assert_eq!(f.genres_heading(), "Genres: all");
+        assert_eq!(f.genre_spec(), "");
     }
 
     #[test]
