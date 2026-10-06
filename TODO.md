@@ -4,7 +4,7 @@
 
 Triaged 2026-10-07 from the sections below; each item points at its section for the details.
 
-- [ ] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the
+- [x] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the
       classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
 - [ ] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a
       decision" which one to build ("Soon: playing-song indicator in Hits").
@@ -72,8 +72,15 @@ another key, and a later explicit successful play clears it. No playback retry o
 
 ## Soon: missing film score / soundtrack genre
 
-- [ ] Investigate why the film score / soundtrack genre is missing from songs such as "Cast Away Theme"
+- [x] Investigate why the film score / soundtrack genre is missing from songs such as "Cast Away Theme"
       by Alan Silvestri, and make that classification available in Hits genre filters.
+
+Done 2026-10-07 (rormpc-tools f2f26c0, not released yet): MusicBrainz has no soundtrack genre, only tags; Silvestri
+carries "soundtrack" (3 votes) and the genre "classical" (2), and only genres were read. The tags soundtrack, film
+score, score, film soundtrack and original soundtrack now count as the genre "soundtrack": on a recording always,
+on an artist only with at least the votes of the artist's best genre (otherwise the Beatles' tag made "Hey Jude"
+a soundtrack). "soundtrack" is a default Hits checkbox in rormpc and rormpc-tools, "film score" an alias of it.
+On the library: 23 songs, e.g. Cast Away, Requiem for a Dream, Jesus Christ Superstar, Skyfall, Eye of the Tiger.
 
 ## "Mute for…" with a countdown
 
@@ -458,3 +465,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: only observable in your use; the code path passes through a stop, which unmutes.
 - [ ] Does the modal DIM backdrop look right in Ghostty?
       Checked: the DIM cells were verified through herdr; the strength in Ghostty needs your eyes.
+- [ ] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)?
+      Checked: main is 5 commits ahead of origin (the plan view's mpd-player swaps and the soundtrack genre); the
+      installed tools are v0.2.30, so neither works in the installed rormpc until a release.
