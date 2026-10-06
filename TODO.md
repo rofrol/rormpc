@@ -8,10 +8,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
 - [x] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a
       decision" which one to build ("Soon: playing-song indicator in Hits").
-- [ ] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral
-      outcome, prev transitions logged for `musicdb import-skips`, Hammerspoon and rormpc sending it through the
-      daemon with the `mpc prev` fallback. Without the "restart in the first seconds" rule until it is decided.
-      Test on a scratch MPD ("Previous in the weighted shuffle").
+- [x] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral
+      outcome, prev transitions logged for `musicdb import-skips`. Without the "restart in the first seconds" rule
+      until it is decided ("Previous in the weighted shuffle"). Done in rormpc-tools 328cff3 (not released).
+- [ ] Previous: rormpc's Previous and Hammerspoon's media key send `shuffle prev` to mpd-player (channel `rormpc`)
+      while it runs, `mpc prev` without it. Hammerspoon lives in dotfiles: edit only, never reload it (read
+      `~/.hammerspoon/AGENTS.md`); the user reloads. Works after the rormpc-tools release.
 - [ ] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
       `≋` marker, "Find versions…" with a key and Back to the Queue row ("Versions: delete a bad version…").
 - [ ] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
@@ -430,6 +432,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     uses the same record. No blanket "ignore the next change" flag: a natural end, Next or a queue edit can race
     with Previous. Persist the intent, then confirm the observed transition before marking it neutral; debounce
     key repeat.
+  - Done 2026-10-07 (rormpc-tools 328cff3, by a worker): `shuffle prev [CMD_ID]`, a trail of really played queue
+    ids with a cursor in shuffle.json, a 0.25 s debounce, prev.jsonl (fsynced before `playid`, then confirmed or
+    failed), `import-skips` drops a matching skip within 2 s. The worker's own choice: a song already played to
+    80% (FINISHED_SHARE) keeps its finished outcome when left with Previous. The rormpc history shows the neutral
+    case as kind "back".
 
 ## Versions: audio fingerprint finds copies
 
