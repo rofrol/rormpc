@@ -106,6 +106,11 @@ fn main_task<B: Backend + std::io::Write>(
         run_external(command.clone(), Vec::new(), env);
     }
 
+    // rormpc: state publication is the acknowledgement, including failed plays with no MPD player event.
+    let _upnext_watcher = crate::ui::rormpc_upnext::watch(ctx.app_event_sender.clone())
+        .map_err(|err| log::warn!(error:? = err; "Cannot watch Up next state"))
+        .ok();
+
     // Listen to changes to lyrics when enabled
     let mut lyrics_watcher = if ctx.config.enable_lyrics_hot_reload
         && ctx.config.enable_lyrics_index

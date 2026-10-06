@@ -7,7 +7,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     prelude::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, TableState},
 };
@@ -128,7 +128,8 @@ impl UpNextPane {
 
 impl Pane for UpNextPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        self.rows = rormpc_upnext::waiting(ctx);
+        let (rows, error) = rormpc_upnext::waiting_and_error(ctx);
+        self.rows = rows;
         let [table_area, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(2)]).areas(area);
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), table_area.height.saturating_sub(1).into());
@@ -166,7 +167,9 @@ impl Pane for UpNextPane {
         .row_highlight_style(ctx.config.theme.current_item_style);
         frame.render_stateful_widget(table, table_area, self.state.as_render_state_ref());
 
-        let hint = if self.rows.is_empty() {
+        let hint = if let Some(error) = &error {
+            format!(" Up next: {error}")
+        } else if self.rows.is_empty() {
             " Nothing waiting. \"Play next\" in a song's menu (Ctrl-z) in any tab puts it here.".to_owned()
         } else {
             format!(
@@ -190,7 +193,10 @@ impl Pane for UpNextPane {
             _ => format!(" Then: MPD's order (weighted shuffle waiting: {})", sh.reason),
         };
         frame.render_widget(
-            Paragraph::new(vec![Line::from(Span::styled(hint, dim)), Line::from(Span::styled(then, dim))]),
+            Paragraph::new(vec![
+                Line::from(Span::styled(hint, if error.is_some() { Style::default().fg(Color::Red) } else { dim })),
+                Line::from(Span::styled(then, dim)),
+            ]),
             footer,
         );
         Ok(())

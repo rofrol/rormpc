@@ -15,6 +15,9 @@ use std::{
     time::SystemTime,
 };
 
+use anyhow::Result;
+use crossbeam::channel::Sender;
+use notify_debouncer_full::notify::{self, RecommendedWatcher, RecursiveMode, Watcher};
 use rmpc_mpd::{
     commands::status::OnOffOneshot,
     mpd_client::MpdClient,
@@ -25,7 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ctx::Ctx,
-    shared::macros::{modal, status_error, status_info, status_warn},
+    shared::{events::AppEvent, macros::{modal, status_error, status_info, status_warn}},
     ui::{
         modals::{
             confirm_modal::{Action, ConfirmModal},
@@ -106,14 +109,46 @@ struct UpNextFile {
     entries: Vec<Waiting>,
     #[serde(default)]
     playing: Option<Waiting>,
+    #[serde(default)]
+    error: Option<String>,
 }
 
-/// mpd-player's upnext.json, read again only when the file changed (it is looked at on every render).
+static UP_NEXT_CACHE: OnceLock<Mutex<(Option<SystemTime>, UpNextFile)>> = OnceLock::new();
+
+/// Watch the directory, not the replaced inode: errors must redraw even while playback is paused or stopped.
+pub fn watch(tx: Sender<AppEvent>) -> Result<RecommendedWatcher> {
+    watch_path(rormpc_player::state_path("upnext"), tx)
+}
+
+fn watch_path(path: PathBuf, tx: Sender<AppEvent>) -> Result<RecommendedWatcher> {
+    let parent = path.parent().ok_or_else(|| anyhow::anyhow!("Up next state has no parent directory"))?;
+    std::fs::create_dir_all(parent)?;
+    // notify reports canonical paths (on macOS /tmp is /private/tmp); compare in the same namespace.
+    let parent = std::fs::canonicalize(parent)?;
+    let target = parent.join(path.file_name().ok_or_else(|| anyhow::anyhow!("Up next state has no filename"))?);
+    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        match event {
+            Ok(event) if event.need_rescan() || event.paths.is_empty()
+                || event.paths.iter().any(|p| p == &target) => {
+                // An atomic replacement can have the same mtime: the event, not a timestamp, invalidates it.
+                if let Some(cache) = UP_NEXT_CACHE.get() && let Ok(mut cache) = cache.lock() {
+                    cache.0 = None;
+                }
+                let _ = tx.send(AppEvent::RequestRender);
+            }
+            Ok(_) => {}
+            Err(err) => log::warn!(error:? = err; "Up next state watcher failed"),
+        }
+    })?;
+    watcher.watch(&parent, RecursiveMode::NonRecursive)?;
+    Ok(watcher)
+}
+
+/// mpd-player's upnext.json, cached until its mtime changes or its watcher invalidates it.
 fn upnext_file() -> UpNextFile {
-    static CACHE: OnceLock<Mutex<(Option<SystemTime>, UpNextFile)>> = OnceLock::new();
     let p = rormpc_player::state_path("upnext");
     let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
-    let cache = CACHE.get_or_init(|| Mutex::new((None, UpNextFile::default())));
+    let cache = UP_NEXT_CACHE.get_or_init(|| Mutex::new((None, UpNextFile::default())));
     let Ok(mut c) = cache.lock() else { return UpNextFile::default() };
     if c.0 != mtime || mtime.is_none() {
         c.1 = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
@@ -122,9 +157,15 @@ fn upnext_file() -> UpNextFile {
     c.1.clone()
 }
 
-/// The songs waiting in Up next, in play order.
+/// The songs waiting in Up next, in play order (also used by the Shuffle timeline).
 pub fn waiting(_ctx: &Ctx) -> Vec<Waiting> {
     upnext_file().entries
+}
+
+/// One coherent snapshot of the waiting list and its command error.
+pub fn waiting_and_error(_ctx: &Ctx) -> (Vec<Waiting>, Option<String>) {
+    let state = upnext_file();
+    (state.entries, state.error)
 }
 
 /// Queue ids that are waiting in Up next, in play order (for the badge).
@@ -365,4 +406,39 @@ fn confirm_replace_with(ctx: &Ctx, kind: String, name: String, files: Vec<String
             .action(Action::CustomButtons { buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Play", Box::new(go))] })
             .build()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_snapshot_keeps_waiting_entries_and_accepts_older_json() {
+        let state: UpNextFile = serde_json::from_str(r#"{
+            "entries": [{"id": 17, "file": "song.flac", "added": true}],
+            "playing": null, "error": "Cannot play song.flac: No such song"
+        }"#).unwrap();
+        assert_eq!(state.entries[0].id, 17);
+        assert!(state.error.unwrap().contains("Cannot play song.flac"));
+        let old: UpNextFile = serde_json::from_str(r#"{"entries": [], "playing": null}"#).unwrap();
+        assert!(old.error.is_none());
+    }
+
+    #[test]
+    fn atomic_state_replacements_wake_ui_without_playback_events() {
+        let dir = std::env::temp_dir().join(format!("rormpc-upnext-watch-{}-{}",
+            std::process::id(), SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos()));
+        let path = dir.join("upnext.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&path, "old inode").unwrap();
+        let (tx, rx) = crossbeam::channel::unbounded();
+        let watcher = watch_path(path.clone(), tx).unwrap();
+        let tmp = dir.join(".upnext.json.tmp");
+        std::fs::write(&tmp, "replacement publication").unwrap();
+        std::fs::rename(&tmp, &path).unwrap();
+        // External test deadline for OS/FSEvents delivery, not a delay or retry in the UI.
+        assert!(matches!(rx.recv_timeout(std::time::Duration::from_secs(3)).unwrap(), AppEvent::RequestRender));
+        drop(watcher);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

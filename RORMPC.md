@@ -62,6 +62,16 @@ double click plays the selected owned song, `a` appends it; the queue is never r
 the queue is not appended again (from any pane: Directories, Search, Find too): Enter plays its existing entry (the playing one is not restarted, a paused
 one resumes), `a` only says so; the row's menu has "Add another copy" for a deliberate duplicate. The pane re-reads the file when it changes and when the MPD database changes.
 
+The Queue's `JumpToCurrent` action (`Shift+C` by default, including custom bindings) also works in Hits:
+if the playing song's file is in the visible table, it selects that row and focuses the table; a second press
+centres it. A search that hides the song stays intact, and a missing match changes neither selection nor
+playback. Queue-only actions such as removing or reordering queue entries are not applied to chart rows.
+
+The default and example configurations put Hits first, Queue second and one top-level Up next tab after Queue.
+`1` opens Hits, `2` Queue, `3`-`8` the library/search tabs; `gu` opens Up next from any pane. Existing explicit
+configurations are not rewritten; move their Hits tab and update their named bindings separately. The last
+active tab is still restored on startup, rather than forcing Hits on every launch.
+
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. Source cycles
 Billboard US (year-end charts) / my charts (songs by my plays in the chosen LISTENING years, "Listened:"
 instead of "Period:", the year in progress included; the weighted shuffle's own picks don't count; "thin data"
@@ -207,7 +217,7 @@ removing it afterwards.
 - Queue menu "Sources… (play the library or a playlist)" and Hits "Play these N songs": the source replaces the
   queue after a confirmation; the song playing goes on (it is not part of the new source), Up next is kept and
   plays first, and the status line says how long preparing took ("11 songs, prepared in 0.4 s").
-- "Play next (Up next)" in the Queue menu (marked rows, else the cursor row) and "Add to Up next" on owned Hits
+- "Play next" in the Queue menu (marked rows, else the cursor row) and on owned Hits
   rows: with random on the songs get MPD priorities 255, 254, … (first asked plays first; MPD drops a song's
   priority when it starts); with random off they move right after the current song, in order. Waiting entries
   carry `↑1`, `↑2`. A song that was not in the queue is added and removed again after it played, so the source
@@ -220,7 +230,10 @@ removing it afterwards.
 - The Up next pane (`Pane(UpNext())`, my tab "Up next", `gu`) lists the waiting songs in play order: Enter plays
   now, K/J (MoveUp/MoveDown) reorder, D (Delete) removes the request (a song added only for Up next leaves the
   queue, a source song keeps its place), the context menu has Make next and "Clear Up next…" (confirmed). There is
-  no Play next inside it.
+  no Play next inside it. A rejected play keeps the request waiting and the previous playback unchanged;
+  its error is shown in red in the Up next footer. An event-driven watcher of the atomically published state
+  redraws it even while paused or stopped, without polling delays or playback retries. A later explicit
+  successful action clears the error.
 - Artists, Album Artists and Albums select the playing song's group every time the tab is shown (its tag value,
   else the root item contained in it, e.g. an artist inside "A feat. B"); nothing playing or no match keeps the
   cursor.

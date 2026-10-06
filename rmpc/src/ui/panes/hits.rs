@@ -27,7 +27,7 @@ use serde::Deserialize;
 
 use super::Pane;
 use crate::{
-    config::keys::CommonAction,
+    config::keys::{CommonAction, QueueActions},
     ctx::Ctx,
     shared::{
         keys::ActionEvent,
@@ -447,6 +447,23 @@ impl HitsPane {
 
     fn selected(&self) -> Option<&HitsRow> {
         self.state.get_selected().and_then(|i| self.rows.get(i))
+    }
+
+    /// Jump within the visible result only; keep the filters and playback untouched.
+    fn jump_to_current(&mut self, ctx: &Ctx) -> bool {
+        let Some(song) = ctx.status.songid.and_then(|id| ctx.queue.iter().find(|s| s.id == id)) else {
+            return false;
+        };
+        let matches = |r: &HitsRow| r.file.as_deref() == Some(song.file.as_str());
+        let selected = self.state.get_selected();
+        let idx = selected.filter(|i| self.rows.get(*i).is_some_and(matches))
+            .or_else(|| self.rows.iter().position(matches));
+        let Some(idx) = idx else { return false };
+        let scrolloff = if selected == Some(idx) { usize::MAX } else { ctx.config.scrolloff };
+        self.state.select(Some(idx), scrolloff);
+        self.focus_filters = false;
+        self.hover_filter = None;
+        true
     }
 
     /// Narrow the result to the `/` search (every word in artist or title, diacritics folded, any order); keep the
@@ -875,7 +892,7 @@ impl HitsPane {
                     });
                 }
                 let next_file = like_file.clone();
-                section.add_item("Add to Up next", move |ctx| {
+                section.add_item("Play next", move |ctx| {
                     crate::ui::rormpc_upnext::play_next(ctx, vec![next_file]);
                     Ok(())
                 });
@@ -1453,6 +1470,15 @@ impl Pane for HitsPane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        if let Some(action) = event.claim_queue() {
+            if matches!(action, QueueActions::JumpToCurrent) {
+                if self.jump_to_current(ctx) {
+                    ctx.render()?;
+                }
+                return Ok(()); // recognized even without a match: never fall through to playback
+            }
+            event.abandon(); // Queue-only actions must not consume common or global bindings
+        }
         let Some(action) = event.claim_common().cloned() else {
             return Ok(());
         };
@@ -1983,6 +2009,93 @@ fn parse_genre_spec(spec: &str) -> Vec<(i8, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
+    use crate::tests::fixtures::ctx;
+    use rmpc_mpd::commands::Song;
+
+    fn row(file: Option<&str>, rank: u32) -> HitsRow {
+        serde_json::from_value(serde_json::json!({
+            "rank": rank, "pct": 1, "cohort": 3, "artist": "Test", "title": "Song",
+            "year": 1980, "file": file,
+        })).unwrap()
+    }
+
+    fn pane() -> HitsPane {
+        let mut pane = HitsPane::new("unused.json".to_owned(), Vec::new());
+        pane.rows = vec![row(None, 1), row(Some("other.flac"), 2), row(Some("current.flac"), 3)];
+        pane.all_rows = pane.rows.clone();
+        pane.state.set_content_and_viewport_len(pane.rows.len(), 2);
+        pane.state.select(Some(1), 0);
+        pane.focus_filters = true;
+        pane
+    }
+
+    #[rstest]
+    fn jump_matches_song_id_then_file_and_preserves_query(mut ctx: Ctx) {
+        ctx.queue = vec![
+            Song { id: 7, file: "other.flac".to_owned(), ..Default::default() },
+            Song { id: 8, file: "current.flac".to_owned(), ..Default::default() },
+            Song { id: 9, file: "current.flac".to_owned(), ..Default::default() },
+        ];
+        ctx.status.songid = Some(9);
+        let mut pane = pane();
+        pane.query = "current".to_owned();
+        assert!(pane.jump_to_current(&ctx));
+        assert_eq!(pane.state.get_selected(), Some(2));
+        assert!(!pane.focus_filters);
+        assert_eq!(pane.query, "current");
+        assert_eq!(ctx.status.songid, Some(9));
+        assert!(pane.jump_to_current(&ctx)); // second press centers without changing the match
+        assert_eq!(pane.state.get_selected(), Some(2));
+        pane.rows.push(row(Some("current.flac"), 4));
+        pane.state.set_content_and_viewport_len(4, 2);
+        pane.state.select(Some(3), 0);
+        assert!(pane.jump_to_current(&ctx));
+        assert_eq!(pane.state.get_selected(), Some(3), "keep a selected duplicate");
+    }
+
+    #[rstest]
+    fn jump_missing_or_filtered_song_leaves_selection_and_focus(mut ctx: Ctx) {
+        ctx.queue = vec![Song { id: 9, file: "current.flac".to_owned(), ..Default::default() }];
+        let mut pane = pane();
+        for songid in [None, Some(99)] {
+            ctx.status.songid = songid;
+            assert!(!pane.jump_to_current(&ctx));
+        }
+        ctx.status.songid = Some(9);
+        pane.rows.pop(); // the playing song remains in all_rows, but not in the visible result
+        pane.query = "other".to_owned();
+        assert!(!pane.jump_to_current(&ctx));
+        assert_eq!(pane.state.get_selected(), Some(1));
+        assert!(pane.focus_filters);
+        assert_eq!(pane.query, "other");
+        pane.rows.clear();
+        assert!(!pane.jump_to_current(&ctx));
+    }
+
+    #[rstest]
+    fn queue_action_routing_does_not_swallow_common_or_global(mut ctx: Ctx) {
+        let mut pane = pane();
+        pane.filters = Some(Filters::default());
+        pane.filter_sel = pane.filter_rows().len() - 1; // Right on Apply focuses the table
+        let mut event = ActionEvent::from(Arc::new(vec![
+            QueueActions::Delete.into(), CommonAction::Right.into(),
+        ]));
+        pane.handle_action(&mut event, &mut ctx).unwrap();
+        assert!(!pane.focus_filters, "the common filter navigation still handles the key");
+        let mut event = ActionEvent::from(Arc::new(vec![
+            QueueActions::DeleteAll.into(),
+            crate::config::keys::GlobalAction::TogglePause.into(),
+        ]));
+        pane.handle_action(&mut event, &mut ctx).unwrap();
+        assert!(event.claim_global().is_some());
+        let mut event = ActionEvent::from(Arc::new(vec![
+            QueueActions::JumpToCurrent.into(),
+            crate::config::keys::GlobalAction::TogglePause.into(),
+        ]));
+        pane.handle_action(&mut event, &mut ctx).unwrap();
+        assert!(event.claim_global().is_none(), "an absent match must not trigger playback");
+    }
 
     #[test]
     fn clear_rows_are_disabled_with_nothing_to_clear() {

@@ -63,13 +63,15 @@
             "gt":         NextTab,
             "<S-Tab>":    PreviousTab,
             "gT":         PreviousTab,
-            "1":          SwitchToTab("Queue"),
-            "2":          SwitchToTab("Directories"),
-            "3":          SwitchToTab("Artists"),
-            "4":          SwitchToTab("Album Artists"),
-            "5":          SwitchToTab("Albums"),
-            "6":          SwitchToTab("Playlists"),
-            "7":          SwitchToTab("Search"),
+            "1":          SwitchToTab("Hits"),
+            "gu":         SwitchToTab("Up next"),
+            "2":          SwitchToTab("Queue"),
+            "3":          SwitchToTab("Directories"),
+            "4":          SwitchToTab("Artists"),
+            "5":          SwitchToTab("Album Artists"),
+            "6":          SwitchToTab("Albums"),
+            "7":          SwitchToTab("Playlists"),
+            "8":          SwitchToTab("Search"),
             "u":          Update,
             "U":          Rescan,
             "R":          AddRandom,
@@ -160,6 +162,13 @@
     ),
     tabs: [
         (
+            name: "Hits",
+            pane: Split(
+                direction: Vertical,
+                panes: [(pane: Pane(Hits()), size: "100%", borders: "ALL", border_symbols: Rounded)],
+            ),
+        ),
+        (
             name: "Queue",
             pane: Split(
                 direction: Horizontal,
@@ -231,6 +240,13 @@
                         )
                     ),
                 ],
+            ),
+        ),
+        (
+            name: "Up next",
+            pane: Split(
+                direction: Vertical,
+                panes: [(pane: Pane(UpNext()), size: "100%", borders: "ALL", border_symbols: Rounded)],
             ),
         ),
         (
