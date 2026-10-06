@@ -345,6 +345,20 @@ impl QueuePane {
                         Ok(())
                     });
                 }
+                let tags_file = file.clone();
+                section.add_item("Tags…", move |ctx| {
+                    crate::ui::rormpc_tags::open_tags_menu(ctx, tags_file);
+                    Ok(())
+                });
+                let lyrics_file = file.clone();
+                section.add_item("Choose lyrics…", move |ctx| {
+                    crate::ui::rormpc_lyrics::open_chooser(ctx, lyrics_file);
+                    Ok(())
+                });
+                Some(section)
+            })
+            // rormpc: playback (mpd-player) and sources: also with an empty queue, e.g. right after "Clear queue"
+            .list_section(ctx, |mut section| {
                 let on = crate::ui::rormpc_player::shuffle_state().enabled;
                 section.add_item(format!("Weighted shuffle: {} (w)", if on { "on → off" } else { "off → on" }), |ctx| {
                     crate::ui::rormpc_player::toggle_shuffle(ctx);
@@ -366,16 +380,6 @@ impl QueuePane {
                 });
                 section.add_item("Sources… (play the library or a playlist)", |ctx| {
                     crate::ui::rormpc_upnext::open_sources(ctx);
-                    Ok(())
-                });
-                let tags_file = file.clone();
-                section.add_item("Tags…", move |ctx| {
-                    crate::ui::rormpc_tags::open_tags_menu(ctx, tags_file);
-                    Ok(())
-                });
-                let lyrics_file = file.clone();
-                section.add_item("Choose lyrics…", move |ctx| {
-                    crate::ui::rormpc_lyrics::open_chooser(ctx, lyrics_file);
                     Ok(())
                 });
                 Some(section)
@@ -418,11 +422,9 @@ impl QueuePane {
                             Ok(())
                         },
                     )
-                    .item("Clear queue", |ctx| {
-                        ctx.command(|_, client| {
-                            client.clear()?;
-                            Ok(())
-                        });
+                    // rormpc: asks first: a menu item runs on one click, so a stray click wiped the queue
+                    .item("Clear queue…", |ctx| {
+                        crate::ui::rormpc_actions::confirm_clear_queue(ctx);
                         Ok(())
                     });
                 Some(section)

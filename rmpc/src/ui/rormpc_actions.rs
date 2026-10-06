@@ -156,6 +156,30 @@ pub fn duplicate_ids(queue: &[Song], current: Option<u32>) -> Vec<u32> {
 
 /// Ask, then remove the duplicate queue entries. The queue is re-read when confirmed (other clients may
 /// have changed it) and entries are deleted by id, since positions shift. Library files are untouched.
+/// "Clear queue…": the whole queue goes after a confirmation (Up next requests added only for it come back: mpd-player
+/// adds them again).
+pub fn confirm_clear_queue(ctx: &Ctx) {
+    let n = ctx.queue.len();
+    let message = vec![format!("Clear the queue ({n} songs)?\n\nLibrary files stay.")];
+    let on_clear = |ctx: &Ctx| -> Result<()> {
+        ctx.command(|_, client| {
+            client.clear()?;
+            Ok(())
+        });
+        Ok(())
+    };
+    modal!(
+        ctx,
+        ConfirmModal::builder()
+            .ctx(ctx)
+            .message(message)
+            .action(Action::CustomButtons {
+                buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Clear", Box::new(on_clear))],
+            })
+            .build()
+    );
+}
+
 pub fn confirm_remove_duplicates(ctx: &Ctx, count: usize) {
     let message = vec![format!(
         "Remove {count} duplicate queue entries?\n\nThe same file queued more than once keeps one entry: \

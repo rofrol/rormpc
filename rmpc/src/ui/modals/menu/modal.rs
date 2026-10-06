@@ -10,6 +10,7 @@ use ratatui::{
     symbols::border,
     widgets::{Block, Borders, Clear},
 };
+use unicode_width::UnicodeWidthStr;
 
 use super::{
     Section,
@@ -57,8 +58,9 @@ impl Modal for MenuModal<'_> {
                 + 1
                 + self.sections.len();
 
-        let popup_area =
-            frame.area().centered(constraint!(==self.width), constraint!(==needed_height as u16));
+        let popup_area = frame
+            .area()
+            .centered(constraint!(==self.width.min(frame.area().width)), constraint!(==needed_height as u16));
         self.popup_area = Some(popup_area);
         frame.render_widget(Clear, popup_area);
         if let Some(bg_color) = ctx.config.theme.modal_background_color {
@@ -405,6 +407,10 @@ impl<'a> MenuModal<'a> {
                 acc.push(s.item_labels_iter().map(|l| l.to_lowercase()).collect());
                 acc
             });
+        // rormpc: wide enough for the longest label (borders, padding and a scrollbar), so none is cut off;
+        // render keeps it within the terminal
+        let longest = self.sections_labels.iter().flatten().map(|l| l.width()).max().unwrap_or(0);
+        self.width = self.width.max(u16::try_from(longest + 4).unwrap_or(u16::MAX));
         self
     }
 

@@ -28,6 +28,19 @@ during the mute, stop, a restart past the deadline.
 - [ ] A queue replaced by Sources… may pass through a stop, which unmutes. Watch whether that happens in use.
 - [ ] Maybe later: "Pause for…" (now that one daemon owns the gap, it no longer fights mpd-gap).
 
+## Test report of 2026-10-06 (scratch MPD, music-mpd-8e)
+
+Fixed 2026-10-06: Up next entries skipped past between two wakes of mpd-player (`mpc next` three times in a row,
+random on) stayed waiting with a ↑1 badge; now a waiting entry whose MPD priority went back to 0 has started and
+counts as played. The Queue menu keeps Weighted shuffle, Silence, Mute for… and Sources… with an empty queue;
+"Clear queue…" asks first (Cancel is the default); Sources… leaves out empty playlists; menus are as wide as their
+longest label (within the terminal).
+
+- [ ] Same race with random off: entries are moved after the current song, so skipping past them leaves them
+      before it. Telling that apart from the user jumping to a later song needs more than positions; not done.
+- [ ] mpd-player down while an Up next song plays: it stays waiting. After an MPD restart the re-found entries
+      carry no priority yet, so "priority 0 = started" cannot be used at startup.
+
 ## Media keys and Now Playing (outside the TUI)
 
 Hardware media keys (play/pause/next/previous) and the system Now Playing widget work on macOS with
