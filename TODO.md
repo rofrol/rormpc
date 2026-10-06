@@ -1,12 +1,15 @@
 # TODO
 
-## Next: Hits works like Queue, Up next as a sub-tab
+## Next: Hits works like Queue, Up next as its own tab
 
 - [ ] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the
       Hits table.
 - [ ] Hits is the first tab.
-- [ ] "Play next" (Up next) becomes a sub-tab of Hits, showing the songs waiting in Up next.
-- [ ] Queue gets the same "Play next" sub-tab.
+- [ ] Up next is one top-level tab "Up next" (the menu action stays "Play next"), not a sub-tab of Hits and
+      Queue (user decided 2026-10-06; Sol and MiMo: a view embedded twice means two cursors on one list). It
+      lists the songs waiting in Up next: J/K reorder, remove, clear with a confirmation, Enter plays now; no
+      "Play next" inside it. Hits and Queue get a key that opens it. Full plan: music-data TODO.md, entry
+      "Playback annoyances".
 
 ## Media keys and Now Playing (outside the TUI)
 
