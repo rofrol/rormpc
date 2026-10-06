@@ -283,6 +283,14 @@ nominating and says "round done"; the Up next menu starts a new round. The Hits 
 screen differ. Hits' State column shows only exceptions: `⏳5d` resting, `heard` in this round, `·` not in the
 snapshot being played.
 
+The weighted shuffle draws the next 10 songs ahead (a plan; only the first has the MPD priority). The Shuffle
+pane (`Pane(Shuffle())`, my tab "Shuffle", `gs`) lists what plays, in order: ▶ the song playing, ↑ the Up next
+requests, then the plan with why each was drawn. The plan changes only when a planned song leaves the queue, is
+requested, gets "heard enough" or is played by hand (its lane goes to the replacement), and is topped up after
+every song. Enter on a planned song asks for it with Play next, on a request plays it now; `C` (the Queue's
+JumpToCurrent) goes to the playing song; the menu has "heard enough". It never reorders the queue (a sort by weight
+would move 770 songs in MPD and be stale one song later; consulted Sol and MiMo).
+
 ## Likes in Hits and Queue
 
 Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).

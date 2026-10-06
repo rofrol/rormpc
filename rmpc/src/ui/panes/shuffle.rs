@@ -1,7 +1,8 @@
-//! rormpc: Shuffle pane. What mpd-player's weighted shuffle does next: the song it already picked (with why), and
-//! the candidates of the draw after it with their chance in that draw. It is a view only: nothing here reorders
-//! the queue. A draw is random and is redrawn after every song, so the list says "candidates", not an order.
-//! Enter (or the menu) asks for a candidate with Play next; the menu also has "heard enough".
+//! rormpc: Shuffle pane. What plays next with mpd-player's weighted shuffle, in play order: the song playing now,
+//! the Up next requests (they always come first), then the shuffle's plan (the next songs it drew ahead, with why).
+//! The plan changes only when a planned song leaves the queue, is requested, gets "heard enough" or is played by
+//! hand, and is topped up after every song. A view only: nothing here reorders the queue. Enter on a planned song
+//! asks for it with Play next, on a request plays it now; C (JumpToCurrent) goes to the playing song.
 
 use anyhow::Result;
 use ratatui::{
@@ -10,12 +11,12 @@ use ratatui::{
     prelude::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Cell, Paragraph, Row, Table, TableState, Wrap},
+    widgets::{Cell, Paragraph, Row, Table, TableState},
 };
 
 use super::Pane;
 use crate::{
-    config::keys::CommonAction,
+    config::keys::{CommonAction, QueueActions},
     ctx::Ctx,
     shared::{
         keys::ActionEvent,
@@ -25,42 +26,68 @@ use crate::{
     ui::{dirstack::DirState, modals::menu::modal::MenuModal, rormpc_player, rormpc_upnext},
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Kind {
+    Now,
+    /// an Up next request, by queue id
+    Request(u32),
+    Planned,
+}
+
+#[derive(Debug, Clone)]
+struct Item {
+    kind: Kind,
+    file: String,
+    why: String,
+}
+
 #[derive(Debug)]
 pub struct ShufflePane {
-    files: Vec<String>,
+    items: Vec<Item>,
     state: DirState<TableState>,
     table_area: Rect,
 }
 
-/// "Artist - Title" of a queued file, else its file name.
+/// (title, artist) of a queued file, else its file name.
 fn name(ctx: &Ctx, file: &str) -> (String, String) {
     let song = ctx.queue.iter().find(|s| s.file == file);
     let tag = |t: &str| song.and_then(|s| s.metadata.get(t)).map(|v| v.last().to_owned()).unwrap_or_default();
     let title = tag("title");
-    (tag("artist"), if title.is_empty() { file.rsplit('/').next().unwrap_or(file).to_owned() } else { title })
+    (if title.is_empty() { file.rsplit('/').next().unwrap_or(file).to_owned() } else { title }, tag("artist"))
 }
 
 impl ShufflePane {
     pub fn new() -> Self {
-        Self { files: Vec::new(), state: DirState::default(), table_area: Rect::default() }
+        Self { items: Vec::new(), state: DirState::default(), table_area: Rect::default() }
     }
 
-    fn selected(&self) -> Option<&String> {
-        self.state.get_selected().and_then(|i| self.files.get(i))
+    fn selected(&self) -> Option<&Item> {
+        self.state.get_selected().and_then(|i| self.items.get(i))
+    }
+
+    fn confirm(&self, ctx: &Ctx) {
+        match self.selected().map(|i| (i.kind.clone(), i.file.clone())) {
+            Some((Kind::Planned, file)) => rormpc_upnext::play_next(ctx, vec![file]),
+            Some((Kind::Request(id), _)) => rormpc_upnext::play_entry(ctx, id),
+            _ => {}
+        }
     }
 
     fn open_menu(&self, ctx: &Ctx) {
-        let Some(file) = self.selected().cloned() else { return };
-        let title = name(ctx, &file).1;
+        let Some(item) = self.selected().cloned() else { return };
+        let title = name(ctx, &item.file).0;
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
-                let f = file.clone();
-                section.add_item("Play next (Up next)", move |ctx| {
-                    rormpc_upnext::play_next(ctx, vec![f.clone()]);
-                    Ok(())
-                });
+                if item.kind == Kind::Planned {
+                    let f = item.file.clone();
+                    section.add_item("Play next (Up next)", move |ctx| {
+                        rormpc_upnext::play_next(ctx, vec![f.clone()]);
+                        Ok(())
+                    });
+                }
+                let f = item.file.clone();
                 section.add_item("Heard enough (rests in the weighted shuffle)", move |ctx| {
-                    rormpc_player::heard_enough(ctx, file.clone(), title.clone());
+                    rormpc_player::heard_enough(ctx, f.clone(), title.clone());
                     Ok(())
                 });
                 Some(section)
@@ -75,74 +102,64 @@ impl Pane for ShufflePane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
         let sh = rormpc_player::shuffle_state();
         let dim = Style::default().add_modifier(Modifier::DIM);
-        let bold = Style::default().add_modifier(Modifier::BOLD);
         let key = ctx.config.theme.preview_label_style;
 
-        // what is decided: the pick (Up next requests play before it)
-        let mut head: Vec<Line> = Vec::new();
-        let up = rormpc_upnext::up_next_ids().len();
-        match (&sh.nominee, sh.enabled, sh.active) {
-            (_, false, _) => head.push(Line::from(Span::styled(
-                "Weighted shuffle is off (w turns it on). With it off the queue plays in order, or MPD's plain random with x.",
-                dim,
-            ))),
-            (Some(n), _, true) => {
-                let (artist, title) = name(ctx, &n.file);
-                head.push(Line::from(vec![
-                    Span::styled("Picked next: ", key),
-                    Span::styled(title, bold),
-                    Span::raw(if artist.is_empty() { String::new() } else { format!(" - {artist}") }),
-                ]));
-                head.push(Line::from(Span::styled(format!("  {}", n.why), dim)));
-                if up > 0 {
-                    head.push(Line::from(Span::styled(format!("  Up next ({up}) plays before it."), dim)));
-                }
-            }
-            _ => head.push(Line::from(Span::styled(format!("Weighted shuffle waiting: {}", sh.reason), dim))),
+        // play order: now, the requests, the plan
+        let keep = self.selected().map(|i| (i.kind.clone(), i.file.clone()));
+        let mut items = Vec::new();
+        if let Some(cur) = ctx.current_song() {
+            items.push(Item { kind: Kind::Now, file: cur.file.clone(), why: "playing now".to_owned() });
         }
-        let outlook = sh.outlook.clone().filter(|_| sh.enabled && sh.active).unwrap_or_default();
-        if !outlook.top.is_empty() {
-            let lent = if outlook.drawn_from != outlook.lane && outlook.lane != "next cycle" {
-                format!(" (lent to {})", outlook.drawn_from)
-            } else {
-                String::new()
-            };
-            head.push(Line::default());
-            head.push(Line::from(vec![
-                Span::styled("Then a draw: ", key),
-                Span::raw(format!(
-                    "{} lane{lent} · {} candidates of {} in the queue ({} resting, recent or requested) · redrawn after every song",
-                    outlook.lane,
-                    outlook.pool,
-                    outlook.queued,
-                    outlook.queued.saturating_sub(outlook.eligible + 1),
-                )),
-            ]));
+        for w in rormpc_upnext::waiting(ctx) {
+            items.push(Item { kind: Kind::Request(w.id), file: w.file, why: "Up next request (plays first)".to_owned() });
         }
-        let head_h = head.len() as u16;
-        let [head_area, table_area, footer] =
-            Layout::vertical([Constraint::Length(head_h), Constraint::Min(1), Constraint::Length(1)]).areas(area);
-        frame.render_widget(Paragraph::new(head).wrap(Wrap { trim: false }), head_area);
+        if sh.enabled && sh.active {
+            items.extend(sh.plan.iter().map(|p| Item { kind: Kind::Planned, file: p.file.clone(), why: p.why.clone() }));
+        }
+        self.items = items;
 
-        // the candidates of that draw: a chance each, not an order
-        self.files = outlook.top.iter().map(|c| c.file.clone()).collect();
+        let status = match (sh.enabled, sh.active) {
+            (false, _) => "Weighted shuffle is off (w turns it on): the queue plays in order, or MPD's random with x.".to_owned(),
+            (true, false) => format!("Weighted shuffle waiting: {}", sh.reason),
+            (true, true) => format!(
+                "In play order: the song playing, the Up next requests, then {} songs the shuffle drew ahead.",
+                sh.plan.len()
+            ),
+        };
+        let [head, table_area, footer] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)]).areas(area);
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(status, dim))), head);
+
         self.table_area = table_area;
-        self.state.set_content_and_viewport_len(self.files.len(), table_area.height.saturating_sub(1).into());
-        if self.state.get_selected().is_none_or(|i| i >= self.files.len()) {
-            self.state.select((!self.files.is_empty()).then_some(0), 0);
-        }
-        let rows = outlook.top.iter().map(|c| {
-            let (artist, title) = name(ctx, &c.file);
-            Row::new(vec![
-                Cell::from(format!("{:>5.1}%", c.p * 100.0)),
+        self.state.set_content_and_viewport_len(self.items.len(), table_area.height.saturating_sub(1).into());
+        let idx = keep
+            .and_then(|(k, f)| self.items.iter().position(|i| i.kind == k && i.file == f))
+            .or_else(|| self.state.get_selected().map(|i| i.min(self.items.len().saturating_sub(1))))
+            .unwrap_or(0);
+        self.state.select((!self.items.is_empty()).then_some(idx), ctx.config.scrolloff);
+
+        let mut n = 0;
+        let rows = self.items.iter().map(|i| {
+            let (title, artist) = name(ctx, &i.file);
+            let mark = match i.kind {
+                Kind::Now => "▶".to_owned(),
+                Kind::Request(_) => "↑".to_owned(),
+                Kind::Planned => {
+                    n += 1;
+                    n.to_string()
+                }
+            };
+            let row = Row::new(vec![
+                Cell::from(mark),
                 Cell::from(title),
                 Cell::from(artist),
-                Cell::from(Span::styled(c.why.clone(), dim)),
-            ])
+                Cell::from(Span::styled(i.why.clone(), dim)),
+            ]);
+            if i.kind == Kind::Now { row.style(Style::default().add_modifier(Modifier::BOLD)) } else { row }
         });
-        let header = Row::new(["Chance", "Title", "Artist", "Why"]).style(key);
+        let header = Row::new(["", "Title", "Artist", "Why"]).style(key);
         let table = Table::new(rows, [
-            Constraint::Length(6),
+            Constraint::Length(3),
             Constraint::Percentage(30),
             Constraint::Percentage(20),
             Constraint::Min(20),
@@ -153,14 +170,7 @@ impl Pane for ShufflePane {
         .row_highlight_style(ctx.config.theme.current_item_style);
         frame.render_stateful_widget(table, table_area, self.state.as_render_state_ref());
 
-        let foot = if self.files.is_empty() {
-            String::new()
-        } else {
-            format!(
-                " the other candidates: {:.1}% together · Enter: Play next · Ctrl-z: heard enough",
-                outlook.rest_p * 100.0
-            )
-        };
+        let foot = " the plan changes only when a planned song is requested, rested or played by hand · Enter: Play next · C: playing song · Ctrl-z: heard enough";
         frame.render_widget(Paragraph::new(Line::from(Span::styled(foot, dim))), footer);
         Ok(())
     }
@@ -174,10 +184,8 @@ impl Pane for ShufflePane {
             MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
                 if let Some(idx) = self.state.get_at_rendered_row(row) {
                     self.state.select(Some(idx), ctx.config.scrolloff);
-                    if matches!(event.kind, MouseEventKind::DoubleClick)
-                        && let Some(f) = self.selected().cloned()
-                    {
-                        rormpc_upnext::play_next(ctx, vec![f]);
+                    if matches!(event.kind, MouseEventKind::DoubleClick) {
+                        self.confirm(ctx);
                     }
                 }
             }
@@ -190,6 +198,13 @@ impl Pane for ShufflePane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        // the Queue's JumpToCurrent (C) works here too: the playing song is the first row
+        if event.actions.iter().any(|a| matches!(a.as_queue(), Some(QueueActions::JumpToCurrent))) {
+            event.claim_queue();
+            self.state.first();
+            ctx.render()?;
+            return Ok(());
+        }
         let Some(action) = event.claim_common().cloned() else {
             return Ok(());
         };
@@ -199,11 +214,7 @@ impl Pane for ShufflePane {
             CommonAction::Up => self.state.prev(scrolloff, wrap),
             CommonAction::Top => self.state.first(),
             CommonAction::Bottom => self.state.last(),
-            CommonAction::Confirm => {
-                if let Some(f) = self.selected().cloned() {
-                    rormpc_upnext::play_next(ctx, vec![f]);
-                }
-            }
+            CommonAction::Confirm => self.confirm(ctx),
             CommonAction::ContextMenu => self.open_menu(ctx),
             _ => {
                 event.abandon(); // not ours: let global keys (tabs, playback) handle it
