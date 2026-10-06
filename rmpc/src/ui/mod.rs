@@ -76,6 +76,7 @@ pub mod input;
 pub mod modals;
 pub mod panes;
 pub mod rormpc_actions;
+pub mod rormpc_filter;
 pub mod rormpc_lyrics;
 pub mod rormpc_playlists;
 pub mod rormpc_tags;
@@ -880,6 +881,16 @@ impl<'ui> Ui<'ui> {
         } else {
             // Resolve each buffered key individually
             for key in buf {
+                // rormpc: Up/Down and Ctrl-n/Ctrl-p move the selection of a pane's live filter while typing
+                if self.modals.is_empty()
+                    && let Some(down) = crate::ui::rormpc_filter::nav_key(key)
+                {
+                    let mut handled = false;
+                    active_tab_call!(self, ctx, handle_insert_nav(down, &mut handled, ctx))?;
+                    if handled {
+                        continue;
+                    }
+                }
                 if let Some(kind) = ctx.input.handle_input(InputEvent::from_key_event(*key)) {
                     if let Some(ref mut modal) = self.modals.last_mut() {
                         modal.handle_insert_mode(kind, ctx)?;

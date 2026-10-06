@@ -63,7 +63,7 @@ use crate::{
     ui::{
         UiEvent,
         dirstack::{self, Dir, DirStackItem},
-        input::InputResultEvent,
+        input::{BufferId, InputResultEvent},
         modals::{
             confirm_modal::{Action, ConfirmModal},
             info_list_modal::{InfoListModal, SongCtx},
@@ -96,6 +96,20 @@ pub struct QueuePane {
     highlight_id: Id,
     highlight_enabled: bool,
     new_album_indices: HashSet<usize>,
+    /// rormpc: the live filter (`/`); while set, `queue.items` holds only the matching songs, in queue order
+    find: Option<QueueFind>,
+}
+
+/// rormpc: state of the Queue's live filter.
+#[derive(Debug)]
+struct QueueFind {
+    buffer: BufferId,
+    /// keys go to the query (Enter plays, Esc restores)
+    typing: bool,
+    query: String,
+    /// the song under the cursor and the scroll when filtering began, restored by Esc
+    saved_id: Option<u32>,
+    saved_offset: usize,
 }
 
 #[derive(Debug, Enum)]
@@ -123,6 +137,7 @@ impl QueuePane {
             highlight_id: id::new(),
             highlight_enabled: true,
             new_album_indices: HashSet::new(),
+            find: None,
         };
 
         s.recalculate_album_indices();
@@ -574,7 +589,9 @@ impl Pane for QueuePane {
             );
         }
 
-        if let Some(filter_text) = filter_text
+        if let Some(f) = &self.find {
+            self.render_find_line(frame, f, ctx);
+        } else if let Some(filter_text) = filter_text
             && self.areas[Areas::FilterArea].height > 0
         {
             frame.render_widget(
@@ -599,7 +616,7 @@ impl Pane for QueuePane {
         ])
         .areas(area);
 
-        let mut table_area = if self.queue.filter_active {
+        let mut table_area = if self.queue.filter_active || self.find.is_some() {
             self.areas[Areas::FilterArea] =
                 Rect::new(table_area.x, table_area.y, table_area.width, 1);
             table_area.shrink_from_top(1)
@@ -623,7 +640,7 @@ impl Pane for QueuePane {
             self.areas[Areas::Table].height as usize,
         );
 
-        if self.should_center_cursor_on_current {
+        if self.should_center_cursor_on_current && self.find.is_none() {
             let to_select = ctx.current_song_index().or(self.queue.selected_idx()).or(Some(0));
             self.queue.select_idx_opt(to_select, usize::MAX);
             self.should_center_cursor_on_current = false;
@@ -650,6 +667,10 @@ impl Pane for QueuePane {
 
     fn on_event(&mut self, event: &mut UiEvent, is_visible: bool, ctx: &Ctx) -> Result<()> {
         match event {
+            UiEvent::Database | UiEvent::QueueChanged if self.find.is_some() => {
+                self.apply_find(ctx, false); // the filtered view is rebuilt from MPD's queue, by song id
+            }
+            UiEvent::SongChanged if self.find.is_some() => {} // a song change never moves the filtered cursor
             UiEvent::Database => {
                 self.queue.filter_active = false;
                 self.queue.items.clone_from(&ctx.queue);
@@ -783,7 +804,9 @@ impl Pane for QueuePane {
 
                     ctx.render()?;
                 }
-                self.open_context_menu(ctx);
+                if self.find.is_none() {
+                    self.open_context_menu(ctx); // its moves act on positions
+                }
             }
             MouseEventKind::RightClick => {}
             MouseEventKind::Drag { .. } => {}
@@ -870,6 +893,19 @@ impl Pane for QueuePane {
     }
 
     fn handle_insert_mode(&mut self, kind: InputResultEvent, ctx: &mut Ctx) -> Result<()> {
+        if let Some(f) = self.find.as_mut().filter(|f| f.typing) {
+            match kind {
+                InputResultEvent::Push | InputResultEvent::Pop => {
+                    f.query = ctx.input.value(f.buffer);
+                    self.apply_find(ctx, true);
+                }
+                InputResultEvent::Confirm => self.end_find(ctx, true),
+                InputResultEvent::Cancel => self.end_find(ctx, false),
+                InputResultEvent::NoChange => {}
+            }
+            ctx.render()?;
+            return Ok(());
+        }
         match kind {
             InputResultEvent::Push => {
                 self.queue.recalculate_matched_items(self.column_formats.as_slice(), ctx);
@@ -891,7 +927,23 @@ impl Pane for QueuePane {
         Ok(())
     }
 
+    fn handle_insert_nav(&mut self, down: bool, handled: &mut bool, ctx: &mut Ctx) -> Result<()> {
+        if self.find.as_ref().is_some_and(|f| f.typing) {
+            if down {
+                self.queue.next(ctx.config.scrolloff, false);
+            } else {
+                self.queue.prev(ctx.config.scrolloff, false);
+            }
+            *handled = true;
+            ctx.render()?;
+        }
+        Ok(())
+    }
+
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        if self.find.is_some() && self.filtered_action(event, ctx)? {
+            return Ok(());
+        }
         if let Some(action) = event.claim_queue() {
             match action {
                 QueueActions::Delete if !self.queue.marked().is_empty() => {
@@ -945,9 +997,7 @@ impl Pane for QueuePane {
                         });
                     }
                 }
-                QueueActions::Find => {
-                    modal!(ctx, crate::ui::modals::queue_find::QueueFindModal::new(ctx));
-                }
+                QueueActions::Find => self.start_find(ctx),
                 QueueActions::JumpToCurrent => {
                     if let Some((idx, _)) = ctx.status.songid.and_then(|id| {
                         self.queue.items.iter().enumerate().find(|(_, song)| song.id == id)
@@ -1543,6 +1593,188 @@ impl QueuePane {
     }
 }
 
+/// rormpc: rows of the queue matching the live filter, in queue order (indices into `songs`). Matches artist,
+/// title, album and the file name: every typed word, diacritic-folded.
+fn find_matches(songs: &[Song], query: &str) -> Vec<usize> {
+    let mut fuzzy = crate::ui::rormpc_filter::Query::new(query);
+    songs
+        .iter()
+        .enumerate()
+        .filter(|(_, song)| {
+            let tag = |k: &str| song.metadata.get(k).map(|v| v.last().to_owned()).unwrap_or_default();
+            let file = song.file.rsplit('/').next().unwrap_or(&song.file);
+            fuzzy.matches(&format!("{} {} {} {file}", tag("artist"), tag("title"), tag("album")))
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// rormpc: the Queue's live filter. Typing narrows the queue to the matching songs in queue order; Enter plays
+/// the selected one and shows the whole queue on it; Esc restores the cursor and the scroll. The filtered list
+/// is a view rebuilt from MPD's queue by song id, so no action ever uses a filtered position as a queue position.
+impl QueuePane {
+    fn start_find(&mut self, ctx: &Ctx) {
+        if let Some(f) = &mut self.find {
+            f.typing = true;
+            ctx.input.insert_mode(f.buffer);
+            return;
+        }
+        let buffer = BufferId::new();
+        ctx.input.create_buffer(buffer, None);
+        ctx.input.insert_mode(buffer);
+        self.find = Some(QueueFind {
+            buffer,
+            typing: true,
+            query: String::new(),
+            saved_id: self.queue.selected().map(|s| s.id),
+            saved_offset: self.queue.state.offset(),
+        });
+        self.apply_find(ctx, false);
+    }
+
+    /// Rebuild the filtered rows from MPD's queue. `snap`: the cursor goes to the first match (a keystroke);
+    /// otherwise it stays on its song while that is still shown.
+    fn apply_find(&mut self, ctx: &Ctx, snap: bool) {
+        let Some(query) = self.find.as_ref().map(|f| f.query.clone()) else { return };
+        let keep = self.queue.selected().map(|s| s.id);
+        let rows: Vec<Song> = find_matches(&ctx.queue, &query).into_iter().map(|i| ctx.queue[i].clone()).collect();
+        let marked = crate::ui::rormpc_actions::remap_marks(&self.queue.items, self.queue.marked(), &rows);
+        self.queue.items = rows;
+        *self.queue.marked_mut() = marked;
+        self.queue.state.set_content_and_viewport_len(self.queue.len(), self.areas[Areas::Table].height as usize);
+        let idx = if snap { None } else { keep.and_then(|id| self.queue.items.iter().position(|s| s.id == id)) };
+        self.queue.select_idx_opt((!self.queue.is_empty()).then(|| idx.unwrap_or(0)), ctx.config.scrolloff);
+        self.recalculate_album_indices();
+    }
+
+    /// Leave the filter: `play` plays the selected song (by id) and shows it in the whole queue; otherwise the
+    /// cursor and scroll from before the filter come back.
+    fn end_find(&mut self, ctx: &Ctx, play: bool) {
+        let Some(f) = self.find.take() else { return };
+        ctx.input.destroy_buffer(f.buffer);
+        let chosen = self.queue.selected().map(|s| s.id);
+        let marked = crate::ui::rormpc_actions::remap_marks(&self.queue.items, self.queue.marked(), &ctx.queue);
+        self.queue.items.clone_from(&ctx.queue);
+        *self.queue.marked_mut() = marked;
+        self.queue.state.set_content_and_viewport_len(self.queue.len(), self.areas[Areas::Table].height as usize);
+        self.recalculate_album_indices();
+        let position = |id: Option<u32>| id.and_then(|id| self.queue.items.iter().position(|s| s.id == id));
+        if play {
+            if let Some(id) = chosen {
+                ctx.command(move |_, client| {
+                    client.play_id(id)?;
+                    Ok(())
+                });
+            }
+            if let Some(idx) = position(chosen) {
+                self.queue.select_idx(idx, usize::MAX); // centred
+            }
+        } else if let Some(idx) = position(f.saved_id) {
+            self.queue.select_idx(idx, ctx.config.scrolloff);
+            self.queue.state.set_offset(f.saved_offset);
+        }
+    }
+
+    /// Actions while the queue is filtered. Moving through the rows, marks, info, ratings and saving the
+    /// selected songs work as usual (they use song ids or files); deleting works on the selected or marked
+    /// rows by id; anything that uses queue positions (moves, sorting, the context menu) waits until the filter
+    /// is cleared. Returns whether the action was handled here.
+    fn filtered_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<bool> {
+        let close = crate::ui::rormpc_filter::binding(&ctx.config.keybinds.navigation, |a| {
+            matches!(a, CommonAction::Close)
+        })
+        .unwrap_or_else(|| "Esc".to_owned());
+        if let Some(action) = event.actions.iter().find_map(|a| a.as_queue()).cloned() {
+            match action {
+                QueueActions::Play => {
+                    event.claim_queue();
+                    self.end_find(ctx, true);
+                }
+                QueueActions::Find => {
+                    event.claim_queue();
+                    self.start_find(ctx);
+                }
+                QueueActions::Delete => {
+                    event.claim_queue();
+                    let ids: Vec<u32> = self.items(false).map(|(_, s)| s.id).collect();
+                    if ids.is_empty() {
+                        status_error!("No song selected");
+                    } else {
+                        let n = ids.len();
+                        ctx.command(move |_, client| {
+                            for id in ids {
+                                client.delete_id(id)?;
+                            }
+                            Ok(())
+                        });
+                        self.queue.marked_mut().clear();
+                        status_info!("{n} song(s) removed from the queue");
+                    }
+                }
+                QueueActions::JumpToCurrent => {
+                    self.end_find(ctx, false);
+                    return Ok(false); // the usual jump, now on the whole queue
+                }
+                _ => {
+                    event.claim_queue();
+                    status_warn!("Not while the queue is filtered: {close} clears the filter");
+                }
+            }
+            ctx.render()?;
+            return Ok(true);
+        }
+        let Some(action) = event.actions.iter().find_map(|a| a.as_common()).cloned() else {
+            return Ok(false);
+        };
+        match action {
+            CommonAction::Up
+            | CommonAction::Down
+            | CommonAction::UpHalf
+            | CommonAction::DownHalf
+            | CommonAction::PageUp
+            | CommonAction::PageDown
+            | CommonAction::Top
+            | CommonAction::Bottom
+            | CommonAction::ScrollFocusedToTop
+            | CommonAction::ScrollFocusedToMiddle
+            | CommonAction::ScrollFocusedToBottom
+            | CommonAction::Select
+            | CommonAction::InvertSelection
+            | CommonAction::ShowInfo
+            | CommonAction::Rate { .. }
+            | CommonAction::CopyToClipboard { .. }
+            | CommonAction::Save { kind: SaveKind::Playlist { all: false, .. } | SaveKind::Modal { all: false, .. }, .. }
+            | CommonAction::Save { current: true, .. }
+            | CommonAction::DeleteFromPlaylist { .. }
+            | CommonAction::PaneUp
+            | CommonAction::PaneDown
+            | CommonAction::PaneLeft
+            | CommonAction::PaneRight => return Ok(false),
+            CommonAction::Confirm => self.end_find(ctx, true),
+            CommonAction::Close => self.end_find(ctx, false),
+            CommonAction::EnterSearch | CommonAction::FocusInput => self.start_find(ctx),
+            _ => status_warn!("Not while the queue is filtered: {close} clears the filter"),
+        }
+        event.claim_common();
+        ctx.render()?;
+        Ok(true)
+    }
+
+    fn render_find_line(&self, frame: &mut Frame, f: &QueueFind, ctx: &Ctx) {
+        let area = self.areas[Areas::FilterArea];
+        if area.height == 0 {
+            return;
+        }
+        let count = format!("{:>11}", format!("{}/{}", self.queue.len(), ctx.queue.len()));
+        let text = format!("FILTER / {}{}", f.query, if f.typing { "▏" } else { "" });
+        let [left, right] = Layout::horizontal([Constraint::Min(1), Constraint::Length(count.chars().count() as u16)])
+            .areas(area);
+        let style = if f.typing { ctx.config.theme.highlight_border_style } else { ctx.config.as_text_style() };
+        frame.render_widget(Line::from(Span::styled(text, style)), left);
+        frame.render_widget(Line::from(count).style(ctx.config.as_text_style()), right);
+    }
+}
+
 #[derive(Default)]
 struct QueueRow {
     cell_style: Option<Style>,
@@ -1587,5 +1819,36 @@ impl QueueRow {
         );
 
         row.style(row_style)
+    }
+}
+
+#[cfg(test)]
+mod rormpc_find_tests {
+    use rmpc_mpd::commands::{Song, metadata_tag::MetadataTag};
+
+    use super::find_matches;
+
+    fn song(id: u32, artist: &str, title: &str, file: &str) -> Song {
+        let metadata = [("artist", artist), ("title", title)]
+            .into_iter()
+            .map(|(k, v)| (k.to_owned(), MetadataTag::Single(v.to_owned())))
+            .collect();
+        Song { id, file: file.to_owned(), metadata, ..Default::default() }
+    }
+
+    #[test]
+    fn filter_keeps_queue_order_and_folds_diacritics() {
+        let q = vec![
+            song(7, "Kult", "Arahja", "a/1.mp3"),
+            song(3, "Myslovitz", "Długość dźwięku samotności", "a/2.mp3"),
+            song(9, "Lao Che", "Żółw", "a/3.mp3"),
+            song(1, "Kult", "Polska", "b/Łódź nocą.mp3"),
+        ];
+        assert_eq!(find_matches(&q, ""), vec![0, 1, 2, 3]);
+        assert_eq!(find_matches(&q, "zolw"), vec![2]);
+        assert_eq!(find_matches(&q, "dlugosc"), vec![1]);
+        assert_eq!(find_matches(&q, "lodz"), vec![3]); // the file name counts
+        assert_eq!(find_matches(&q, "kult"), vec![0, 3]); // queue order, not score order
+        assert!(find_matches(&q, "qqq").is_empty());
     }
 }

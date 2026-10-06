@@ -418,7 +418,7 @@ impl TryFrom<QueueActionsFile> for QueueActions {
 impl ToDescription for QueueActions {
     fn to_description(&self) -> Cow<'static, str> {
         match self {
-            QueueActions::Find => "Find in queue (fuzzy filter, Enter plays)".into(),
+            QueueActions::Find => "Filter the queue as you type (Enter plays, Esc restores)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),
             QueueActions::Play => "Play song under cursor".into(),

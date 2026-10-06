@@ -41,7 +41,7 @@ RO_LB_REPO=https://github.com/rofrol/ro-listenbrainz-mpd
 RO_LB_TAG=v2.6.0-ro.4
 RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
 RORMPC_TOOLS_REPO=https://github.com/rofrol/rormpc-tools
-RORMPC_TOOLS_TAG=v0.2.2
+RORMPC_TOOLS_TAG=v0.2.3
 RORMPC_TOOLS_DIR="${RORMPC_TOOLS_DIR:-$HOME/personal_projects/rormpc-tools}"
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
@@ -61,10 +61,13 @@ service() {
   if [ "$(uname)" = Darwin ]; then
     local label="io.github.rofrol.rormpc.$name" plist="$HOME/Library/LaunchAgents/io.github.rofrol.rormpc.$name.plist"
     for a in "$@"; do args="$args<string>$a</string>"; done
-    local run="<key>KeepAlive</key><true/>"
+    local run="<key>KeepAlive</key><true/>" priority="<key>ProcessType</key><string>Standard</string>"
     [ -n "$interval" ] && run="<key>StartInterval</key><integer>$interval</integer>"
+    # always-on services: ProcessType Standard, since Background lets macOS coalesce timers (mpd-gap's silence
+    # would stretch); periodic jobs (musicdb update) run at background priority with low-priority disk I/O
+    [ -n "$interval" ] && priority="<key>ProcessType</key><string>Background</string>
+	<key>LowPriorityIO</key><true/>"
     mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-    # ProcessType Standard: Background lets macOS coalesce timers (mpd-gap's silence would stretch)
     cat > "$plist.tmp" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -79,7 +82,7 @@ service() {
 	<key>RunAtLoad</key><true/>
 	$run
 	<key>ThrottleInterval</key><integer>10</integer>
-	<key>ProcessType</key><string>Standard</string>
+	$priority
 </dict>
 </plist>
 PLIST
@@ -92,7 +95,8 @@ PLIST
     local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" unit="rormpc-$name"
     mkdir -p "$dir"
     if [ -n "$interval" ]; then
-      printf '[Unit]\nDescription=rormpc companion %s\n\n[Service]\nType=oneshot\nExecStart=%s\n' "$name" "$*" > "$dir/$unit.service.tmp"
+      # periodic jobs at background priority, like ProcessType Background on macOS
+      printf '[Unit]\nDescription=rormpc companion %s\n\n[Service]\nType=oneshot\nExecStart=%s\nNice=10\nIOSchedulingClass=idle\n' "$name" "$*" > "$dir/$unit.service.tmp"
       printf '[Unit]\nDescription=rormpc companion %s, every %s s\n\n[Timer]\nOnBootSec=60\nOnUnitActiveSec=%s\n\n[Install]\nWantedBy=timers.target\n' \
         "$name" "$interval" "$interval" > "$dir/$unit.timer.tmp" && mv "$dir/$unit.timer.tmp" "$dir/$unit.timer"
     else

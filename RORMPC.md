@@ -30,6 +30,9 @@ session: log in normally, or on a machine nobody logs into run `sudo loginctl en
 
 They run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
 `rormpc-*.service` (musicdb with a `.timer`) on Linux; the installer writes them, so edits there are overwritten.
+The hourly `musicdb update` runs at background priority (launchd `ProcessType Background` + `LowPriorityIO`;
+systemd `Nice=10`, `IOSchedulingClass=idle`): about a second of CPU per run. The always-on services stay at
+standard priority, since background priority lets macOS stretch timers (mpd-gap's silence).
 `companions --local` installs both from checkouts instead (`$RORMPC_TOOLS_DIR`, `$RO_LB_DIR`), rormpc-tools editable.
 Without rormpc-tools those features report that the command cannot be run; the rest works.
 
@@ -67,6 +70,18 @@ why), `+` arrived (the result reruns to show it as owned); the status line count
     (pane: Pane(Hits()), size: "100%", borders: "ALL", border_symbols: Rounded), // path: "~/.cache/rormpc/hits/current.json"
 ])),
 ```
+
+## Queue filter
+
+`/` in the Queue (QueueActions `Find`) filters it as you type, inline, no window: the header line shows
+`FILTER / query  12/779`, rows that don't match are hidden and the rest keep their queue order. Every typed word
+must appear in artist, title, album or file name, in any order, diacritics folded ("zolw" finds "Żółw", "lodz"
+finds "Łódź"). While typing: ↑/↓ or Ctrl-n/Ctrl-p move among the shown rows (the cursor starts on the first match
+after each keystroke), Backspace, Ctrl-w and Ctrl-u edit. Enter plays the selected song (by MPD song id), clears
+the filter and shows it in the whole queue; Esc clears the filter and puts the cursor and the scroll back where
+they were. The filtered rows are a view rebuilt from MPD's queue by song id whenever it changes, so nothing acts
+on a filtered position: while filtered, moving, sorting and the context menu wait for the filter to be cleared
+(the status bar says so); delete works on the selected or marked rows by id.
 
 ## Context menus
 
@@ -110,7 +125,14 @@ on several files. Right: the group's files (length, version label, plays) and th
 Spotify album, first and last play, longest play, decision, suggestion). The footer counts the open items, or
 says "clean".
 
-h / l (Left / Right) move between the list, the files and the tracks; Enter opens a menu:
+A hint line at the bottom shows the keys for where the cursor is, from the actual bindings. `/` filters the
+group list as you type (every typed word, diacritics folded; files and tracks inside a group are never hidden),
+↑/↓ move while typing, Enter keeps the filter, Esc clears it and restores the selection; Space (Select) toggles
+"unresolved only". A suggestion reads "Suggested: <file>" and "Why: … longest listen 3:27, file 3:38": Spotify
+records how long you listened each time, so the longest listen is about the song's length if you ever played it
+to the end. Undecided tracks say "Unresolved".
+
+h / l (Left / Right) move between the list, the files and the tracks; Enter opens a menu (actions):
 
 - on a track: "Accept suggestion" (shown with its reason under the table, never applied by itself), "N. It is
   <file>", "A version I don't own" (it joins musicdb's missing list), "Clear the decision";
