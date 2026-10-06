@@ -256,10 +256,12 @@ mpd-player shows as `gap`), consume on as a red ` CONSUME c=off `.
 
 ## Weighted shuffle
 
-A mode of its own, independent of MPD's random: mpd-player draws the next song by weight. With random on it
-nominates it with priority 1, below Up next (2-255); with random off it moves it right after the current song and
-the Up next requests (the queue's order changes as it plays). Either way a request always plays first. It
-excludes MPD's random: `w` turns random off, and random turned on (`x`, a phone, mpc) turns it off. Weights come from `musicdb sync` (hourly,
+A mode of its own next to plain random: mpd-player draws the next song by weight and gives it MPD priority 1,
+below Up next (2-255), so a request always plays first. Priorities steer MPD only with random on, so the mode owns
+MPD's random (other clients see random on): `w` turns both on, or both off (the queue plays in order); `x` while
+it runs switches to plain random (random stays on, the mode turns off, `shuffle release`); random turned off by
+a phone or mpc turns the mode off. Nothing in the queue is moved. While the mode runs, the `x rnd` badge shows
+off and `w shuf` on. Weights come from `musicdb sync` (hourly,
 `$XDG_STATE_HOME/rormpc/weights.json`): (1 + all its plays) ** 0.75, doubled for a like: 1 for a song never
 played, about 13 for one played 30 times; a dislike makes it rare. One pick in five ignores the weights.
 Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
