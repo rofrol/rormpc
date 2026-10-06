@@ -256,8 +256,9 @@ mpd-player shows as `gap`), consume on as a red ` CONSUME c=off `.
 
 ## Weighted shuffle
 
-With random on, mpd-player draws the next song instead of MPD's uniform random and nominates it with priority 1,
-below Up next (2-255), so a request always plays first. Weights come from `musicdb sync` (hourly,
+A mode of its own, independent of MPD's random: mpd-player draws the next song by weight. With random on it
+nominates it with priority 1, below Up next (2-255); with random off it moves it right after the current song and
+the Up next requests (the queue's order changes as it plays). Either way a request always plays first. Weights come from `musicdb sync` (hourly,
 `$XDG_STATE_HOME/rormpc/weights.json`): 1 for a song never played, up to 3 for songs played a lot lately (a play
 counts half after 60 days, log-compressed) or liked; a dislike makes it rare. One pick in five ignores the weights.
 Recently played songs and songs in a "heard enough" cooldown are left out. `w` (ToggleWeightedShuffle) turns it on
@@ -265,8 +266,8 @@ or off; `e` (HeardEnough) rests the playing song for 1, 3, 7, then 14 days and s
 has it for the selected song, and "Back in the weighted shuffle"). Enter and Play next still play a resting song.
 The Up next pane's second footer line shows the pick ("Then likely: … · may change") or why there is none. The theme
 property `Status(WeightedShuffle(on_label, off_label, on_style, waiting_style, off_style))` shows its state, e.g.
-a `w shuf` badge next to the mode badges: on_style while it picks, waiting_style while it is on but idle (random
-off, consume on, stopped), off_style when off.
+a `w shuf` badge next to the mode badges: on_style while it picks, waiting_style while it is on but idle (consume
+on, single on, stopped), off_style when off.
 
 A Hits result played as the source ("Play these N songs (as the source)…" in the Hits menu: its owned rows, a
 snapshot that moving a filter never changes) is shuffled in rounds: each song once, then the shuffle stops
