@@ -1199,11 +1199,13 @@ impl Pane for HitsPane {
                     None => String::new(),
                 },
             };
+            let next = r.file.as_deref().and_then(|f| crate::ui::rormpc_player::next_marker_for_file(ctx, f));
             Row::new(vec![
                 Cell::from(format!("#{}", r.rank)),
                 Cell::from(format!("{:.0}%", r.pct.ceil())),
                 Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
                 like_cell,
+                Cell::from(next.unwrap_or_default()),
                 Cell::from(r.artist.clone()),
                 Cell::from(r.title.clone()),
                 Cell::from(if r.year > 0 { r.year.to_string() } else { String::new() }),
@@ -1212,13 +1214,14 @@ impl Pane for HitsPane {
             ])
             .style(if owned && !r.hidden { Style::default() } else { dim })
         });
-        let header = Row::new(["Rank", "%", "", "♥", "Artist", "Title", "Year", "Plays", "State"])
+        let header = Row::new(["Rank", "%", "", "♥", "Next", "Artist", "Title", "Year", "Plays", "State"])
             .style(ctx.config.theme.preview_label_style);
         let table = Table::new(rows, [
             Constraint::Length(5),
             Constraint::Length(4),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(4),
             Constraint::Percentage(35),
             Constraint::Percentage(65),
             Constraint::Length(4),

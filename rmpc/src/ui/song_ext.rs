@@ -361,6 +361,7 @@ impl SongExt for Song {
             SongProperty::Channels() => self.channels().map(|v| Cow::Owned(v.to_string())),
             SongProperty::Added() => self.added.map(|d| Cow::Owned(d.to_string())),
             SongProperty::LastModified() => Some(Cow::Owned(self.last_modified.to_string())),
+            SongProperty::ShuffleNext() => crate::ui::rormpc_player::next_marker(self.id).map(Cow::Owned),
         }
     }
 

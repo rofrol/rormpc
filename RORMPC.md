@@ -180,8 +180,9 @@ it keeps working with rormpc closed: rormpc sends `upnext add|playnow|play|first
 messages and shows its `upnext.json`. Without mpd-player, Play next says so and Enter plays the song without
 removing it afterwards.
 
-- Queue menu "Sources… (play the library or a playlist)": the whole library or a saved playlist replaces the queue
-  and plays now, after a confirmation. Up next is kept and plays first.
+- Queue menu "Sources… (play the library or a playlist)" and Hits "Play these N songs": the source replaces the
+  queue after a confirmation; the song playing goes on (it is not part of the new source), Up next is kept and
+  plays first, and the status line says how long preparing took ("11 songs, prepared in 0.4 s").
 - "Play next (Up next)" in the Queue menu (marked rows, else the cursor row) and "Add to Up next" on owned Hits
   rows: with random on the songs get MPD priorities 255, 254, … (first asked plays first; MPD drops a song's
   priority when it starts); with random off they move right after the current song, in order. Waiting entries
@@ -283,7 +284,10 @@ nominating and says "round done"; the Up next menu starts a new round. The Hits 
 screen differ. Hits' State column shows only exceptions: `⏳5d` resting, `heard` in this round, `·` not in the
 snapshot being played.
 
-The weighted shuffle draws the next 10 songs ahead (a plan; only the first has the MPD priority). The Shuffle
+The weighted shuffle draws the next 10 songs ahead (a plan) and publishes it as MPD priorities 10..1, below the
+Up next requests (255, 254, ...), so MPD itself plays it in order (also "next" on a phone). The song property
+`ShuffleNext()` shows each song's turn in a column (`↑1` a request, `1`..`10` the plan): my Queue's first column
+"Next", and the Hits table has it too. The Shuffle
 pane (`Pane(Shuffle())`, my tab "Shuffle", `gs`) lists what plays, in order: ▶ the song playing, ↑ the Up next
 requests, then the plan with why each was drawn. The plan changes only when a planned song leaves the queue, is
 requested, gets "heard enough" or is played by hand (its lane goes to the replacement), and is topped up after

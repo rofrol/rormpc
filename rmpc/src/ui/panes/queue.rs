@@ -495,6 +495,7 @@ impl Pane for QueuePane {
         let formats = &config.theme.song_table_format;
         // rormpc: the column showing rmpc's like sticker gets a clickable heart (hover shows ♡ on an unrated song)
         let like_idx = formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
+        let has_next_col = formats.iter().any(|f| format!("{:?}", f.prop).contains("ShuffleNext"));
         self.like_col = like_idx.and_then(|i| widths.get(i)).map(|r| (r.x, r.width.max(1)));
         let hover_like = self.hover_like;
 
@@ -524,7 +525,10 @@ impl Pane for QueuePane {
 
                 let is_marked = marked.contains(&idx);
                 let is_duplicate = duplicates.contains(&song.file);
-                let up_badge = up_next.iter().position(|id| *id == song.id).map(|k| format!("↑{} ", k + 1));
+                // the badge only when the theme has no ShuffleNext column, which shows the same turn
+                let up_badge = (!has_next_col)
+                    .then(|| up_next.iter().position(|id| *id == song.id).map(|k| format!("↑{} ", k + 1)))
+                    .flatten();
                 let matches_filter = is_currently_playing_song
                     || if self.queue.filter_active {
                         song.matches_formats(self.column_formats.as_slice(), &filter, ctx)

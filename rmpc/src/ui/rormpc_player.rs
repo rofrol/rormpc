@@ -135,6 +135,7 @@ pub struct Nominee {
 /// A song the weighted shuffle drew ahead (the plan, in play order; the first one has the MPD priority).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Planned {
+    pub id: u32,
     pub file: String,
     #[serde(default)]
     pub why: String,
@@ -294,4 +295,23 @@ pub fn new_round(ctx: &Ctx) {
         || shuffle_state().round.is_none_or(|r| !r.done),
         || "New round: every song of the source once more".to_owned(),
     );
+}
+
+/// A queued song's turn: 0.. for the Up next requests (in order), then 1000 + k for the weighted shuffle's plan.
+pub fn next_rank(id: u32) -> Option<usize> {
+    if let Some(k) = crate::ui::rormpc_upnext::up_next_ids().iter().position(|i| *i == id) {
+        return Some(k);
+    }
+    let sh = shuffle_state();
+    (sh.enabled && sh.active).then(|| sh.plan.iter().position(|p| p.id == id).map(|k| 1000 + k)).flatten()
+}
+
+/// The ShuffleNext column: "↑1" for the first Up next request, "1".."10" for the shuffle's plan.
+pub fn next_marker(id: u32) -> Option<String> {
+    next_rank(id).map(|r| if r >= 1000 { (r - 999).to_string() } else { format!("↑{}", r + 1) })
+}
+
+/// The ShuffleNext marker of a library file (Hits rows know files, not queue ids): its first queue entry's turn.
+pub fn next_marker_for_file(ctx: &crate::ctx::Ctx, file: &str) -> Option<String> {
+    ctx.queue.iter().filter(|s| s.file == file).find_map(|s| next_marker(s.id))
 }

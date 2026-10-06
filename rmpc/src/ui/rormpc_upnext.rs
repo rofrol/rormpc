@@ -15,7 +15,12 @@ use std::{
     time::SystemTime,
 };
 
-use rmpc_mpd::{commands::status::OnOffOneshot, mpd_client::MpdClient, queue_position::QueuePosition};
+use rmpc_mpd::{
+    commands::status::OnOffOneshot,
+    mpd_client::MpdClient,
+    proto_client::ProtoClient,
+    queue_position::QueuePosition,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -292,14 +297,31 @@ fn confirm_replace_with(ctx: &Ctx, kind: String, name: String, files: Vec<String
     let waiting = upnext_file().entries;
     let up = waiting.len();
     let message = vec![format!(
-        "Play {what} now?\n\nThe queue is replaced by it and playback starts (the current song is cut).{}",
+        "Play {what}?\n\nThe queue is replaced by it; the song playing now goes on, then the new source plays.{}",
         if up > 0 { format!("\nUp next ({up}) is kept and plays first.") } else { String::new() }
     )];
     let go = move |ctx: &Ctx| -> anyhow::Result<()> {
         let (kind, name, files) = (kind.clone(), name.clone(), files.clone());
-        let first = waiting.first().map(|e| e.file.clone());
         ctx.command(move |_, client| {
-            client.clear()?;
+            let started = std::time::Instant::now();
+            let status = client.get_status()?;
+            let current = status.songid;
+            // everything but the playing song leaves (two range deletes around it); Up next follows its files
+            // (mpd-player re-finds the requests in the new queue)
+            match status.song {
+                Some(pos) if current.is_some() => {
+                    let len = client.playlist_info()?.map_or(0, |q| q.len());
+                    if pos + 1 < len {
+                        client.execute(&format!("delete {}:", pos + 1))?;
+                        client.read_ok()?;
+                    }
+                    if pos > 0 {
+                        client.execute(&format!("delete 0:{pos}"))?;
+                        client.read_ok()?;
+                    }
+                }
+                _ => client.clear()?,
+            }
             match kind.as_str() {
                 "library" => client.add("/", None)?,
                 "hits" => {
@@ -309,24 +331,31 @@ fn confirm_replace_with(ctx: &Ctx, kind: String, name: String, files: Vec<String
                 }
                 _ => client.load_playlist(&name, None)?,
             }
+            // the playing song was kept: its copy from the new source would make it play twice
+            let queue = client.playlist_info()?.unwrap_or_default();
+            if let Some(cur) = current.and_then(|id| queue.iter().find(|s| s.id == id)).map(|s| s.file.clone()) {
+                for s in queue.iter().filter(|s| s.file == cur && Some(s.id) != current) {
+                    client.delete_id(s.id)?;
+                }
+            }
             let len = client.playlist_info()?.map_or(0, |q| q.len());
             let st = State { source: Some(Source { kind, name, len, files }) };
             if let Ok(mut g) = state().lock() {
                 *g = st.clone();
             }
             save(&st);
-            // mpd-player keeps Up next across the replaced queue (same files, new ids); its first song plays first
-            match first {
-                Some(f) if client.channels()?.0.iter().any(|c| c == rormpc_player::CHANNEL) => {
-                    client.send_message(rormpc_player::CHANNEL, &format!("upnext playnow {f}"))?;
-                }
-                _ => client.play()?,
+            if current.is_none() {
+                client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
             }
-            status_info!("Playing from {}", match st.source.as_ref().map(|s| s.kind.as_str()) {
-                Some("library") => "the whole library",
-                Some("hits") => "the Hits result",
-                _ => "the playlist",
-            });
+            status_info!(
+                "Playing from {} · {len} songs, prepared in {:.1} s",
+                match st.source.as_ref().map(|s| s.kind.as_str()) {
+                    Some("library") => "the whole library",
+                    Some("hits") => "the Hits result",
+                    _ => "the playlist",
+                },
+                started.elapsed().as_secs_f64()
+            );
             Ok(())
         });
         Ok(())
