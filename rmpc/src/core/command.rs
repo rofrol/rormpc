@@ -12,7 +12,7 @@ use rmpc_mpd::{
     client::Client,
     commands::{IdleEvent, State, mpd_config::MpdConfig, volume::Bound},
     filter::{Filter, Tag},
-    mpd_client::{AlbumArtOrder, MpdClient, MpdCommand, StickerFindOptions, ValueChange},
+    mpd_client::{AlbumArtOrder, MpdClient, MpdCommand, StickerFindOptions},
     proto_client::ProtoClient,
     queue_position::QueuePosition,
     single_or_range::SingleOrRange,
@@ -162,18 +162,14 @@ impl Command {
             })),
             Command::Prev { rewind_to_start, keep_state } => Ok(Box::new(move |_, client| {
                 let status = client.get_status()?;
-                match rewind_to_start {
-                    Some(value) if status.elapsed.as_secs() >= value => {
-                        client.seek_current(ValueChange::Set(0))?;
-                    }
-                    Some(_value) => {
-                        client.prev_keep_state(keep_state, status.state)?;
-                    }
-                    None => {
-                        client.prev_keep_state(keep_state, status.state)?;
-                    }
-                }
-                Ok(())
+                // rormpc: the same routing as the Previous key (mpd-player's `shuffle prev`)
+                crate::ui::rormpc_player::previous(
+                    client,
+                    rewind_to_start,
+                    status.elapsed.as_secs(),
+                    keep_state,
+                    status.state,
+                )
             })),
             Command::Repeat { value } => {
                 Ok(Box::new(move |_, client| Ok(client.repeat((value).into())?)))
