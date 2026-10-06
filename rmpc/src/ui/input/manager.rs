@@ -66,7 +66,11 @@ impl InputManager {
     }
 
     pub fn destroy_buffer(&self, id: BufferId) {
-        self.normal_mode();
+        // rormpc: only when typing into this buffer: a menu that opens an input modal and then closes destroys its
+        // filter buffer after the input modal entered insert mode, which left the new input deaf
+        if self.is_active(id) {
+            self.normal_mode();
+        }
         self.buffers.borrow_mut().remove(&id);
     }
 
