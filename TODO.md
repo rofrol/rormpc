@@ -1,5 +1,13 @@
 # TODO
 
+## Next: Hits works like Queue, Up next as a sub-tab
+
+- [ ] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the
+      Hits table.
+- [ ] Hits is the first tab.
+- [ ] "Play next" (Up next) becomes a sub-tab of Hits, showing the songs waiting in Up next.
+- [ ] Queue gets the same "Play next" sub-tab.
+
 ## Media keys and Now Playing (outside the TUI)
 
 Hardware media keys (play/pause/next/previous) and the system Now Playing widget work on macOS with
