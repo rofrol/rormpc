@@ -25,6 +25,12 @@ A file for [guiding AI coding agents](https://agents.md/).
   `shuffle_state()` returns the per-thread `TEST_SHUFFLE` (set it in a test that needs a weighted shuffle). Keep
   new state readers behind `state_path()` so plain `cargo test` stays independent of the machine.
 
+## State-file notifications
+
+- Watch the parent directory of atomically replaced state files, not their old inode. Canonicalize the watched
+  parent and target before comparing notify event paths: macOS reports `/private/tmp` for paths opened via `/tmp`.
+  A missed state notification while paused is a correctness bug, not a reason to add a sleep or a longer timeout.
+
 ## Checking UI behaviour
 
 - An agent can drive the TUI itself: `herdr tab create --no-focus`, `herdr pane run <pane> rormpc`, then
