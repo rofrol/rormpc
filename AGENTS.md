@@ -21,9 +21,9 @@ A file for [guiding AI coding agents](https://agents.md/).
 
 ## Tests
 
-- Run `cargo test` with an empty state dir: `env XDG_STATE_HOME=$(mktemp -d) cargo test -p rmpc`. Status
-  properties read mpd-player's state files (`$XDG_STATE_HOME/rormpc/*.json`), and with the user's real
-  `shuffle.json` (weighted shuffle on) three `format_tests` on the Random label fail (2026-10-06).
+- Unit tests never read mpd-player's real state: under `cfg(test)` `state_path()` points at an empty temp dir and
+  `shuffle_state()` returns the per-thread `TEST_SHUFFLE` (set it in a test that needs a weighted shuffle). Keep
+  new state readers behind `state_path()` so plain `cargo test` stays independent of the machine.
 
 ## Checking UI behaviour
 
