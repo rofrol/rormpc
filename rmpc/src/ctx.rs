@@ -70,6 +70,8 @@ pub struct Ctx {
     #[debug(skip)]
     pub(crate) client_request_sender: Sender<ClientRequest>,
     pub(crate) needs_render: Cell<bool>,
+    pub(crate) queue_plan: Cell<bool>,
+    pub(crate) player_present: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) stickers_to_fetch: RefCell<HashSet<String>>,
     #[debug(skip)]
     pub(crate) lrc_index: LrcIndex,
@@ -139,6 +141,12 @@ impl Ctx {
             scheduler,
             client_request_sender,
             needs_render: Cell::new(false),
+            queue_plan: Cell::new(false),
+            player_present: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                client
+                    .channels()
+                    .is_ok_and(|c| c.0.iter().any(|c| c == crate::ui::rormpc_player::CHANNEL)),
+            )),
             stickers_to_fetch: RefCell::new(HashSet::new()),
             rendered_frames: 0,
             messages: RingVec::default(),

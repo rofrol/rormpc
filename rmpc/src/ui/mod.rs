@@ -80,6 +80,8 @@ pub mod rormpc_filter;
 pub mod rormpc_lyrics;
 pub mod rormpc_mute;
 pub mod rormpc_player;
+pub mod rormpc_queue_plan;
+pub mod rormpc_process;
 pub mod rormpc_genres;
 pub mod rormpc_playlists;
 pub mod rormpc_tags;

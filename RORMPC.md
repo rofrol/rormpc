@@ -358,8 +358,13 @@ the played head is classified against the effective patched order first.
 The title calls this a forecast. Missing daemon channel, old/missing/future heartbeat, incompatible version or
 failed priority publication means dimmed forecast numbers and `stale · Xm` (unknown age without a heartbeat),
 not a fresh prediction. mpd-player publishes on its existing 30-second idle wake; 60 seconds without a heartbeat
-is stale. Subscription events detect daemon absence immediately, native atomic-file notifications refresh the
-view even while paused, and one deadline render expires freshness without polling. A missing patch reply uses
+is stale. A Subscription event (and a reconnect) re-reads whether the daemon's channel exists, so a daemon start
+or a clean unsubscribe shows at once. MPD (0.24.15) sends no Subscription event when a subscribed client just
+disconnects, so a stopped or crashed daemon is seen by the operating system instead: shuffle.json carries the
+daemon's `pid`, and rormpc waits on that process's exit (kqueue `EVFILT_PROC` on macOS, `pidfd` on Linux) once
+per daemon session (the session part of `plan_version`); a pid it cannot observe counts as stale. Native
+atomic-file notifications refresh the view even while paused, and one deadline render expires freshness without
+polling. A missing patch reply uses
 the existing 2-second external acknowledgement deadline and re-reads state before reporting failure; no retry.
 
 ## Likes in Hits and Queue

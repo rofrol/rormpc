@@ -77,6 +77,8 @@ pub fn ctx(
         client_request_sender: client_request_channel.0.clone(),
         supported_commands: HashSet::new(),
         needs_render: Cell::new(false),
+        queue_plan: Cell::new(false),
+        player_present: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         stickers_to_fetch: RefCell::new(HashSet::new()),
         lrc_index: LrcIndex::default(),
         stickers_supported: StickersSupport::Unsupported,

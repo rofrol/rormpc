@@ -1,18 +1,28 @@
 # TODO
 
-## Next: live Queue plan view (approved 2026-10-06)
+## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
-- [ ] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two
+- [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two
       plays (`-2`, `-1`, dimmed), `0 ▶` current, `↑n` requests, all ten forecast slots, then an unselectable
       `unplanned · queue order` divider and the remaining songs in MPD order. Label the mode in the panel title.
-- [ ] Preserve selection, scrolling and mouse targets by queue song ID across forecast refreshes; break ties
+- [x] Preserve selection, scrolling and mouse targets by queue song ID across forecast refreshes; break ties
       by MPD position. Disable Next-header sorting in this view. Filtering keeps the original turn numbers.
-- [ ] Dim stale forecast numbers and show `stale · Xm` when the daemon is absent or its state is old.
-- [ ] J/K reorder requests in the request section; in the forecast they request a version-checked slot swap
+- [x] Dim stale forecast numbers and show `stale · Xm` when the daemon is absent or its state is old.
+- [x] J/K reorder requests in the request section; in the forecast they request a version-checked slot swap
       from mpd-player, which alone writes priorities and publishes confirmation. Never move across section
       boundaries or move past/current/unplanned rows. Document patch lifetime and clear it when a patched
       song plays or leaves the queue, or the daemon draws a new forecast.
-- [ ] Verify with `cargo test`, `uv run pytest`, `uvx pyflakes src`, and TUI tests only on a scratch MPD.
+- [x] Verify with `cargo test`, `uv run pytest`, `uvx pyflakes src`, and TUI tests only on a scratch MPD.
+
+Verified: `cargo test` (957 tests), `uv run pytest` (123 tests), pyflakes, and the TUI on a null-output scratch MPD
+(port 6650): 20 confirmed forecast swaps with the MPD queue order unchanged, past/current/request/forecast
+sections, request J/K, a filter that keeps slot 10 and plays its ID, stale state from an old, deleted or
+59-second-old heartbeat while paused, `stale · 0m` at once when the daemon is killed (MPD sends no Subscription
+event on a client disconnect, so rormpc waits on the daemon's process exit), and fresh again after a restart.
+
+- [ ] Proposed: keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the
+      ordinary Queue filter), so a paste or a scripted `send-keys / text` runs the letters as commands. Seen
+      2026-10-07 on the scratch MPD (`c` turned consume on).
 
 ## Done: Hits works like Queue, Up next as its own tab (2026-10-06)
 

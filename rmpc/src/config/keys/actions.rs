@@ -367,6 +367,8 @@ impl ToDescription for LogsActions {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub enum QueueActionsFile {
+    /// rormpc: toggle a live forecast view without reordering MPD
+    TogglePlanView,
     /// rormpc: fzf-like find in queue
     Find,
     Delete,
@@ -390,6 +392,7 @@ pub enum QueueActionsFile {
 #[derive(Debug, Display, Clone, EnumDiscriminants, PartialEq, Eq)]
 #[strum_discriminants(derive(VariantArray))]
 pub enum QueueActions {
+    TogglePlanView,
     Find,
     Delete,
     DeleteAll,
@@ -407,6 +410,7 @@ impl TryFrom<QueueActionsFile> for QueueActions {
 
     fn try_from(value: QueueActionsFile) -> Result<Self, Self::Error> {
         match value {
+            QueueActionsFile::TogglePlanView => Ok(QueueActions::TogglePlanView),
             QueueActionsFile::Find => Ok(QueueActions::Find),
             QueueActionsFile::Delete => Ok(QueueActions::Delete),
             QueueActionsFile::DeleteAll => Ok(QueueActions::DeleteAll),
@@ -448,6 +452,7 @@ impl TryFrom<QueueActionsFile> for QueueActions {
 impl ToDescription for QueueActions {
     fn to_description(&self) -> Cow<'static, str> {
         match self {
+            QueueActions::TogglePlanView => "Toggle Queue plan view (never reorders MPD)".into(),
             QueueActions::Find => "Filter the queue as you type (Enter plays, Esc restores)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),

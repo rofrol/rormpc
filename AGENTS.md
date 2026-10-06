@@ -45,6 +45,12 @@ A file for [guiding AI coding agents](https://agents.md/).
   It talks to the real MPD, so undo queue changes (`mpc del`) and close the tab afterwards. To compare with
   the build before a fix, run a backup binary from `~/.cache/rormpc/installed/`.
 - With random on, `mpc insert` appends at the end; use `mpc add` + `mpc move` to put a song at a position.
+- Send `/` alone and wait for the filter line (`[FILTER]` / `FILTER /`) before typing the query: keys sent in the
+  same `herdr pane send-keys` batch as `/` run as normal-mode commands (on 2026-10-07 they toggled consume,
+  opened modals and switched tabs on the scratch MPD).
+- MPD (0.24.15) emits no `subscription` idle event when a subscribed client disconnects; only explicit
+  subscribe/unsubscribe emit it. Detect a stopped mpd-player by its process (`rormpc_process.rs`), not by waiting
+  for that event.
 - Features that change playback or replace the queue (Sources…, Up next): test them on a scratch MPD, never the
   user's. A config with `music_directory` = the real library, its own `db_file`, `state_file`, `sticker_file`, a
   copy of the playlists, `port "6650"` and `audio_output { type "null" name "null" }`, started with

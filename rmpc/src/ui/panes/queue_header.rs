@@ -71,6 +71,10 @@ impl QueueHeaderPane {
         idx: usize,
         ctx: &Ctx,
     ) -> Result<()> {
+        if ctx.queue_plan.get() {
+            crate::shared::macros::status_info!("Plan view never sorts MPD; o returns to queue order");
+            return Ok(());
+        }
         if let Some(format) = column_formats.get(idx) {
             let mut evald = Self::evaluate_content(format, ctx);
             // rormpc: the Next column sorts by turn (requests, then the plan 1..10, then the rest), not as text

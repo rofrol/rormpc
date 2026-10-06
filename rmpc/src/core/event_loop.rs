@@ -984,8 +984,8 @@ fn handle_idle_event(event: IdleEvent, ctx: &Ctx) {
                 Ok(MpdQueryResult::Outputs(client.current_partition_outputs()?))
             });
         }
+        IdleEvent::Subscription => crate::ui::rormpc_player::refresh_presence(ctx),
         IdleEvent::Partition
-        | IdleEvent::Subscription
         | IdleEvent::Message
         | IdleEvent::Neighbor
         | IdleEvent::Mount => {

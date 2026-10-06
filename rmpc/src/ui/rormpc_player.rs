@@ -20,7 +20,22 @@ use crate::{
 pub const CHANNEL: &str = "rormpc";
 /// how long to wait for mpd-player to write its state after a command: it answers within milliseconds when it
 /// runs; this only bounds the wait when it does not
-const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
+/// Two existing mpd-player `MAX_WAIT` (30 s) heartbeats: a missing publication is stale, not a live forecast.
+pub const FORECAST_FRESH_SECONDS: f64 = 60.0;
+
+/// Re-read whether mpd-player is subscribed to its channel (on MPD's Subscription event, a reconnect, or
+/// entering the Queue plan view). A crash sends no Subscription event; `rormpc_process` sees that one.
+pub fn refresh_presence(ctx: &Ctx) {
+    let present = std::sync::Arc::clone(&ctx.player_present);
+    ctx.command(move |tx, client| {
+        let channels = client.channels();
+        let subscribed = channels.as_ref().is_ok_and(|c| c.0.iter().any(|c| c == CHANNEL));
+        present.store(subscribed, std::sync::atomic::Ordering::Relaxed);
+        tx.send(crate::shared::events::AppEvent::RequestRender)?;
+        Ok(channels.map(|_| ())?)
+    });
+}
 
 pub fn state_path(module: &str) -> PathBuf {
     // tests never see the machine's mpd-player state (a weighted shuffle left on changed what labels render)
@@ -185,6 +200,24 @@ pub struct ShuffleState {
     pub plan: Vec<Planned>,
     #[serde(default)]
     pub history: Vec<Past>,
+    #[serde(default)]
+    pub plan_version: String,
+    #[serde(default)]
+    pub pid: u32,
+    #[serde(default)]
+    pub updated_at: f64,
+    #[serde(default)]
+    pub ack: Option<PlanAck>,
+    #[serde(default)]
+    pub publish_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PlanAck {
+    pub token: String,
+    pub ok: bool,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 /// A song mpd-player saw play, with how it ended.
@@ -208,12 +241,27 @@ pub fn shuffle_state() -> ShuffleState {
 }
 
 #[cfg(not(test))]
+type ShuffleCache = std::sync::Mutex<(Option<std::time::SystemTime>, ShuffleState)>;
+#[cfg(not(test))]
+static SHUFFLE_CACHE: std::sync::OnceLock<ShuffleCache> = std::sync::OnceLock::new();
+
+/// Forget the cached shuffle.json: an atomic replacement can keep the old mtime.
+pub fn invalidate_shuffle_state() {
+    #[cfg(not(test))]
+    if let Some(cache) = SHUFFLE_CACHE.get()
+        && let Ok(mut cache) = cache.lock()
+    {
+        // None also means a deleted file; never reuse its old forecast
+        *cache = (None, ShuffleState::default());
+    }
+}
+
+#[cfg(not(test))]
 fn shuffle_state_from_file() -> ShuffleState {
-    use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<(Option<std::time::SystemTime>, ShuffleState)>> = OnceLock::new();
     let p = state_path("shuffle");
     let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
-    let cache = CACHE.get_or_init(|| Mutex::new((None, ShuffleState::default())));
+    let cache =
+        SHUFFLE_CACHE.get_or_init(|| std::sync::Mutex::new((None, ShuffleState::default())));
     let Ok(mut c) = cache.lock() else { return ShuffleState::default() };
     if c.0 != mtime || mtime.is_none() {
         c.1 = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
