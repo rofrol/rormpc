@@ -30,6 +30,8 @@ A file for [guiding AI coding agents](https://agents.md/).
 - Watch the parent directory of atomically replaced state files, not their old inode. Canonicalize the watched
   parent and target before comparing notify event paths: macOS reports `/private/tmp` for paths opened via `/tmp`.
   A missed state notification while paused is a correctness bug, not a reason to add a sleep or a longer timeout.
+- Invalidate an mtime cache's value as well as its timestamp: `None` also means a missing file, so resetting
+  only the timestamp can match a deleted file and resurrect its old state.
 
 ## Checking UI behaviour
 

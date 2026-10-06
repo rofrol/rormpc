@@ -348,7 +348,8 @@ filtering retains the original turn numbers. Next-header sorting (and other phys
 
 J/K reorder requests only within their section, or ask mpd-player to swap adjacent forecast slots using the
 published plan version. Only the daemon writes priorities and verifies MPD state again before acknowledging
-(a song can start during the writes); rormpc never moves queue positions or draws an optimistic order. A correlated acknowledgement confirms the change; stale versions are rejected, never retried.
+(a song can start during the writes); rormpc never moves queue positions or draws an optimistic order.
+A correlated acknowledgement confirms the change; stale versions are rejected, never retried.
 The temporary patch survives heartbeats and more confirmed swaps, but expires at the first new draw (including
 per-song top-up), a planned song playing/leaving/becoming a request or heard-enough, reroll/new round/source
 change, or daemon restart. Surviving entries regain their pre-patch order **before** replacements are drawn;
