@@ -11,6 +11,11 @@
       "Play next" inside it. Hits and Queue get a key that opens it. Full plan: music-data TODO.md, entry
       "Playback annoyances".
 
+## Soon: missing film score / soundtrack genre
+
+- [ ] Investigate why the film score / soundtrack genre is missing from songs such as "Cast Away Theme"
+      by Alan Silvestri, and make that classification available in Hits genre filters.
+
 ## "Mute for…" with a countdown
 
 Asked 2026-10-06; planned with GPT-6.1 Sol and MiMo, done 2026-10-06 (rormpc-tools `player/mute.py`, rormpc
