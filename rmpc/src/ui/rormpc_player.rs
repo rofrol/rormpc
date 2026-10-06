@@ -23,10 +23,20 @@ pub const CHANNEL: &str = "rormpc";
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub fn state_path(module: &str) -> PathBuf {
+    // tests never see the machine's mpd-player state (a weighted shuffle left on changed what labels render)
+    #[cfg(test)]
+    let base = std::env::temp_dir().join(format!("rormpc-test-state-{}", std::process::id()));
+    #[cfg(not(test))]
     let base = std::env::var("XDG_STATE_HOME").map(PathBuf::from).unwrap_or_else(|_| {
         PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/state")
     });
     base.join(format!("rormpc/{module}.json"))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// What `shuffle_state()` returns in this test thread (default: no shuffle state, as on a fresh machine).
+    pub static TEST_SHUFFLE: std::cell::RefCell<ShuffleState> = std::cell::RefCell::default();
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +201,14 @@ pub struct Past {
 
 /// shuffle.json, read again only when the file changed (it is looked at while rendering).
 pub fn shuffle_state() -> ShuffleState {
+    #[cfg(test)]
+    return TEST_SHUFFLE.with(|s| s.borrow().clone());
+    #[cfg(not(test))]
+    shuffle_state_from_file()
+}
+
+#[cfg(not(test))]
+fn shuffle_state_from_file() -> ShuffleState {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<(Option<std::time::SystemTime>, ShuffleState)>> = OnceLock::new();
     let p = state_path("shuffle");

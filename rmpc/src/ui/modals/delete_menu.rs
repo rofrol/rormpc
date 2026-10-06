@@ -69,6 +69,28 @@ struct Preview {
     youtube: Option<YouTube>,
 }
 
+/// `musicdb delete --preview`'s JSON: `{"version": 1, "songs": [...]}`. Older rormpc-tools printed the
+/// bare list; it is read the same way so an older install keeps working.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PreviewOutput {
+    Versioned { version: u32, songs: Vec<Preview> },
+    Legacy(Vec<Preview>),
+}
+
+const PREVIEW_VERSION: u32 = 1;
+
+fn parse_preview(out: &str) -> Result<Vec<Preview>, String> {
+    match serde_json::from_str(out).map_err(|e| format!("musicdb delete --preview: {e}"))? {
+        PreviewOutput::Versioned { version: PREVIEW_VERSION, songs } | PreviewOutput::Legacy(songs) => Ok(songs),
+        PreviewOutput::Versioned { version, .. } => Err(format!(
+            "musicdb delete --preview speaks version {version}, this rormpc reads {PREVIEW_VERSION}: install the \
+             matching rormpc-tools ({}) with scripts/rormpc_install.sh companions",
+            *crate::shared::dependencies::RORMPC_TOOLS_TAG
+        )),
+    }
+}
+
 #[derive(Debug, Default)]
 struct Job {
     songs: Option<Vec<Preview>>,
@@ -129,7 +151,7 @@ fn run(args: &[String]) -> Result<String, String> {
             .find(|l| !l.trim().is_empty())
             .unwrap_or("musicdb failed")
             .to_owned()),
-        Err(err) => Err(format!("cannot run {MUSICDB}: {err}")),
+        Err(err) => Err(crate::shared::dependencies::cannot_run(MUSICDB, &err)),
     }
 }
 
@@ -140,7 +162,7 @@ fn preview(files: &[String], youtube: bool) -> Result<Vec<Preview>, String> {
     }
     args.push("--".to_owned());
     args.extend(files.iter().cloned());
-    run(&args).and_then(|out| serde_json::from_str(&out).map_err(|e| e.to_string()))
+    run(&args).and_then(|out| parse_preview(&out))
 }
 
 /// The local preview first (fast), then again with the live YouTube lookup (a network call).
@@ -409,5 +431,52 @@ impl Modal for DeleteMenu {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_preview;
+
+    // the shape rormpc-tools' tests/test_rormpc_contract.py checks on its side
+    const SONG: &str = r#"{"file": "yt/001--Rick_Astley--dQw4w9WgXcQ--20091025.mp3", "artist": "Rick Astley",
+        "title": "Never Gonna Give You Up", "ytid": "dQw4w9WgXcQ", "exists": true, "plays": 3, "lb_listens": 2,
+        "shared": []}"#;
+
+    #[test]
+    fn reads_the_versioned_preview() {
+        let songs = parse_preview(&format!(r#"{{"version": 1, "songs": [{SONG}]}}"#)).unwrap();
+        assert_eq!(songs.len(), 1);
+        assert_eq!((songs[0].artist.as_str(), songs[0].lb_listens), ("Rick Astley", 2));
+        assert_eq!(songs[0].ytid.as_deref(), Some("dQw4w9WgXcQ"));
+        assert!(songs[0].youtube.is_none());
+    }
+
+    #[test]
+    fn reads_the_youtube_lookup_and_its_error() {
+        let found = SONG.replace(
+            r#""shared": []"#,
+            r#""shared": ["cd/01.flac"], "youtube": {"video": "dQw4w9WgXcQ", "playlists":
+                [{"id": "PL1", "title": "Favourites", "item": "x"}], "cached_at": "2026-10-06T12:00:00"}"#,
+        );
+        let failed = SONG.replace(r#""shared": []"#, r#""shared": [], "youtube": {"error": "login expired"}"#);
+        let songs = parse_preview(&format!(r#"{{"version": 1, "songs": [{found}, {failed}]}}"#)).unwrap();
+        let yt = songs[0].youtube.as_ref().unwrap();
+        assert_eq!(yt.playlists[0].title, "Favourites");
+        assert_eq!(yt.cached_at.as_deref(), Some("2026-10-06T12:00:00"));
+        assert_eq!(songs[0].shared, vec!["cd/01.flac".to_owned()]);
+        assert_eq!(songs[1].youtube.as_ref().unwrap().error.as_deref(), Some("login expired"));
+    }
+
+    #[test]
+    fn reads_the_bare_list_of_older_rormpc_tools() {
+        assert_eq!(parse_preview(&format!("[{SONG}]")).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn refuses_another_version_and_garbage() {
+        let err = parse_preview(&format!(r#"{{"version": 2, "songs": [{SONG}]}}"#)).unwrap_err();
+        assert!(err.contains("version 2") && err.contains("rormpc_install.sh"), "{err}");
+        assert!(parse_preview("usage: musicdb [-h]").is_err());
     }
 }

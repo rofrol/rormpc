@@ -2040,6 +2040,24 @@ mod format_tests {
             assert_eq!(result, Some(Either::Left(Span::raw(expected_label))));
         }
 
+        // rormpc: random owned by the weighted shuffle shows as off
+        #[rstest]
+        fn random_label_is_off_while_the_weighted_shuffle_owns_it(mut ctx: Ctx) {
+            let format = Property::<PropertyKind> {
+                kind: PropertyKindOrText::Property(PropertyKind::Status(
+                    StatusPropertyFile::Random.try_into().unwrap(),
+                )),
+                style: None,
+                default: None,
+            };
+            let song = Song { id: 1, file: "file".to_owned(), ..Default::default() };
+            ctx.status = Status { random: true, ..Default::default() };
+            crate::ui::rormpc_player::TEST_SHUFFLE.with(|s| s.borrow_mut().enabled = true);
+            let result = format.as_span(Some(&song), &ctx, "", TagResolutionStrategy::All);
+            crate::ui::rormpc_player::TEST_SHUFFLE.with(|s| s.borrow_mut().enabled = false);
+            assert_eq!(result, Some(Either::Left(Span::raw("Off"))));
+        }
+
         #[rstest]
         #[case(StatusPropertyFile::ConsumeV2 { on_style: Some(StyleFile::builder().fg("red".to_string()).build()), off_style: Some(StyleFile::builder().fg("green".to_string()).build()), oneshot_style: Some(StyleFile::builder().fg("blue".to_string()).build()), on_label: String::new(), off_label: String::new(), oneshot_label: String::new() }, Status { consume: OnOffOneshot::On, ..Default::default() }, Some(Style::default().red()))]
         #[case(StatusPropertyFile::SingleV2  { on_style: Some(StyleFile::builder().fg("red".to_string()).build()), off_style: Some(StyleFile::builder().fg("green".to_string()).build()), oneshot_style: Some(StyleFile::builder().fg("blue".to_string()).build()),  on_label: String::new(), off_label: String::new(), oneshot_label: String::new() }, Status { single: OnOffOneshot::On, ..Default::default() }, Some(Style::default().red()))]

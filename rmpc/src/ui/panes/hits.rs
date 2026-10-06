@@ -509,7 +509,7 @@ impl HitsPane {
                         String::from_utf8_lossy(&out.stderr).lines().rev().find(|l| !l.trim().is_empty())
                             .unwrap_or("hits failed").to_owned(),
                     ),
-                    Err(err) => Some(format!("cannot run {}: {err}", command[0])),
+                    Err(err) => Some(crate::shared::dependencies::cannot_run(&command[0], &err)),
                 };
                 let mut j = job.lock().expect("hits job lock");
                 j.error = error;
@@ -606,7 +606,7 @@ impl HitsPane {
             let parsed = match out {
                 Ok(o) if o.status.success() => serde_json::from_slice::<GenresFile>(&o.stdout).map_err(|e| e.to_string()),
                 Ok(o) => Err(last_line(&o.stderr, "hits genres failed")),
-                Err(err) => Err(format!("cannot run {}: {err}", command[0])),
+                Err(err) => Err(crate::shared::dependencies::cannot_run(&command[0], &err)),
             };
             let mut ex = explorer.lock().expect("explorer lock");
             ex.loading = false;
@@ -1055,7 +1055,7 @@ impl FetchHandle {
                 match hits(&args) {
                     Ok(out) if out.status.success() => status_info!("{}", last_line(&out.stdout, "queued")),
                     Ok(out) => return status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
-                    Err(err) => return status_error!("cannot run {}: {err}", command[0]),
+                    Err(err) => return status_error!("{}", crate::shared::dependencies::cannot_run(&command[0], &err)),
                 }
             }
             match hits(&["fetch".to_owned(), "run".to_owned()]) {
@@ -1067,7 +1067,7 @@ impl FetchHandle {
                     }
                 }
                 Ok(out) => status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
-                Err(err) => status_error!("cannot run {}: {err}", command[0]),
+                Err(err) => status_error!("{}", crate::shared::dependencies::cannot_run(&command[0], &err)),
             }
             let _ = sender.send(AppEvent::RequestRender);
         });
