@@ -32,6 +32,8 @@ A file for [guiding AI coding agents](https://agents.md/).
   A missed state notification while paused is a correctness bug, not a reason to add a sleep or a longer timeout.
 - Invalidate an mtime cache's value as well as its timestamp: `None` also means a missing file, so resetting
   only the timestamp can match a deleted file and resurrect its old state.
+- A live projection's mouse target is the ID/file pair from its last paint, not the row now at the old screen
+  coordinate. Rebuilding before a click can otherwise play a different song; ignore removed or reused IDs.
 
 ## Checking UI behaviour
 
