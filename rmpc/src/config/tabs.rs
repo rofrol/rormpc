@@ -223,6 +223,8 @@ pub enum PaneTypeFile {
     Versions(),
     /// rormpc: the songs waiting in Up next ("Play next")
     UpNext(),
+    /// rormpc: the weighted shuffle's pick and the candidates of its next draw
+    Shuffle(),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, strum::Display, strum::EnumDiscriminants)]
@@ -272,6 +274,7 @@ pub enum PaneType {
     Deleted,
     Versions,
     UpNext,
+    Shuffle,
 }
 
 pub const PANES_ALLOWED_IN_BOTH_TAB_AND_LAYOUT: [PaneTypeDiscriminants; 2] =
@@ -417,6 +420,7 @@ impl TryFrom<PaneTypeFile> for PaneType {
             PaneTypeFile::Deleted() => PaneType::Deleted,
             PaneTypeFile::Versions() => PaneType::Versions,
             PaneTypeFile::UpNext() => PaneType::UpNext,
+            PaneTypeFile::Shuffle() => PaneType::Shuffle,
         })
     }
 }

@@ -132,6 +132,34 @@ pub struct Nominee {
     pub why: String,
 }
 
+/// One candidate of the draw after the pick, with its chance in that draw.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Candidate {
+    pub file: String,
+    pub p: f64,
+    #[serde(default)]
+    pub why: String,
+}
+
+/// The draw after the pick (mpd-player redraws it after every song).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Outlook {
+    #[serde(default)]
+    pub lane: String,
+    #[serde(default)]
+    pub drawn_from: String,
+    #[serde(default)]
+    pub pool: usize,
+    #[serde(default)]
+    pub eligible: usize,
+    #[serde(default)]
+    pub queued: usize,
+    #[serde(default)]
+    pub top: Vec<Candidate>,
+    #[serde(default)]
+    pub rest_p: f64,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Round {
     #[serde(default)]
@@ -162,6 +190,8 @@ pub struct ShuffleState {
     pub round: Option<Round>,
     #[serde(default)]
     pub cooldown: std::collections::HashMap<String, Cooldown>,
+    #[serde(default)]
+    pub outlook: Option<Outlook>,
 }
 
 /// shuffle.json, read again only when the file changed (it is looked at while rendering).
