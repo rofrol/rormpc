@@ -1186,7 +1186,8 @@ impl Pane for HitsPane {
                 (false, _) => Cell::from(Span::styled("·", dim)),
                 (true, Some("2")) => Cell::from("♥"),
                 (true, Some("0")) => Cell::from("✗"),
-                (true, _) if hover == Some(i) => Cell::from(Span::styled("♡", Style::default().add_modifier(Modifier::BOLD))),
+                // the liked glyph, dimmed: same shape, so it reads "click to like" (♡ is narrower in some fonts)
+                (true, _) if hover == Some(i) => Cell::from(Span::styled("♥", Style::default().add_modifier(Modifier::DIM))),
                 (true, _) => Cell::from(""),
             };
             let state = match r.file.as_deref() {
