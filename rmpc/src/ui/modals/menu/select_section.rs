@@ -166,7 +166,7 @@ impl Section for SelectSection {
             if self.state.get_selected().is_some_and(|i| i == idx) {
                 text = text.style(self.current_item_style);
             } else if let Some(f) = filter
-                && item.label.to_lowercase().contains(f)
+                && crate::ui::rormpc_filter::Query::new(f).matches(&item.label)
             {
                 text = text.style(
                     ctx.config.as_text_style().patch(ctx.config.theme.highlighted_item_style),

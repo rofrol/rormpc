@@ -58,7 +58,12 @@ under the genre checkboxes asks for genres that have no checkbox (`italo-disco, 
 `-` excludes) and adds them as rows. The genre checkboxes are the ones pinned with `hits genres pin` (rormpc-tools,
 `~/.config/rormpc-tools/hits-genres.json`). "⋯ explore genres…" lists every genre of the library with its song
 count (how many from the recording's own tags) and plays; picking one filters by it alone, on the chart or
-among my liked songs, or pins/unpins its checkbox. `[ Apply ]` stays at the bottom of the column however far it is scrolled, and
+among my liked songs, or pins/unpins its checkbox. Artists work like genres (`hits --artist "+Queen; -Madonna"`):
+"+ artist…" lists the artists of the result's whole cohort (before the Top % cut) with their song counts, `/`
+searches the list; a picked artist is a three-state row (+ / - / off), "× clear artists" drops them. The artist
+filter applies after the Top % cut, so "Queen, 1980s, top 10%" is Queen's songs in the decade's top 10% with their
+ranks in the decade, and matches the whole credit or any artist in it ("A feat. B", "A & B"), case and diacritics
+ignored. (`/` in any menu now also ignores case and diacritics and takes words in any order.) `[ Apply ]` stays at the bottom of the column however far it is scrolled, and
 says "• changed" when the filters differ from the result on screen, "running…" while `hits` runs.
 
 Missing songs can be fetched from a missing row's menu: "Fetch this song", "Fetch the first 10 missing" or

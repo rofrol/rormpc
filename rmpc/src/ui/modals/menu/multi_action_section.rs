@@ -157,7 +157,7 @@ impl Section for MultiActionSection<'_> {
             if self.selected_idx.is_some_and(|i| i == idx) {
                 text = text.style(self.current_item_style);
             } else if let Some(f) = filter
-                && item.label.to_lowercase().contains(f)
+                && crate::ui::rormpc_filter::Query::new(f).matches(&item.label)
             {
                 text = text.style(ctx.config.theme.highlighted_item_style);
             } else {

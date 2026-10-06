@@ -123,7 +123,7 @@ impl Section for InputSection<'_> {
             .label_style(if self.is_current && !ctx.input.is_active(self.buffer_id) {
                 ctx.config.as_text_style().patch(ctx.config.theme.current_item_style)
             } else if let Some(f) = filter
-                && self.label.to_lowercase().contains(f)
+                && crate::ui::rormpc_filter::Query::new(f).matches(&self.label)
             {
                 ctx.config.as_text_style().patch(ctx.config.theme.highlighted_item_style)
             } else {
