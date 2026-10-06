@@ -286,8 +286,8 @@ snapshot being played.
 
 The weighted shuffle draws the next 10 songs ahead (a plan) and publishes it as MPD priorities 10..1, below the
 Up next requests (255, 254, ...), so MPD itself plays it in order (also "next" on a phone). The song property
-`ShuffleNext()` shows each song's turn in a column, one sequence: `0` the song playing, `↑1`, `↑2` the requests,
-then the plan numbered on (`3`..`12`): my Queue's first column "Next", and the Hits table has it too. Sorting the Queue by it (a header click) puts the requests, then the
+`ShuffleNext()` shows each song's turn in a column, one sequence: `-1`..`-10` the last plays (they stay in the
+queue), `0` the song playing, `↑1`, `↑2` the requests, then the plan numbered on (`3`..`12`): my Queue's first column "Next", and the Hits table has it too. Sorting the Queue by it (a header click) puts the requests, then the
 plan 1..10, then the rest; like every Queue sort it only reorders the list, playback follows the priorities. The Shuffle
 pane (`Pane(Shuffle())`, my tab "Shuffle", `gs`) is a timeline: the last 5 plays (`-5`..`-1`, ✓ played to the end,
 ⏭ skipped; mpd-player keeps 20 in shuffle.json), `0 ▶` the song playing, `↑` the Up next requests, then the plan

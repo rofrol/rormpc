@@ -455,7 +455,7 @@ impl CmpByProp {
             }
             // rormpc: requests first, then the shuffle's plan, then the rest
             SongProperty::ShuffleNext() => {
-                let rank = |id| crate::ui::rormpc_player::next_rank(id).unwrap_or(usize::MAX);
+                let rank = |id| crate::ui::rormpc_player::next_rank(id).unwrap_or(i64::MAX);
                 CmpByProp::cmp(Some(rank(a.id)), Some(rank(b.id)))
             }
         }
