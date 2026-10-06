@@ -252,6 +252,7 @@ pub fn open_sources(ctx: &Ctx) {
         Ok(p) => p,
         Err(err) => return status_error!("Cannot read the playlists: {err}"),
     };
+    playlists.retain(|(_, n)| *n > 0); // an empty one (e.g. "Not finished" with nothing left) is no source
     playlists.sort_by_key(|(name, _)| name.to_lowercase());
     let current = state().lock().ok().and_then(|s| s.source.clone());
     let mark = move |kind: &str, name: &str| {
@@ -269,11 +270,7 @@ pub fn open_sources(ctx: &Ctx) {
             for ((name, n), on) in playlists.into_iter().zip(marks) {
                 let label = format!("{} {name}  ({n})", if on { "▶" } else { " " });
                 section.add_item(label, move |ctx| {
-                    if n == 0 {
-                        status_warn!("{name} is empty");
-                    } else {
-                        confirm_replace(ctx, "playlist".into(), name.clone());
-                    }
+                    confirm_replace(ctx, "playlist".into(), name.clone());
                     Ok(())
                 });
             }
