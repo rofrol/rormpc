@@ -331,3 +331,31 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     batch only as an explicit command. Pitfalls: wrong song or version matched on tekstowo, instrumental tracks,
     repeated choruses, timestamp offsets, invented lines from the LLM, and `index.json` having one writer
     (`musicdb lyrics`); keep translations out of it or behind the same writer.
+
+## Previous in the weighted shuffle
+
+- [ ] Asked 2026-10-07: with the weighted shuffle on, the Previous media key bounced between unrelated songs and
+      each change was recorded as an early skip. Facts: Hammerspoon runs `mpc prev`; with random on, MPD's
+      `previous` goes to the previous song in its own random order, not the one that played before; mpd-player
+      records every change of song as finished / early (48 h rest) / late, and ro-listenbrainz-mpd logs the same
+      changes in skips.jsonl (imported hourly). A burst of 11 such skips (2026-10-07 00:15-00:17) was removed by
+      hand from skips.jsonl and shuffle.json.
+      Consulted 2026-10-07 (GPT-6.1 Sol, MiMo; both agreed unless noted):
+  - `shuffle prev` in mpd-player (rormpc-tools); in weighted mode nothing calls MPD's `previous`. Hammerspoon and
+    rormpc send it through the daemon's existing command channel; without the daemon, fall back to `mpc prev`
+    (knowing it reopens the bug).
+  - A cursor over the real playback history: each press goes one song further back; songs reached with Previous
+    are not added to that trail; normal forward play starts from the cursor again. By queue id; an entry no longer
+    in the queue is skipped over, never re-added; at the start of the history nothing happens. The song starts at
+    0:00.
+  - "Press within the first seconds restarts the current song": Sol says leave it out at first (it fights
+    predictable walking back), MiMo says restart (seek 0, no outcome) when under ~3 s. Undecided.
+  - The plan: the song gone back to leaves the plan; the rest keeps its order and is topped up; the song that was
+    left is not put back. Up next requests stay first on forward play.
+  - Leaving a song with Previous is a neutral outcome: no skip, no rest, no weight change; listening credit already
+    earned stays.
+  - The scrobbler is a separate process: the daemon logs each prev transition (from, to, time, command id) before
+    acting, and `musicdb import-skips` drops a skip that matches one (MiMo: within ±2 s); the daemon's own outcome
+    uses the same record. No blanket "ignore the next change" flag: a natural end, Next or a queue edit can race
+    with Previous. Persist the intent, then confirm the observed transition before marking it neutral; debounce
+    key repeat.
