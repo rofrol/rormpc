@@ -37,6 +37,8 @@ pub struct TagBrowserPane {
     target_pane: PaneType,
     browser: Browser<DirOrSong>,
     initialized: bool,
+    /// rormpc: select the playing song's artist (root item) once the root list is loaded
+    jump_pending: bool,
 }
 
 const INIT: &str = "init";
@@ -58,6 +60,7 @@ impl TagBrowserPane {
             stack: DirStack::default(),
             browser: Browser::new(),
             initialized: false,
+            jump_pending: false,
         }
     }
 
@@ -276,6 +279,55 @@ impl TagBrowserPane {
         Ok(())
     }
 
+    /// rormpc: every time the tab is shown, go back to the root and select the playing song's group (its artist in
+    /// the Artists tab): the same tag value or display name first, else the first root item contained in the
+    /// song's value (an artist credited inside "A feat. B"). Nothing playing or no match: the cursor stays.
+    fn jump_to_playing(&mut self, ctx: &Ctx) -> Result<()> {
+        let Some(song) = ctx.current_song() else { return Ok(()) };
+        if self.stack.current().items.is_empty() && self.stack.path().as_slice().is_empty() {
+            self.jump_pending = true; // root not loaded yet
+            return Ok(());
+        }
+        let Some(group) = Self::group_songs_by_tag(vec![song.clone()], &self.tags[0], ctx).into_iter().next() else {
+            return Ok(());
+        };
+        // the root tag's value (e.g. the artist); the display name only when the tag is missing and it says something
+        let value = group.tags.first().cloned().flatten().or_else(|| {
+            (!group.display_name.is_empty()).then(|| group.display_name.clone())
+        });
+        let Some(value) = value else { return Ok(()) };
+        let fold = |s: &str| s.to_lowercase();
+        while self.stack.leave() {}
+        let root_items = &self.stack.current().items;
+        let name_of = |item: &DirOrSong| match item {
+            DirOrSong::Dir { name, display_name, .. } => {
+                (name.clone(), display_name.clone().unwrap_or_else(|| name.clone()))
+            }
+            DirOrSong::Song(s) => (s.file.clone(), s.file.clone()),
+        };
+        let exact = root_items.iter().position(|item| {
+            let (name, shown) = name_of(item);
+            value == name || value == shown
+        });
+        let idx = exact.or_else(|| {
+            let hay = fold(&value);
+            root_items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| {
+                    let shown = fold(&name_of(item).1);
+                    !shown.is_empty() && hay.contains(&shown)
+                })
+                .max_by_key(|(_, item)| name_of(item).1.len())
+                .map(|(i, _)| i)
+        });
+        if let Some(idx) = idx {
+            self.stack.current_mut().select_idx(idx, ctx.config.scrolloff);
+            self.fetch_data_internal(ctx)?; // only when its songs are not loaded yet
+        }
+        Ok(())
+    }
+
     fn songs_for_item(&self, item: &DirOrSong) -> Vec<Song> {
         let path = self.stack().path().to_owned();
         item.walk(&self.stack, path)
@@ -298,6 +350,9 @@ impl Pane for TagBrowserPane {
         if !self.initialized {
             self.queue_root_fetch(ctx)?;
             self.initialized = true;
+            self.jump_pending = true;
+        } else {
+            self.jump_to_playing(ctx)?;
         }
 
         Ok(())
@@ -355,6 +410,9 @@ impl Pane for TagBrowserPane {
                 if let Some(sel) = self.stack.current().selected() {
                     self.fetch_data(sel, ctx)?;
                 }
+                if std::mem::take(&mut self.jump_pending) {
+                    self.jump_to_playing(ctx)?;
+                }
                 ctx.render()?;
             }
             (INIT, MpdQueryResult::LsInfo { data, path: _ }) => {
@@ -369,6 +427,9 @@ impl Pane for TagBrowserPane {
                 self.stack = DirStack::new(data);
                 if let Some(sel) = self.stack.current().selected() {
                     self.fetch_data(sel, ctx)?;
+                }
+                if std::mem::take(&mut self.jump_pending) {
+                    self.jump_to_playing(ctx)?;
                 }
                 ctx.render()?;
             }

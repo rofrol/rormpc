@@ -176,6 +176,18 @@ The whole queue stays in MPD (phones, media keys and mpc keep working); rormpc r
   priority when it starts); with random off they move right after the current song, in order. Waiting entries
   carry `↑1`, `↑2`. A song that was not in the queue is added and removed again after it played, so the source
   stays as it was. Consume must be off. MPD song ids don't survive an MPD restart, so Up next doesn't either.
+- The menus of Directories, Artists, Album Artists, Albums, Playlists and Search have "Play next (Up next)" too (a
+  directory, artist or album: all its songs). Asking again for a song that is already waiting moves it to the top.
+- Enter on a song in those panes plays it now and leaves the queue alone (upstream replaced the queue with the
+  whole list): a queued song plays from its entry, another one is put right after the current song, played, and
+  removed again after it played, so with random off the source goes on from there.
+- The Up next pane (`Pane(UpNext())`, my tab "Up next", `gu`) lists the waiting songs in play order: Enter plays
+  now, K/J (MoveUp/MoveDown) reorder, D (Delete) removes the request (a song added only for Up next leaves the
+  queue, a source song keeps its place), the context menu has Make next and "Clear Up next…" (confirmed). There is
+  no Play next inside it.
+- Artists, Album Artists and Albums select the playing song's group every time the tab is shown (its tag value,
+  else the root item contained in it, e.g. an artist inside "A feat. B"); nothing playing or no match keeps the
+  cursor.
 
 ## Add to playlist
 

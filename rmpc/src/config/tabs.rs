@@ -221,6 +221,8 @@ pub enum PaneTypeFile {
     Deleted(),
     /// rormpc: names shared by several files, from `musicdb versions --json`
     Versions(),
+    /// rormpc: the songs waiting in Up next ("Play next")
+    UpNext(),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, strum::Display, strum::EnumDiscriminants)]
@@ -269,6 +271,7 @@ pub enum PaneType {
     },
     Deleted,
     Versions,
+    UpNext,
 }
 
 pub const PANES_ALLOWED_IN_BOTH_TAB_AND_LAYOUT: [PaneTypeDiscriminants; 2] =
@@ -413,6 +416,7 @@ impl TryFrom<PaneTypeFile> for PaneType {
             },
             PaneTypeFile::Deleted() => PaneType::Deleted,
             PaneTypeFile::Versions() => PaneType::Versions,
+            PaneTypeFile::UpNext() => PaneType::UpNext,
         })
     }
 }

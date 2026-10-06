@@ -124,9 +124,16 @@ pub fn play_next(ctx: &Ctx, files: Vec<String>) {
         let mut st = state().lock().map_err(|_| anyhow::anyhow!("Up next state poisoned"))?.clone();
         st.up_next.retain(|e| queue.iter().any(|s| s.id == e.id) && Some(e.id) != current);
         let mut added_now = 0;
+        let mut moved = 0;
         for file in files {
-            if st.up_next.iter().any(|e| e.file == file) {
-                continue; // already waiting
+            if let Some(pos) = st.up_next.iter().position(|e| e.file == file) {
+                // asked again: it goes to the top (a no-op when it is already first)
+                if pos > 0 {
+                    let e = st.up_next.remove(pos);
+                    st.up_next.insert(0, e);
+                    moved += 1;
+                }
+                continue;
             }
             let existing = queue.iter().find(|s| s.file == file && Some(s.id) != current).map(|s| s.id);
             let (id, added) = match existing {
@@ -147,9 +154,139 @@ pub fn play_next(ctx: &Ctx, files: Vec<String>) {
             *g = st.clone();
         }
         save(&st);
-        status_info!("Up next: {added_now} added, {n} waiting");
+        if moved > 0 && added_now == 0 {
+            status_info!("Already in Up next: moved to next ({n} waiting)");
+        } else {
+            status_info!("Up next: {added_now} added, {n} waiting");
+        }
         Ok(())
     });
+}
+
+/// Enter on a song in a browser pane: play it now without touching the rest of the queue. A song already in the
+/// queue plays from its entry; another one is added and played, and (as an Up next entry marked `added`) leaves
+/// the queue again after it played, so the source stays as it was.
+pub fn play_now(ctx: &Ctx, file: String) {
+    if crate::ui::rormpc_actions::use_existing_entry(ctx, &file, true) {
+        return;
+    }
+    let after_current = ctx.current_song().is_some();
+    ctx.command(move |_, client| {
+        // right after the current song, so with random off the source goes on from there afterwards
+        client.add(&file, after_current.then_some(QueuePosition::RelativeAdd(0)))?;
+        let queue = client.playlist_info()?.unwrap_or_default();
+        let Some(id) = queue.iter().rev().find(|s| s.file == file).map(|s| s.id) else { return Ok(()) };
+        client.play_id(id)?;
+        if let Ok(mut st) = state().lock() {
+            st.up_next.retain(|e| e.file != file);
+            st.up_next.insert(0, Entry { id, file, added: true });
+            save(&st);
+        }
+        Ok(())
+    });
+}
+
+/// One waiting Up next entry, for the Up next pane.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Waiting {
+    pub id: u32,
+    pub file: String,
+    /// added to the queue only for Up next (leaves it after playing)
+    pub added: bool,
+}
+
+/// The songs waiting in Up next, in play order (the playing one is not waiting any more).
+pub fn waiting(ctx: &Ctx) -> Vec<Waiting> {
+    let current = ctx.current_song().map(|s| s.id);
+    state()
+        .lock()
+        .map(|s| {
+            s.up_next
+                .iter()
+                .filter(|e| Some(e.id) != current)
+                .map(|e| Waiting { id: e.id, file: e.file.clone(), added: e.added })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Change Up next in MPD's command thread: `f` edits the list and returns the entries it dropped. A dropped entry
+/// that was added only for Up next leaves the queue; a source song loses its priority and stays in the source.
+fn edit(ctx: &Ctx, f: impl FnOnce(&mut Vec<Entry>) -> Vec<Entry> + Send + 'static) {
+    ctx.command(move |_, client| {
+        let random = client.get_status()?.random;
+        let current = client.get_status()?.songid;
+        let mut st = state().lock().map_err(|_| anyhow::anyhow!("Up next state poisoned"))?.clone();
+        // the playing entry stays (it leaves when the song changes); only waiting ones are edited
+        let playing: Vec<Entry> = st.up_next.iter().filter(|e| Some(e.id) == current).cloned().collect();
+        let mut list: Vec<Entry> = st.up_next.into_iter().filter(|e| Some(e.id) != current).collect();
+        for e in f(&mut list) {
+            if client.playlist_id(e.id).ok().flatten().is_some_and(|s| s.file == e.file) {
+                if e.added {
+                    client.delete_id(e.id)?;
+                } else if random {
+                    client.prio_id(0, e.id)?;
+                }
+            }
+        }
+        st.up_next = playing.into_iter().chain(list).collect();
+        let waiting: Vec<Entry> = st.up_next.iter().filter(|e| Some(e.id) != current).cloned().collect();
+        apply_order(client, &State { source: None, up_next: waiting }, random)?;
+        if let Ok(mut g) = state().lock() {
+            *g = st.clone();
+        }
+        save(&st);
+        Ok(())
+    });
+}
+
+/// Move the waiting entry `id` by `delta` places (negative: earlier).
+pub fn move_entry(ctx: &Ctx, id: u32, delta: isize) {
+    edit(ctx, move |list| {
+        if let Some(pos) = list.iter().position(|e| e.id == id) {
+            let to = (pos as isize + delta).clamp(0, list.len() as isize - 1) as usize;
+            let e = list.remove(pos);
+            list.insert(to, e);
+        }
+        Vec::new()
+    });
+}
+
+/// Make the waiting entry `id` the next one.
+pub fn make_next(ctx: &Ctx, id: u32) {
+    edit(ctx, move |list| {
+        if let Some(pos) = list.iter().position(|e| e.id == id) {
+            let e = list.remove(pos);
+            list.insert(0, e);
+        }
+        Vec::new()
+    });
+}
+
+/// Drop the waiting entry `id` from Up next.
+pub fn remove(ctx: &Ctx, id: u32) {
+    edit(ctx, move |list| {
+        let (gone, keep): (Vec<Entry>, Vec<Entry>) = std::mem::take(list).into_iter().partition(|e| e.id == id);
+        *list = keep;
+        gone
+    });
+}
+
+/// Drop every waiting entry.
+pub fn clear(ctx: &Ctx) {
+    edit(ctx, std::mem::take);
+}
+
+/// Play the waiting entry `id` now; it leaves Up next when the next song starts.
+pub fn play_entry(ctx: &Ctx, id: u32) {
+    edit(ctx, move |list| {
+        if let Some(pos) = list.iter().position(|e| e.id == id) {
+            let e = list.remove(pos);
+            list.insert(0, e);
+        }
+        Vec::new()
+    });
+    ctx.command(move |_, client| Ok(client.play_id(id)?));
 }
 
 /// Random on: priorities 255, 254, … in Up next order. Random off: the entries right after the current song.

@@ -80,7 +80,14 @@ where
             return Ok(());
         };
 
-        if selected.is_file() {
+        if selected.is_file() && autoplay {
+            // rormpc: Enter plays this song now without replacing the queue (upstream replaced it with the
+            // whole list); a song not in the queue is added for this play only (see rormpc_upnext::play_now)
+            let (items, _) = self.enqueue(std::iter::once(selected));
+            if let Some(Enqueue::File { path }) = items.first() {
+                crate::ui::rormpc_upnext::play_now(ctx, path.clone());
+            }
+        } else if selected.is_file() {
             let (items, hovered_song_idx) = self.enqueue(
                 self.stack()
                     .current()
@@ -834,6 +841,20 @@ where
                             client.enqueue_multiple(cloned_items, None, None, false)?;
                             Ok(())
                         });
+                        Ok(())
+                    });
+                    // rormpc: the selection (songs, or every song of a directory/artist/album) plays before the
+                    // rest of the source; the queue stays as it is
+                    let songs_in_items = list_songs_in_items.clone();
+                    section.add_item("Play next (Up next)", move |ctx| {
+                        let files = ctx.query_sync(move |client| {
+                            let mut files = Vec::new();
+                            for cb in songs_in_items {
+                                files.extend(cb(client)?.into_iter().map(|s| s.file));
+                            }
+                            Ok(files)
+                        })?;
+                        crate::ui::rormpc_upnext::play_next(ctx, files);
                         Ok(())
                     });
                     let cloned_items = current_items.clone();

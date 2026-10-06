@@ -10,6 +10,7 @@ use directories::DirectoriesPane;
 use either::Either;
 use header::HeaderPane;
 use deleted::DeletedPane;
+use up_next::UpNextPane;
 use versions::VersionsPane;
 use hits::HitsPane;
 use itertools::Itertools;
@@ -96,6 +97,7 @@ pub mod tabs;
 pub mod tag_browser;
 pub mod volume;
 pub mod versions;
+pub mod up_next;
 
 #[derive(Debug, Display, strum::EnumDiscriminants)]
 pub enum Panes<'pane_ref, 'pane> {
@@ -323,6 +325,9 @@ impl<'panes> PaneContainer<'panes> {
                 PaneType::Versions => {
                     Some((pane.pane.clone(), Box::new(VersionsPane::new()) as Box<dyn BoxedPane>))
                 }
+                PaneType::UpNext => {
+                    Some((pane.pane.clone(), Box::new(UpNextPane::new()) as Box<dyn BoxedPane>))
+                }
                 _ => None,
             })
     }
@@ -369,7 +374,7 @@ impl<'panes> PaneContainer<'panes> {
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
             )),
-            p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions) => Ok(Panes::Others(
+            p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext) => Ok(Panes::Others(
                 self.others
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
