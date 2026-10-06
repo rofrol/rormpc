@@ -11,6 +11,39 @@
       "Play next" inside it. Hits and Queue get a key that opens it. Full plan: music-data TODO.md, entry
       "Playback annoyances".
 
+## Next after that: "Mute for…" with a countdown
+
+Asked 2026-10-06: a "Mute for…" button with a choice of durations or a custom one, and a countdown showing when
+the music comes back. Plan after asking GPT-6.1 Sol and MiMo (both agreed on the points below unless noted):
+
+- [ ] Mute, not pause: `setvol 0`, playback goes on, expiry restores the volume and never sends `play`. A timed
+      pause would fight mpd-gap, which also pauses and resumes (single=oneshot, resume after N s) and cannot tell
+      whose pause or play it sees. Caveat to show in the modal: songs played while muted still reach ListenBrainz
+      and musicdb play counts (the scrobbler counts elapsed time, not audibility). A "Pause for…" variant only
+      later, and only once one daemon owns both the gap and the timed resume.
+- [ ] The timer lives in mpd-gap (rormpc-tools), not in the TUI: rormpc is often closed, and a timer in it would
+      leave the music muted for good. No third playback daemon.
+- [ ] Commands go through MPD client-to-client messages (`subscribe` / `sendmessage`, channel e.g.
+      `rormpc-mute`: `start <seconds>`, `extend <seconds>`, `cancel`); rmpc-mpd already has `subscribe`, mpd-gap
+      waits on the `message` idle event next to `player`. No socket of our own (Sol) and no state file written by
+      two processes (MiMo's variant). mpd-gap is the only writer of `$XDG_STATE_HOME/rormpc/mute.json`
+      (`saved_volume`, `deadline` as wall-clock Unix time, `generation`), written with temp + rename; the TUI
+      reads it for the countdown and counts down locally between reads.
+- [ ] Wall-clock deadline, so a Mac that slept past it unmutes on wake; mpd-gap restarting reads the file and
+      keeps the timer.
+- [ ] Restore the volume saved at the start (88 today, not a fixed value), and only if it is still 0: a volume set
+      by anyone during the mute (rormpc, mpc, another client) cancels the timer and is kept. Stop / end of the
+      queue: unmute at once and cancel, so the next `play` is not silently muted. Pause, next and seek leave the
+      timer alone. Starting a mute while already at 0 does nothing (nothing to restore).
+- [ ] UI: a key (configurable) and a button/menu entry open a modal: presets 1 / 5 / 15 / 30 / 60 min and a
+      custom input (`90s`, `5m`, `1h30`, a bare number = minutes; bounded maximum). While muted, the header next
+      to the volume shows `muted · 12:34` ("unmutes in", not "music comes back": with an empty queue nothing
+      comes back). Clicking it or the same key offers "Unmute now", "+5 min" and "Cancel timer, stay muted".
+- [ ] After expiry, read the volume back before showing it as restored; a failed `setvol` is reported, not
+      shown as success.
+- [ ] Test on the scratch MPD (AGENTS.md): expiry, cancel, extend, a volume change from `mpc` during the mute,
+      end of the queue, mpd-gap restart mid-mute, and a mute that spans an mpd-gap silence.
+
 ## Media keys and Now Playing (outside the TUI)
 
 Hardware media keys (play/pause/next/previous) and the system Now Playing widget work on macOS with
