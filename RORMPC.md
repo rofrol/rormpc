@@ -26,6 +26,12 @@ rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and 
   rormpc (`og`, ShowGapMenu, or the Queue menu "Silence between songs…") and remembered; `--gap` is only the
   default before that. rormpc sends it commands as MPD messages on channel `rormpc` (`gap set 5`) and reads its
   state from `$XDG_STATE_HOME/rormpc/gap.json`; a change counts once that file shows it.
+  "Mute for…" (`om`, ShowMuteMenu, the Queue menu, or a click on the volume slider while muted): presets 1-60 min
+  or a custom duration (`5`, `90s`, `1h30`, `1:30`); mpd-player sets the volume to 0 and restores the previous one
+  at a wall-clock deadline, also with rormpc closed or after the Mac slept past it. The slider shows
+  `muted · 12:34` meanwhile; the menu then offers unmute now, +5/15/30 min, or cancel the timer and stay muted.
+  Songs keep playing (they still count as listens); a volume set by anyone cancels the timer and stays, a stop or
+  the end of the queue unmutes at once, and the expiry never presses play. State in `mute.json`.
 
 On Linux, building the scrobbler needs a C toolchain, OpenSSL and SQLite headers (Debian/Ubuntu:
 `sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev`), and the services need a systemd user
