@@ -336,6 +336,31 @@ every song. Enter on a planned or past song asks for it with Play next, on a req
 JumpToCurrent) goes to the playing song; the menu has "heard enough". It never reorders the queue (a sort by weight
 would move 770 songs in MPD and be stale one song later; consulted Sol and MiMo).
 
+## Queue plan view
+
+`o` (`TogglePlanView`, add it to an existing explicit Queue keymap) toggles a **view**, not an MPD sort.
+It shows the last two plays still identified in Queue as dimmed `-2`, `-1`, current `0 ▶`, requests `↑n`,
+forecast `1`..`10`, a nonselectable `unplanned · queue order` divider, then the rest in physical MPD order.
+An ID appears only once: current/request/forecast takes precedence over history, and an old ID belonging to
+another file is never reused. Selection, marks, scrolling and mouse actions follow song IDs across refreshes;
+filtering retains the original turn numbers. Next-header sorting (and other physical sorts) is disabled here.
+`o` returns to ordinary Queue order with the same selected song and marks.
+
+J/K reorder requests only within their section, or ask mpd-player to swap adjacent forecast slots using the
+published plan version. Only the daemon writes priorities and verifies MPD state again before acknowledging
+(a song can start during the writes); rormpc never moves queue positions or draws an optimistic order. A correlated acknowledgement confirms the change; stale versions are rejected, never retried.
+The temporary patch survives heartbeats and more confirmed swaps, but expires at the first new draw (including
+per-song top-up), a planned song playing/leaving/becoming a request or heard-enough, reroll/new round/source
+change, or daemon restart. Surviving entries regain their pre-patch order **before** replacements are drawn;
+the played head is classified against the effective patched order first.
+
+The title calls this a forecast. Missing daemon channel, old/missing/future heartbeat, incompatible version or
+failed priority publication means dimmed forecast numbers and `stale · Xm` (unknown age without a heartbeat),
+not a fresh prediction. mpd-player publishes on its existing 30-second idle wake; 60 seconds without a heartbeat
+is stale. Subscription events detect daemon absence immediately, native atomic-file notifications refresh the
+view even while paused, and one deadline render expires freshness without polling. A missing patch reply uses
+the existing 2-second external acknowledgement deadline and re-reads state before reporting failure; no retry.
+
 ## Likes in Hits and Queue
 
 Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).
