@@ -19,6 +19,12 @@ A file for [guiding AI coding agents](https://agents.md/).
   so even `rustfmt +nightly <file>` rewraps lines you did not touch. Match the surrounding style by hand; at most
   run `rustfmt +nightly --edition 2024 --check <file>` and take only the hunks inside your own change.
 
+## Tests
+
+- Run `cargo test` with an empty state dir: `env XDG_STATE_HOME=$(mktemp -d) cargo test -p rmpc`. Status
+  properties read mpd-player's state files (`$XDG_STATE_HOME/rormpc/*.json`), and with the user's real
+  `shuffle.json` (weighted shuffle on) three `format_tests` on the Random label fail (2026-10-06).
+
 ## Checking UI behaviour
 
 - An agent can drive the TUI itself: `herdr tab create --no-focus`, `herdr pane run <pane> rormpc`, then
