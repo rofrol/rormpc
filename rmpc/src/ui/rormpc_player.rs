@@ -173,6 +173,17 @@ pub struct ShuffleState {
     pub cooldown: std::collections::HashMap<String, Cooldown>,
     #[serde(default)]
     pub plan: Vec<Planned>,
+    #[serde(default)]
+    pub history: Vec<Past>,
+}
+
+/// A song mpd-player saw play, with how it ended.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Past {
+    pub file: String,
+    /// "finished", "early" or "late" (skips)
+    #[serde(default)]
+    pub kind: String,
 }
 
 /// shuffle.json, read again only when the file changed (it is looked at while rendering).
@@ -297,20 +308,36 @@ pub fn new_round(ctx: &Ctx) {
     );
 }
 
-/// A queued song's turn: 0.. for the Up next requests (in order), then 1000 + k for the weighted shuffle's plan.
+static PLAYING: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
+
+/// The playing song's queue id, kept for the ShuffleNext column (song properties are rendered without ctx).
+pub fn set_playing(id: Option<u32>) {
+    PLAYING.store(id.unwrap_or(u32::MAX), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A queued song's turn on the timeline: 0 the playing song, then 1.. the Up next requests, then the weighted
+/// shuffle's plan.
 pub fn next_rank(id: u32) -> Option<usize> {
-    if let Some(k) = crate::ui::rormpc_upnext::up_next_ids().iter().position(|i| *i == id) {
-        return Some(k);
+    if id == PLAYING.load(std::sync::atomic::Ordering::Relaxed) {
+        return Some(0);
+    }
+    let requests = crate::ui::rormpc_upnext::up_next_ids();
+    if let Some(k) = requests.iter().position(|i| *i == id) {
+        return Some(1 + k);
     }
     let sh = shuffle_state();
-    (sh.enabled && sh.active).then(|| sh.plan.iter().position(|p| p.id == id).map(|k| 1000 + k)).flatten()
+    (sh.enabled && sh.active).then(|| sh.plan.iter().position(|p| p.id == id).map(|k| 1 + requests.len() + k)).flatten()
 }
 
-/// The ShuffleNext column: "↑1" for the first Up next request, "1".."10" for the shuffle's plan.
+/// The ShuffleNext column: "0" the playing song, "↑1" a request, then the plan numbered on from the requests.
 pub fn next_marker(id: u32) -> Option<String> {
-    next_rank(id).map(|r| if r >= 1000 { (r - 999).to_string() } else { format!("↑{}", r + 1) })
+    let requests = crate::ui::rormpc_upnext::up_next_ids().len();
+    next_rank(id).map(|r| match r {
+        0 => "0".to_owned(),
+        r if r <= requests => format!("↑{r}"),
+        r => r.to_string(),
+    })
 }
-
 /// The ShuffleNext marker of a library file (Hits rows know files, not queue ids): its first queue entry's turn.
 pub fn next_marker_for_file(ctx: &crate::ctx::Ctx, file: &str) -> Option<String> {
     ctx.queue.iter().filter(|s| s.file == file).find_map(|s| next_marker(s.id))

@@ -537,6 +537,7 @@ fn main_task<B: Backend + std::io::Write>(
                             let current_updating_db = ctx.status.updating_db;
                             let current_playlist = ctx.status.lastloadedplaylist.take();
                             let previous_status = std::mem::replace(&mut ctx.status, status);
+                            crate::ui::rormpc_player::set_playing(ctx.status.songid);
                             // rormpc: consume deletes played songs, which breaks the source and Up next; rormpc
                             // never turns it on, so another client did
                             if matches!(previous_status.consume, rmpc_mpd::commands::status::OnOffOneshot::Off)
