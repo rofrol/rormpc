@@ -24,7 +24,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
       The LLM fallback waits for its decision below ("Lyrics: Polish translation next to the original").
       Done in rormpc 7e6b794, rormpc-tools 69d8201 (worker; tools not released: after v0.2.31).
-- [ ] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item).
+- [x] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item). Done in dacac50.
 - [ ] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…").
 - [ ] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
       locally ("Tests and GitHub Actions…", first two items).
@@ -156,7 +156,7 @@ or a change of its Python can leave launchd restarting a dead path: rerun `insta
 
 Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first"):
 
-- [ ] Document it in RORMPC.md ("Media keys" section): what it is, the commands above, how to check it
+- [x] Document it in RORMPC.md ("Media keys" section): what it is, the commands above, how to check it
       (`launchctl print gui/$UID/me.00dani.mpd-now-playable`), the upgrade caveat, and that it is independent
       of rormpc.
 - [ ] Do not fold it into `rormpc_install.sh install`: that script installs and rolls back the binary, and a
