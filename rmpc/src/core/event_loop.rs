@@ -71,6 +71,9 @@ fn main_task<B: Backend + std::io::Write>(
     // waiting for the frame interval, so hover and selection follow the user without a frame of lag.
     // `max_fps` still paces renders caused by background events (status, idle).
     let mut user_input = false;
+    // The action a key resolved to. It is handled before the next event, so the keys that arrived
+    // with it in one input batch (`/` and a query sent together, a paste) see the mode it set.
+    let mut resolved_key_event: Option<AppEvent> = None;
     let max_fps = f64::from(ctx.config.max_fps);
     let mut min_frame_duration = Duration::from_secs_f64(1f64 / max_fps);
     let mut last_render = std::time::Instant::now()
@@ -143,7 +146,9 @@ fn main_task<B: Backend + std::io::Write>(
     loop {
         let now = std::time::Instant::now();
 
-        let event = if render_wanted {
+        let event = if let Some(ev) = resolved_key_event.take() {
+            Some(ev)
+        } else if render_wanted {
             match event_receiver.recv_timeout(
                 min_frame_duration.checked_sub(now - last_render).unwrap_or(Duration::ZERO),
             ) {
@@ -284,7 +289,7 @@ fn main_task<B: Backend + std::io::Write>(
                     render_wanted = true;
                 }
                 AppEvent::UserKeyInput(key) => {
-                    ctx.key_resolver.handle_key_event(key.into(), &ctx);
+                    resolved_key_event = ctx.key_resolver.handle_key_event(key.into(), &ctx);
                     render_wanted = true;
                 }
                 AppEvent::UserMouseInput(ev) => match ui.handle_mouse_event(ev, &mut ctx) {
@@ -327,7 +332,7 @@ fn main_task<B: Backend + std::io::Write>(
                 }
                 AppEvent::KeyTimeout => {
                     log::debug!("Key timeout reached, handling queued keys");
-                    ctx.key_resolver.handle_timeout(&ctx);
+                    resolved_key_event = ctx.key_resolver.handle_timeout(&ctx);
                     render_wanted = true;
                 }
                 AppEvent::Status(mut message, level, timeout) => {
@@ -868,7 +873,9 @@ fn main_task<B: Backend + std::io::Write>(
         if render_wanted {
             let till_next_frame =
                 min_frame_duration.saturating_sub(now.duration_since(last_render));
-            if till_next_frame != Duration::ZERO && !(user_input && event_receiver.is_empty()) {
+            if till_next_frame != Duration::ZERO
+                && !(user_input && event_receiver.is_empty() && resolved_key_event.is_none())
+            {
                 continue;
             }
             terminal

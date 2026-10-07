@@ -47,9 +47,10 @@ A file for [guiding AI coding agents](https://agents.md/).
 - A debug build (`target/debug/rormpc`) finds no config file by itself (`debuginfo` says "Config path None"): pass
   `-c ~/.config/rormpc/config.ron`, or the user's key bindings (`og`, `om`, ...) silently do nothing.
 - With random on, `mpc insert` appends at the end; use `mpc add` + `mpc move` to put a song at a position.
-- Send `/` alone and wait for the filter line (`[FILTER]` / `FILTER /`) before typing the query: keys sent in the
-  same `herdr pane send-keys` batch as `/` run as normal-mode commands (on 2026-10-07 they toggled consume,
-  opened modals and switched tabs on the scratch MPD).
+- `/` and a query may go in one batch (`herdr pane send-keys <pane> / c l`, one key per argument, or
+  `herdr pane send-text <pane> "/cl"`): the event loop handles the action a key resolves to before the next key,
+  so the keys after `/` land in the filter. Keep it that way: an action sent back through the app event channel
+  runs after the keys already queued, in the old mode (until 2026-10-07 they toggled consume and switched tabs).
 - MPD (0.24.15) emits no `subscription` idle event when a subscribed client disconnects; only explicit
   subscribe/unsubscribe emit it. Detect a stopped mpd-player by its process (`rormpc_process.rs`), not by waiting
   for that event.
