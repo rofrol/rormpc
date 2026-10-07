@@ -371,6 +371,8 @@ pub enum QueueActionsFile {
     TogglePlanView,
     /// rormpc: fzf-like find in queue
     Find,
+    /// rormpc: open the Versions pane on the selected song's group
+    FindVersions,
     Delete,
     DeleteAll,
     Play,
@@ -394,6 +396,7 @@ pub enum QueueActionsFile {
 pub enum QueueActions {
     TogglePlanView,
     Find,
+    FindVersions,
     Delete,
     DeleteAll,
     Play,
@@ -412,6 +415,7 @@ impl TryFrom<QueueActionsFile> for QueueActions {
         match value {
             QueueActionsFile::TogglePlanView => Ok(QueueActions::TogglePlanView),
             QueueActionsFile::Find => Ok(QueueActions::Find),
+            QueueActionsFile::FindVersions => Ok(QueueActions::FindVersions),
             QueueActionsFile::Delete => Ok(QueueActions::Delete),
             QueueActionsFile::DeleteAll => Ok(QueueActions::DeleteAll),
             QueueActionsFile::Play => Ok(QueueActions::Play),
@@ -454,6 +458,7 @@ impl ToDescription for QueueActions {
         match self {
             QueueActions::TogglePlanView => "Toggle Queue plan view (never reorders MPD)".into(),
             QueueActions::Find => "Filter the queue as you type (Enter plays, Esc restores)".into(),
+            QueueActions::FindVersions => "Open Versions on the selected song's group (Esc returns)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),
             QueueActions::Play => "Play song under cursor".into(),

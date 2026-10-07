@@ -137,6 +137,7 @@
             "<CR>":       Play,
             "C":          JumpToCurrent,
             "o":          TogglePlanView,
+            "V":          FindVersions,
             "L":          SelectAlbum(),
             "X":          Shuffle,
         },

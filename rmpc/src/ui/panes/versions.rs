@@ -3,6 +3,8 @@
 //! don't own"; version labels; merging files that are one recording; and YouTube ids / MBIDs on several files to
 //! review. Every decision is a `musicdb versions ...` call; the list reloads after each. Previews play in a
 //! separate player (mpv, else ffplay), never through MPD, whose scrobbler would log a listen or a skip.
+//! "Delete this file…" asks whether the file is a copy (merged, `musicdb versions same`) or a recording I don't
+//! want (the delete menu); the Queue's "Find versions…" opens a group here, and Back / Esc returns there.
 
 use std::{
     path::PathBuf,
@@ -158,6 +160,8 @@ enum Focus {
 #[derive(Debug, Default)]
 struct Job {
     loading: bool,
+    /// asked to load while a load ran: its answer may predate the change, so load once more
+    again: bool,
     report: Option<Report>,
     error: Option<String>,
     reload: bool,
@@ -213,6 +217,12 @@ pub struct VersionsPane {
     close: bool,
     /// the selected entry before filtering began, restored by Esc
     before_filter: Option<String>,
+    /// "Find versions…" from the Queue: the file to select once the report has it
+    jump: Option<String>,
+    /// the tab "Find versions…" came from: Back / Esc returns there (and takes it)
+    back: Option<crate::config::tabs::TabName>,
+    /// `rormpc_versions`' change count this pane last loaded for
+    generation: u64,
 }
 
 fn run(args: &[&str]) -> Result<String, String> {
@@ -449,6 +459,9 @@ impl VersionsPane {
             unresolved_only: false,
             close: false,
             before_filter: None,
+            jump: None,
+            back: None,
+            generation: crate::ui::rormpc_versions::generation(),
         }
     }
 
@@ -514,15 +527,19 @@ impl VersionsPane {
                 "{enter} open the group · {right} files · {search} filter · {select} unresolved only ({})",
                 if self.unresolved_only { "on" } else { "off" }
             ),
-            Focus::Files => {
-                format!("{enter} actions: preview, label, same recording · {left}/{right} switch list · {search} filter")
-            }
+            Focus::Files => format!(
+                "{enter} actions: preview, label, same recording, delete · {left}/{right} switch list · {search} filter"
+            ),
             Focus::Tracks => format!(
                 "{enter} actions: accept the suggestion, which file it is, not owned · {left} files · {search} filter"
             ),
         };
         if self.filter_active() && self.focus == Focus::List {
             h.push_str(&format!(" · {close} clear the filter"));
+        } else if self.back.is_some() {
+            h.push_str(" · ");
+            h.push_str(&close);
+            h.push_str(" back");
         }
         h
     }
@@ -530,19 +547,25 @@ impl VersionsPane {
     fn load(&self, ctx: &Ctx) {
         let mut job = self.job.lock().expect("versions job lock");
         if job.loading {
+            job.again = true;
             return;
         }
         job.loading = true;
         drop(job);
         let (job, sender) = (Arc::clone(&self.job), ctx.app_event_sender.clone());
         std::thread::spawn(move || {
-            let result = run(&["versions", "--json"])
+            // every group, also the resolved ones: "Find versions…" may open one
+            let result = run(&["versions", "--json", "--all"])
                 .and_then(|out| serde_json::from_str::<Report>(&out).map_err(|e| e.to_string()))
                 .and_then(|r| {
                     (r.version == 1).then_some(r).ok_or_else(|| "unknown versions JSON (update rormpc)".to_owned())
                 });
+            if let Ok(r) = &result {
+                crate::ui::rormpc_versions::set_files(member_files(r));
+            }
             let mut j = job.lock().expect("versions job lock");
             j.loading = false;
+            j.reload |= std::mem::take(&mut j.again);
             match result {
                 Ok(r) => {
                     j.report = Some(r);
@@ -587,17 +610,56 @@ impl VersionsPane {
 
     /// Take a new report, keeping the selected entry (by name / id) and the positions inside it.
     fn take_report(&mut self, report: Report) {
-        let keep = self.entry().map(|e| self.entry_key(e));
-        let (file_idx, track_idx) = (self.file_idx, self.track_idx);
+        let keep = self.entry().and_then(|e| self.entry_key(e));
+        let (row, file_idx, track_idx) = (self.state.get_selected(), self.file_idx, self.track_idx);
         self.report = report;
-        let keep = keep.flatten();
-        let same = keep.is_some();
-        self.refilter(keep);
+        self.refilter(keep.clone());
+        let same = keep.is_some() && self.entry().and_then(|e| self.entry_key(e)) == keep;
         if same {
             self.file_idx = file_idx;
             self.track_idx = track_idx;
             self.clamp();
+        } else if let Some(row) = row.filter(|_| keep.is_some() && !self.entries.is_empty()) {
+            // the group is gone (its last other file deleted or merged): the next group takes its row
+            self.state.select(Some(row.min(self.entries.len() - 1)), 0);
+            self.focus = Focus::List;
+            self.clamp();
         }
+        if let Some(file) = self.jump.take() {
+            self.show_file(&file, true);
+        }
+    }
+
+    /// "Find versions…": no filter, the file's group selected, the cursor on the file. Not found in a fresh
+    /// report (no group any more): say so and stay on the list.
+    fn show_file(&mut self, file: &str, fresh: bool) {
+        self.query.clear();
+        self.typing = false;
+        self.unresolved_only = false;
+        self.before_filter = None;
+        let found = self.report.groups.iter().position(|g| g.files.iter().any(|f| f.file == file));
+        let key = found.and_then(|i| self.entry_key(Entry::Group(i)));
+        self.refilter(key);
+        if let Some(idx) = found.and_then(|i| self.report.groups[i].files.iter().position(|f| f.file == file)) {
+            self.focus = Focus::Files;
+            self.file_idx = idx;
+            self.state.set_viewport_len(Some(self.list_area.height.saturating_sub(1).into()));
+            if let Some(row) = self.state.get_selected() {
+                self.state.select(Some(row), usize::MAX); // centred
+            }
+        } else {
+            self.focus = Focus::List;
+            if fresh {
+                status_info!("No other versions of {} in the library", base(file));
+            }
+        }
+    }
+
+    /// Back / Esc after "Find versions…": the tab it came from, which restores its row and scroll.
+    fn go_back(&mut self, ctx: &Ctx) -> bool {
+        let Some(tab) = self.back.take() else { return false };
+        crate::ui::rormpc_versions::go_back(ctx, tab);
+        true
     }
 
     fn clamp(&mut self) {
@@ -717,6 +779,13 @@ impl VersionsPane {
                         let (job, file, others) = (Arc::clone(&job), file.clone(), others.clone());
                         section.add_item("Same recording: keep this file, merge the others…", move |ctx| {
                             confirm_same(ctx, job, file, others);
+                            Ok(())
+                        });
+                    }
+                    {
+                        let (job, file, others) = (Arc::clone(&job), file.clone(), others.clone());
+                        section.add_item("Delete this file…", move |ctx| {
+                            what_to_delete(ctx, job, file, others);
                             Ok(())
                         });
                     }
@@ -869,6 +938,37 @@ fn start_preview(preview: &Mutex<Preview>, dir: &std::path::Path, file: &str, st
     }
 }
 
+/// "Delete this file…" first asks what the file is. A copy of another file in the group is merged into it
+/// (`musicdb versions same OTHER FILE`: quarantine and an alias, its plays and decisions move to the file that
+/// stays); a recording I don't want goes through the delete menu (Trash by default, undo, the Deleted pane), and
+/// its plays stay with it, never moved to a sibling.
+fn what_to_delete(ctx: &Ctx, job: Arc<Mutex<Job>>, file: String, others: Vec<String>) {
+    let menu = MenuModal::new(ctx)
+        .width(80) // file names are long
+        .list_section(ctx, move |mut section| {
+            for other in &others {
+                let (job, keep, file) = (Arc::clone(&job), other.clone(), file.clone());
+                section.add_item(format!("A copy of {} (same recording): merge it…", base(other)), move |ctx| {
+                    confirm_same(ctx, job, keep, vec![file]);
+                    Ok(())
+                });
+            }
+            section.add_item("A different recording I don't want: delete it…", move |ctx| {
+                crate::ui::rormpc_actions::open_delete_menu(ctx, vec![file]);
+                Ok(())
+            });
+            Some(section)
+        })
+        .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
+        .build();
+    modal!(ctx, menu);
+}
+
+/// Files of the groups with several owned files (the Queue's `≋` column).
+fn member_files(r: &Report) -> std::collections::HashSet<String> {
+    r.groups.iter().filter(|g| g.files.len() > 1).flat_map(|g| g.files.iter().map(|f| f.file.clone())).collect()
+}
+
 /// "Same recording": the confirmation names every file merged into the kept one; Cancel is first.
 fn confirm_same(ctx: &Ctx, job: Arc<Mutex<Job>>, keep: String, others: Vec<String>) {
     let message = format!(
@@ -939,7 +1039,10 @@ impl Pane for VersionsPane {
             let mut j = self.job.lock().expect("versions job lock");
             (j.report.take(), std::mem::take(&mut j.reload), j.loading, j.error.clone())
         };
-        if reload {
+        // a deletion or a merge elsewhere (the delete menu, the Queue) changes the groups
+        let generation = crate::ui::rormpc_versions::generation();
+        if reload || generation != self.generation {
+            self.generation = generation;
             self.load(ctx);
         }
         if let Some(r) = fresh {
@@ -1061,12 +1164,22 @@ impl Pane for VersionsPane {
     }
 
     fn before_show(&mut self, ctx: &Ctx) -> Result<()> {
+        if let Some(j) = crate::ui::rormpc_versions::take_jump() {
+            ctx.input.clear_buffer(self.filter); // the group shows without a filter
+            self.back = Some(j.back);
+            self.show_file(&j.file, false); // the report already here (it may be stale)
+            self.jump = Some(j.file); // and again on the fresh one
+        }
         self.load(ctx);
         Ok(())
     }
 
     fn on_hide(&mut self, _ctx: &Ctx) -> Result<()> {
         self.stop_preview();
+        // left some other way than Back / Esc: the Queue keeps its usual cursor
+        if self.back.take().is_some() {
+            crate::ui::rormpc_versions::forget_queue_view();
+        }
         Ok(())
     }
 
@@ -1143,6 +1256,8 @@ impl Pane for VersionsPane {
                 };
                 self.clamp();
             }
+            CommonAction::Left if self.focus == Focus::List && self.go_back(ctx) => {}
+            CommonAction::Close if !self.filter_active() && self.go_back(ctx) => {}
             CommonAction::Left => {
                 self.focus = match self.focus {
                     Focus::Tracks => Focus::Files,
@@ -1241,6 +1356,43 @@ mod tests {
         );
         assert_eq!(human_reason("title says live"), "title says live");
         assert_eq!(human_reason("12 songs"), "12 songs");
+    }
+
+    fn two_groups() -> Report {
+        let mut r: Report = serde_json::from_str(JSON).expect("test report");
+        r.groups[1].files = r.groups[0].files.iter().map(|f| VFile { file: format!("Other/{}", base(&f.file)), ..f.clone() }).collect();
+        r
+    }
+
+    #[test]
+    fn a_gone_group_hands_its_row_to_the_next_one() {
+        let mut pane = VersionsPane::new();
+        pane.take_report(two_groups());
+        assert_eq!(pane.entry(), Some(Entry::Group(0)));
+        pane.focus = Focus::Files;
+        let mut r = two_groups();
+        r.groups.remove(0); // its last other file was deleted
+        pane.take_report(r);
+        assert_eq!(pane.group().map(|g| g.name.as_str()), Some("done|song"));
+        assert_eq!(pane.focus, Focus::List);
+        // a group that stays keeps the cursor inside it
+        pane.focus = Focus::Files;
+        pane.file_idx = 1;
+        pane.take_report(two_groups());
+        assert_eq!((pane.group().map(|g| g.name.as_str()), pane.file_idx), (Some("done|song"), 1));
+    }
+
+    #[test]
+    fn find_versions_selects_the_file_in_its_group_without_a_filter() {
+        let mut pane = VersionsPane::new();
+        pane.query = "adagio".into();
+        pane.unresolved_only = true;
+        pane.jump = Some("Other/b.mp3".into());
+        pane.take_report(two_groups());
+        assert_eq!(pane.group().map(|g| g.name.as_str()), Some("done|song"));
+        assert_eq!((pane.focus, pane.file_idx), (Focus::Files, 1));
+        assert!(!pane.filter_active());
+        assert_eq!(member_files(&two_groups()).len(), 4);
     }
 
     #[test]

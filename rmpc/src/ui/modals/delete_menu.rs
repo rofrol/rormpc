@@ -61,6 +61,9 @@ struct Preview {
     ytid: Option<String>,
     #[serde(default)]
     lb_listens: u32,
+    /// the file is still in the music directory
+    #[serde(default = "yes")]
+    exists: bool,
     /// other library files with the same recording: their listens stay on ListenBrainz
     #[serde(default)]
     shared: Vec<String>,
@@ -79,6 +82,10 @@ enum PreviewOutput {
 }
 
 const PREVIEW_VERSION: u32 = 1;
+
+fn yes() -> bool {
+    true
+}
 
 fn parse_preview(out: &str) -> Result<Vec<Preview>, String> {
     match serde_json::from_str(out).map_err(|e| format!("musicdb delete --preview: {e}"))? {
@@ -184,6 +191,23 @@ fn load(job: &Arc<Mutex<Job>>, files: Vec<String>, sender: crossbeam::channel::S
     });
 }
 
+/// Check the preview again (the library may have changed since the menu opened), then delete; the status bar
+/// gets musicdb's last line when it has finished, or why it failed.
+fn delete(choice: Choice, files: &[String]) {
+    match preview(files, false) {
+        Err(err) => return status_error!("musicdb delete: {err}; nothing deleted"),
+        Ok(songs) => {
+            if let Some(gone) = songs.iter().find(|s| !s.exists) {
+                return status_error!("{} - {} is no longer in the library; nothing deleted", gone.artist, gone.title);
+            }
+        }
+    }
+    match run(&choice.args(files)) {
+        Ok(out) => status_info!("{}", out.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("musicdb delete: done")),
+        Err(err) => status_error!("musicdb delete: {err}"),
+    }
+}
+
 /// Deletable ListenBrainz listens over all songs (a shared recording keeps its listens).
 fn listens(songs: &[Preview]) -> u32 {
     songs.iter().filter(|s| s.shared.is_empty()).map(|s| s.lb_listens).sum()
@@ -252,12 +276,12 @@ impl DeleteMenu {
             |s| s.iter().map(|p| format!("{} - {}", p.artist, p.title)).collect::<Vec<_>>().join("\n"),
         );
         let files = self.files.clone();
-        let go = move |_: &Ctx| -> Result<()> {
-            let args = choice.args(&files);
+        let go = move |ctx: &Ctx| -> Result<()> {
+            let sender = ctx.app_event_sender.clone();
             std::thread::spawn(move || {
-                if let Err(err) = run(&args) {
-                    status_error!("musicdb delete: {err}");
-                }
+                delete(choice, &files);
+                // the groups (Versions, the Queue's ≋) change, also after a partial failure
+                crate::ui::rormpc_versions::changed(&sender);
             });
             Ok(())
         };
