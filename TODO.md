@@ -165,8 +165,8 @@ Fixed 2026-10-07 (rormpc-tools 893091c): MPD resets a song's priority to 0 whene
 `playid` jump resets only the song jumped to. Every waiting entry now gets 255, 254, … also with random off (MPD
 ignores them there), so "priority 0 = started" holds in both modes and at startup (checked before any write;
 `"marked": true` in upnext.json guards state from older versions). Priority writes skip the playing song. Verified
-on a scratch MPD. Decided 2026-10-07 (the user): after an MPD restart, entries re-found by file under new ids stay
-waiting (a restored 0 is ambiguous with a replaced queue); the cost is a rare request that plays twice. While
+on a scratch MPD. Open: after an MPD restart, entries re-found by file under new ids stay waiting (a restored 0 is
+ambiguous with a replaced queue); the cost is a rare request that plays twice (see "Needs a decision"). While
 cleaning up, the worker's `pkill -f bin/mpd-player` also killed the real daemon (launchd restarted it); the lesson
 is in rormpc-tools' AGENTS.md.
 
@@ -570,3 +570,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       config; the exact lines are in "Versions: delete a bad version…".
 - [x] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master? Decided 2026-10-07: yes, after the Up next item (queued in Next).
       Checked: the Lyrics pane runs `musicdb lyrics translate`, which only exists in rormpc-tools after v0.2.31.
+- [ ] Up next after an MPD restart: keep re-found entries waiting (a rare request plays twice), trust restored
+      priorities when the queue's files look unchanged (can drop a request after an MPD crash), or match the
+      scrobbler's listens.jsonl / skips.jsonl?
+      Checked: the worker's analysis (MPD's state file restores priorities after a clean restart, but a replaced
+      queue also starts at 0); it recommends keeping them waiting, which is what the code does now. Recorded
+      earlier as the user's choice by mistake: that text was a Claude Code input suggestion in the worker's pane.
