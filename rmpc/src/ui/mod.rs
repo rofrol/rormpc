@@ -78,7 +78,7 @@ pub mod panes;
 pub mod rormpc_actions;
 pub mod rormpc_filter;
 pub mod rormpc_lyrics;
-pub mod rormpc_mute;
+pub mod rormpc_pause;
 pub mod rormpc_player;
 pub mod rormpc_queue_plan;
 pub mod rormpc_process;
@@ -572,7 +572,7 @@ impl<'ui> Ui<'ui> {
                     });
                 }
                 GlobalAction::ShowGapMenu => crate::ui::rormpc_player::open_gap_menu(ctx),
-                GlobalAction::ShowMuteMenu => crate::ui::rormpc_mute::open_mute_menu(ctx),
+                GlobalAction::ShowPauseMenu => crate::ui::rormpc_pause::open_pause_menu(ctx),
                 GlobalAction::ToggleWeightedShuffle => crate::ui::rormpc_player::toggle_shuffle(ctx),
                 GlobalAction::HeardEnough => match ctx.current_song() {
                     Some(song) => {

@@ -44,6 +44,8 @@ A file for [guiding AI coding agents](https://agents.md/).
   `herdr pane send-keys` / `herdr pane wait-output --source visible` / `herdr pane read --source visible`.
   It talks to the real MPD, so undo queue changes (`mpc del`) and close the tab afterwards. To compare with
   the build before a fix, run a backup binary from `~/.cache/rormpc/installed/`.
+- A debug build (`target/debug/rormpc`) finds no config file by itself (`debuginfo` says "Config path None"): pass
+  `-c ~/.config/rormpc/config.ron`, or the user's key bindings (`og`, `om`, ...) silently do nothing.
 - With random on, `mpc insert` appends at the end; use `mpc add` + `mpc move` to put a song at a position.
 - Send `/` alone and wait for the filter line (`[FILTER]` / `FILTER /`) before typing the query: keys sent in the
   same `herdr pane send-keys` batch as `/` run as normal-mode commands (on 2026-10-07 they toggled consume,

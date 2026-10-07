@@ -1,6 +1,6 @@
-//! rormpc: "Mute for…": mpd-player (rormpc-tools) sets the volume to 0 and brings the old volume back at a
-//! wall-clock deadline, also with rormpc closed. Commands go as `mute start|extend|unmute|cancel` on the "rormpc"
-//! channel; mute.json (written only by mpd-player) holds the deadline, which the volume slider shows as a countdown.
+//! rormpc: "Pause for…": mpd-player (rormpc-tools) pauses MPD and plays on at a wall-clock deadline, also with
+//! rormpc closed. Commands go as `pause start|extend|resume|cancel` on the "rormpc" channel; pause.json (written only
+//! by mpd-player) holds the deadline, which the volume slider shows as a countdown.
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -16,19 +16,16 @@ use crate::{
     },
 };
 
-/// how long to wait for mpd-player to write mute.json after a command (it answers within milliseconds when it runs)
+/// how long to wait for mpd-player to write pause.json after a command (it answers within milliseconds when it runs)
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
-/// longest mute that can be asked for (mpd-player refuses more)
+/// longest pause that can be asked for (mpd-player refuses more)
 const MAX_SECONDS: u64 = 24 * 3600;
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct MuteState {
-    /// wall-clock Unix time when the volume comes back; None: not muted by mpd-player
+pub struct PauseState {
+    /// wall-clock Unix time when playback goes on; None: no timed pause by mpd-player
     #[serde(default)]
     pub deadline: Option<f64>,
-    /// the volume that comes back
-    #[serde(default)]
-    pub volume: Option<u32>,
     /// +1 for every command mpd-player handled
     #[serde(default)]
     pub generation: u64,
@@ -36,14 +33,14 @@ pub struct MuteState {
     pub error: Option<String>,
 }
 
-/// mute.json, read again only when the file changed (the slider looks at it on every render).
-pub fn mute_state() -> MuteState {
+/// pause.json, read again only when the file changed (the slider looks at it on every render).
+pub fn pause_state() -> PauseState {
     use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<(Option<SystemTime>, MuteState)>> = OnceLock::new();
-    let p = state_path("mute");
+    static CACHE: OnceLock<Mutex<(Option<SystemTime>, PauseState)>> = OnceLock::new();
+    let p = state_path("pause");
     let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
-    let cache = CACHE.get_or_init(|| Mutex::new((None, MuteState::default())));
-    let Ok(mut c) = cache.lock() else { return MuteState::default() };
+    let cache = CACHE.get_or_init(|| Mutex::new((None, PauseState::default())));
+    let Ok(mut c) = cache.lock() else { return PauseState::default() };
     if c.0 != mtime || mtime.is_none() {
         c.1 = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         c.0 = mtime;
@@ -51,14 +48,14 @@ pub fn mute_state() -> MuteState {
     c.1.clone()
 }
 
-/// Seconds until the volume comes back (0 once the deadline passed and mpd-player has not answered yet), or None
-/// when nothing is muted.
+/// Seconds until playback goes on (0 once the deadline passed and mpd-player has not answered yet), or None
+/// without a timed pause.
 pub fn remaining() -> Option<f64> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs_f64();
-    mute_state().deadline.map(|d| (d - now).max(0.0))
+    pause_state().deadline.map(|d| (d - now).max(0.0))
 }
 
-/// 12:34, or 1:02:03 from an hour on (rounded up, so it never shows 0:00 while still muted).
+/// 12:34, or 1:02:03 from an hour on (rounded up, so it never shows 0:00 while still paused).
 pub fn fmt_remaining(secs: f64) -> String {
     let s = secs.ceil() as u64;
     if s >= 3600 { format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60) } else { format!("{}:{:02}", s / 60, s % 60) }
@@ -99,24 +96,25 @@ fn fmt_duration(secs: u64) -> String {
     }
 }
 
-/// Send one `mute …` command, then report once mpd-player handled it (mute.json's generation moved on): its error,
+/// Send one `pause …` command, then report once mpd-player handled it (pause.json's generation moved on): its error,
 /// or `ok`.
-fn send(ctx: &Ctx, msg: String, ok: impl Fn(&MuteState) -> String + Send + 'static) {
-    let before = mute_state().generation;
+fn send(ctx: &Ctx, msg: String, ok: impl Fn(&PauseState) -> String + Send + 'static) {
+    let before = pause_state().generation;
     ctx.command(move |_, client| {
         if !client.channels()?.0.iter().any(|c| c == CHANNEL) {
-            status_error!("mpd-player is not running (rormpc_install.sh companions starts it): not muted");
+            status_error!("mpd-player is not running (rormpc_install.sh companions starts it): not paused");
             return Ok(());
         }
         client.send_message(CHANNEL, &msg)?;
         std::thread::spawn(move || {
             let start = Instant::now();
             loop {
-                let st = mute_state();
+                let st = pause_state();
                 if st.generation != before {
-                    match &st.error {
-                        Some(e) => status_warn!("Mute: {e}"),
-                        None => status_info!("{}", ok(&st)),
+                    if let Some(e) = &st.error {
+                        status_warn!("Pause: {e}");
+                    } else {
+                        status_info!("{}", ok(&st));
                     }
                     return;
                 }
@@ -132,31 +130,28 @@ fn send(ctx: &Ctx, msg: String, ok: impl Fn(&MuteState) -> String + Send + 'stat
 }
 
 fn start(ctx: &Ctx, secs: u64) {
-    send(ctx, format!("mute start {secs}"), move |st| {
-        format!("Muted for {}: volume {}% comes back at the end", fmt_duration(secs), st.volume.unwrap_or(0))
-    });
+    send(ctx, format!("pause start {secs}"), move |_| format!("Paused for {}: plays on at the end", fmt_duration(secs)));
 }
 
 fn extend(ctx: &Ctx, secs: u64) {
-    send(ctx, format!("mute extend {secs}"), |_| {
-        format!("Still muted: unmutes in {}", remaining().map_or_else(String::new, fmt_remaining))
+    send(ctx, format!("pause extend {secs}"), |_| {
+        format!("Still paused: plays on in {}", remaining().map_or_else(String::new, fmt_remaining))
     });
 }
 
-/// "Mute for…" (presets and a custom duration), or while muted: unmute now, longer, or stay muted without a timer.
-pub fn open_mute_menu(ctx: &Ctx) {
-    let st = mute_state();
+/// "Pause for…" (presets and a custom duration), or while paused for a while: play now, longer, or stay paused
+/// without a timer.
+pub fn open_pause_menu(ctx: &Ctx) {
     let menu = if let Some(left) = remaining() {
-        let volume = st.volume.unwrap_or(0);
         MenuModal::new(ctx)
             .width(50)
             .list_section(ctx, move |mut section| {
-                section.add_item(format!("Muted: unmutes in {} (to {volume}%)", fmt_remaining(left)), |_| Ok(()));
+                section.add_item(format!("Paused: plays on in {}", fmt_remaining(left)), |_| Ok(()));
                 Some(section)
             })
             .list_section(ctx, |mut section| {
-                section.add_item("Unmute now", |ctx| {
-                    send(ctx, "mute unmute".to_owned(), |st| format!("Unmuted: volume {}%", st.volume.unwrap_or(0)));
+                section.add_item("Play now", |ctx| {
+                    send(ctx, "pause resume".to_owned(), |_| "Playing on".to_owned());
                     Ok(())
                 });
                 for min in [5, 15, 30] {
@@ -165,17 +160,17 @@ pub fn open_mute_menu(ctx: &Ctx) {
                         Ok(())
                     });
                 }
-                section.add_item("Cancel timer, stay muted", |ctx| {
-                    send(ctx, "mute cancel".to_owned(), |_| "Timer cancelled: stays muted (volume 0)".to_owned());
+                section.add_item("Cancel timer, stay paused", |ctx| {
+                    send(ctx, "pause cancel".to_owned(), |_| "Timer cancelled: stays paused".to_owned());
                     Ok(())
                 });
                 Some(section)
             })
     } else {
         MenuModal::new(ctx)
-            .width(56)
+            .width(50)
             .list_section(ctx, |mut section| {
-                section.add_item("Mute for… (songs keep playing and count as listens)", |_| Ok(()));
+                section.add_item("Pause for… (then plays on by itself)", |_| Ok(()));
                 Some(section)
             })
             .list_section(ctx, |mut section| {
@@ -189,13 +184,14 @@ pub fn open_mute_menu(ctx: &Ctx) {
                     modal!(
                         ctx,
                         InputModal::new(ctx)
-                            .title("Mute for")
+                            .title("Pause for")
                             .input_label("Minutes, or 90s, 1h30, 1:30:")
-                            .confirm_label("Mute")
+                            .confirm_label("Pause")
                             .on_confirm(|ctx, value| {
-                                match parse_duration(value) {
-                                    Some(secs) => start(ctx, secs),
-                                    None => status_warn!("Not a duration from 1 s to 24 h: {value}"),
+                                if let Some(secs) = parse_duration(value) {
+                                    start(ctx, secs);
+                                } else {
+                                    status_warn!("Not a duration from 1 s to 24 h: {value}");
                                 }
                                 Ok(())
                             })
