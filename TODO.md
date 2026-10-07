@@ -31,6 +31,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done: rormpc-tools e354b97 (179 tests), ro-listenbrainz-mpd 862c08a (12 tests); no bugs found.
 - [ ] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
       an Up next song plays ("Test report of 2026-10-06").
+- [ ] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc
+      from master (decided 2026-10-07; the coordinator does it).
+- [ ] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
+      (decided 2026-10-07; mockups and pitfalls in "Soon: playing-song indicator in Hits").
+- [ ] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
+      and the rormpc installer smoke test, plus `push` in rormpc's ci.yml; triggers as in "Tests and GitHub
+      Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -495,8 +502,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Needs a decision
 
-- [ ] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
-      its first ~3 s?
+- [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
+      its first ~3 s? Decided 2026-10-07: no, Previous always goes back.
       Checked: Sol says leave it out (it fights walking back), MiMo says restart; the TODO marks it undecided.
 - [ ] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch
       MPD, or will you test the fix live with the media keys?
@@ -512,8 +519,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc
       pane)?
       Checked: a multi-repository feature with downloads; the plan is agreed but not ordered.
-- [ ] CI: push GitHub Actions workflows (rormpc-tools, ro-listenbrainz-mpd, rormpc installer smoke test, `push`
-      trigger in ci.yml)?
+- [x] CI: push GitHub Actions workflows (rormpc-tools, ro-listenbrainz-mpd, rormpc installer smoke test, `push`
+      trigger in ci.yml)? Decided 2026-10-07: yes (queued in Next).
       Checked: they only matter once pushed to GitHub; the local tests are in "Next, in order".
 - [ ] Mute: build "Pause for…"?
       Checked: listed as "maybe later".
@@ -524,10 +531,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)? Decided 2026-10-07: yes; done 2026-10-07 (rormpc-tools v0.2.31 pushed and installed with `companions`, rormpc 1a691fc installed, dotfiles 7e15624 adds `V` and the `≋` column; Hammerspoon picks up `shuffle prev` on its next restart).
       Checked: main is 6 commits ahead of origin (the plan view's mpd-player swaps, the soundtrack genre, `shuffle
       prev`); the installed tools are v0.2.30, so none of them works in the installed rormpc until a release.
-- [ ] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)?
+- [x] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)? Decided 2026-10-07: B (queued in Next).
       Checked: mockups and MiMo's ranking in "Soon: playing-song indicator in Hits"; Sol was at its usage limit.
 - [x] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme? Decided 2026-10-07: yes; done together with the release above.
       Checked: the installed binary does not know either name, so adding them now would break loading the
       config; the exact lines are in "Versions: delete a bad version…".
-- [ ] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master?
+- [x] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master? Decided 2026-10-07: yes, after the Up next item (queued in Next).
       Checked: the Lyrics pane runs `musicdb lyrics translate`, which only exists in rormpc-tools after v0.2.31.
