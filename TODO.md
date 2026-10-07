@@ -74,8 +74,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       input from its Enter menu). Not tested: a real download from a live playlist (the one allowed live listing
       returned 0 items); the UI was checked on a scratch MPD with hand-made items. Needs a release and a
       `Pane(LivePlaylists())` tab in the user's config (snippet in RORMPC.md).
-- [ ] Release rormpc-tools v0.2.34 (Live playlists), install rormpc (Live playlists pane, keys sent with `/`) and
+- [x] Release rormpc-tools v0.2.34 (Live playlists), install rormpc (Live playlists pane, keys sent with `/`) and
       add a "Live playlists" tab after Playlists in the dotfiles config (decided 2026-10-07: now).
+      Done: v0.2.34 pushed and installed, rormpc 1cb1b3b installed, dotfiles 9474d93 (tab + `gl`; the config loads).
 - [ ] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided
       2026-10-07): line by line with the stanza as context, labelled "machine translation", the key from the
       user's rormpc-tools config (never in the repo); the model id from the claude-api reference.
