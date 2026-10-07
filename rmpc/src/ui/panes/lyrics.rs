@@ -99,7 +99,7 @@ impl LyricsPane {
             binding(nav, want).unwrap_or_else(|| fallback.to_owned())
         };
         let mut status = if self.fetching {
-            "Looking up the Polish translation on tekstowo.pl…".to_owned()
+            "Looking up the Polish translation (tekstowo.pl, else Claude)…".to_owned()
         } else {
             tr.status.clone()
         };
