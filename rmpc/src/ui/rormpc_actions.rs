@@ -182,7 +182,7 @@ pub fn confirm_clear_queue(ctx: &Ctx) {
 
 pub fn confirm_remove_duplicates(ctx: &Ctx, count: usize) {
     let message = vec![format!(
-        "Remove {count} duplicate queue entries?\n\nThe same file queued more than once keeps one entry: \
+        "Remove {count} repeated queue entries?\n\nThe same file queued more than once keeps one entry: \
          the playing one, else the first.\nLibrary files stay."
     )];
     let on_remove = |ctx: &Ctx| -> Result<()> {
@@ -193,7 +193,7 @@ pub fn confirm_remove_duplicates(ctx: &Ctx, count: usize) {
             for id in &ids {
                 client.delete_id(*id)?;
             }
-            status_info!("Removed {} duplicate queue entries", ids.len());
+            status_info!("Removed {} repeated queue entries", ids.len());
             Ok(())
         });
         Ok(())
