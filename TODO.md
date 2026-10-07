@@ -37,13 +37,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done: v0.2.32 pushed and installed with `companions`, rormpc 53751e0 installed.
 - [x] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
       (decided 2026-10-07; mockups and pitfalls in "Soon: playing-song indicator in Hits"). Done in 81c9248 (worker; not yet installed).
-- [ ] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
+- [x] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
       and the rormpc installer smoke test, plus `push` in rormpc's ci.yml; triggers as in "Tests and GitHub
-      Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes).
-- [ ] Installer on macOS: `rormpc_install.sh companions` silently fails to add the listen rule to a fresh
+      Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes). Done and pushed: rormpc-tools and
+      ro-listenbrainz-mpd `test.yml` green on the first run; rormpc ci.yml runs on push (Build & Test green on
+      Ubuntu and macOS; Formatter only on pull requests, decided by the user, the fork is not rustfmt-clean);
+      `installer_smoke.yml` is manual (workflow_dispatch) until it passes once; `RORMPC_TOOLS_REF` / `RO_LB_REF`
+      override the pinned tags.
+- [x] Installer on macOS: `rormpc_install.sh companions` silently fails to add the listen rule to a fresh
       scrobbler config (macOS awk rejects the newlines in `-v rule=...`; the `awk … && mv` hides it, prints "set
       the 90%-without-a-seek rule" anyway and leaves a .tmp file). Pass the rule with `\n` escapes, fail loudly,
-      no .tmp left (found by the CI worker 2026-10-07; fix approved by the user).
+      no .tmp left (found by the CI worker 2026-10-07; fix approved by the user). Done: the rule goes through ENVIRON.
 - [ ] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed
       pause owned by mpd-player with a wall-clock deadline (works with rormpc closed, across sleep and restarts);
       at the deadline it resumes only if still paused by this timer; a play by anyone cancels the timer. Remove
