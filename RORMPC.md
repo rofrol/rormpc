@@ -50,6 +50,29 @@ reads carries a version it checks: `hits --json` files and `musicdb delete --pre
 [...]}`; the older bare list is still read). Change such a format in both repositories together, with the tests on
 both sides (rormpc-tools `tests/test_rormpc_contract.py`, rormpc `delete_menu.rs`).
 
+## Media keys
+
+On macOS the hardware media keys (play/pause, next, previous) and the system Now Playing widget come from
+[mpd-now-playable](https://git.00dani.me/00dani/mpd-now-playable), a separate daemon that talks to MPD directly, so
+they work with rormpc closed. It is independent of rormpc: `rormpc_install.sh` neither installs nor touches it.
+
+    uv tool install mpd-now-playable
+    mpd-now-playable install-launchagent      # ~/Library/LaunchAgents/me.00dani.mpd-now-playable.plist, started now
+    mpd-now-playable uninstall-launchagent    # stops and removes it
+    launchctl print gui/$UID/me.00dani.mpd-now-playable   # check: state = running
+
+The plist runs the uv tool venv's Python, so after `uv tool upgrade mpd-now-playable` or a reinstall rerun
+`mpd-now-playable install-launchagent --force`, or launchd keeps restarting a dead path.
+
+On this setup Hammerspoon (`~/.hammerspoon/init.lua`) overrides the keyboard keys, because a browser playing media
+takes Now Playing and with it the keys: Play/Next/Previous are consumed and sent to MPD with `mpc`
+(toggle/next/prev); with Shift held they pass through to the Now Playing app. The menu bar ♪ item turns the
+override off and on. Previous sends `shuffle prev` to mpd-player (channel `rormpc`) when mpd-player is subscribed
+and its `shuffle.json` has `trail`, else plain `mpc prev`. Volume, mute and fast-forward/rewind are left alone;
+AirPods/Bluetooth buttons never reach Hammerspoon and still go to the Now Playing app.
+
+On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-mpris or mpDris2; see TODO.md).
+
 ## Hits pane
 
 Ranked chart hits produced by the `hits` CLI ([rormpc-tools](https://github.com/rofrol/rormpc-tools)), e.g.
