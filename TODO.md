@@ -508,11 +508,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: only observable in your use; the code path passes through a stop, which unmutes.
 - [ ] Does the modal DIM backdrop look right in Ghostty?
       Checked: the DIM cells were verified through herdr; the strength in Ghostty needs your eyes.
-- [x] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)? Decided 2026-10-07: yes, the coordinator does it.
+- [x] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)? Decided 2026-10-07: yes; done 2026-10-07 (rormpc-tools v0.2.31 pushed and installed with `companions`, rormpc 1a691fc installed, dotfiles 7e15624 adds `V` and the `≋` column; Hammerspoon picks up `shuffle prev` on its next restart).
       Checked: main is 6 commits ahead of origin (the plan view's mpd-player swaps, the soundtrack genre, `shuffle
       prev`); the installed tools are v0.2.30, so none of them works in the installed rormpc until a release.
 - [ ] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)?
       Checked: mockups and MiMo's ranking in "Soon: playing-song indicator in Hits"; Sol was at its usage limit.
-- [x] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme? Decided 2026-10-07: yes, the coordinator does it.
+- [x] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme? Decided 2026-10-07: yes; done together with the release above.
       Checked: the installed binary does not know either name, so adding them now would break loading the
       config; the exact lines are in "Versions: delete a bad version…".
