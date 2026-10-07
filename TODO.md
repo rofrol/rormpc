@@ -85,7 +85,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Claude Code login. Done in rormpc-tools 6ac635f, rormpc e621bef (worker): `claude -p` (default
       claude-sonnet-5-5, `translate_model` in config.toml or RORMPC_TRANSLATE_MODEL), strict JSON per stanza, line
       counts checked with one retry, nothing stored on a mismatch; never replaces "mine" or a human translation.
-      One live call on invented lyrics (4.4 s). Not released yet.
+      One live call on invented lyrics (4.4 s). Released 2026-10-07: v0.2.35 pushed and installed, rormpc 6474e92
+      installed; dotfiles be85114 renumbers the digit keys (1 Hits … 0 Live playlists; gy Lyrics, gd Deleted,
+      gf Search).
 - [ ] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit,
       and mouse scroll does nothing; also 3 jumps to Directories"). The bar cuts "Ver…" at the right edge
       (Hits, Queue, Up next, Shuffle, Directories, Artists, Album Artists, Albums, Playlists, Lyrics, Deleted,
