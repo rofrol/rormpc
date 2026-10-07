@@ -97,10 +97,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       changes the dotfiles keymap, a worker the bar. Done: dotfiles be85114 (digits), rormpc 7249c32 (worker): the bar
       scrolls the active tab into view, ‹ › mark hidden tabs, the wheel over the bar and a click on ‹ › scroll it
       without switching, a click hits the tab drawn there. Not installed yet.
-- [ ] Asked 2026-10-07: "download the top 1% of music" (in Polish: "ściągnij top 1% muzyki"). Facts: Hits' Top %
+- [x] Asked 2026-10-07: "download the top 1% of music" (in Polish: "ściągnij top 1% muzyki"). Facts: Hits' Top %
       is the share of a chart cohort (Billboard year-end, per year); `hits fetch` is a verified import queue for
       missing songs (rormpc: "Fetch missing…"). Scope decided 2026-10-07: Billboard year-end, all years, the top 1%
       of each year's chart, the missing songs through `hits fetch` (verified).
+      Done 2026-10-07 (worker): `hits --years 1959-2025 --top 1-1` = 64 songs, 11 owned; of the 53 missing, 18
+      promoted into the library, 28 wait in review (21 "other recording of the same song", 5 "different song", 2
+      "no MusicBrainz match"), 7 failed (no YouTube result within 5 s of the chart recording's length: Macarena
+      Bayside Boys Mix, Walk Like an Egyptian, Believe, Breathe, Happy, Low, Surfin' U.S.A.). Review: `hits fetch
+      status`, or the Hits pane's "Fetch missing…".
 - [ ] Asked 2026-10-07: "in Hits, all my playlists as a source" (in Polish: "w Hits jako źródło moje playlisty
       wszystkie"). Facts: Hits' Source cycles Billboard US / my charts / whole library / my likes / recommended.
 
