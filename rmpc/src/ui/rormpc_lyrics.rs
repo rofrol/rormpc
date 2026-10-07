@@ -3,7 +3,7 @@
 //! next to where the `.lrc` would be), scrolled along with the song; a note when there are none (instrumental,
 //! nothing on LRCLIB, not checked yet) taken from `<lyrics_dir>/index.json`; "Choose lyrics…", a menu of the
 //! LRCLIB entries for a song; and a Polish translation beside the original (`musicdb lyrics translate`, from
-//! tekstowo.pl, stored in `<song stem>.pl.json` next to the lyrics).
+//! tekstowo.pl or else a machine translation by Claude, stored in `<song stem>.pl.json` next to the lyrics).
 
 use std::{collections::HashMap, process::Command};
 
@@ -203,6 +203,12 @@ struct Sidecar {
     state: String,
     #[serde(default)]
     kind: Option<String>,
+    /// "tekstowo.pl" or "claude"
+    #[serde(default)]
+    source: Option<String>,
+    /// why the machine translation was not made (no `claude`, a line count mismatch, ...)
+    #[serde(default)]
+    note: Option<String>,
     #[serde(default)]
     original_hash: Option<String>,
     #[serde(default)]
@@ -271,7 +277,7 @@ fn translation_from(lines: Vec<String>, estimated: bool, sidecar: Option<Sidecar
         units: Vec::new(),
         pairing: Pairing::Whole,
         status: String::new(),
-        action: Some("look it up on tekstowo.pl"),
+        action: Some("translate"),
     };
     let Some(s) = sidecar else {
         "No Polish translation".clone_into(&mut tr.status);
@@ -305,6 +311,7 @@ fn translation_from(lines: Vec<String>, estimated: bool, sidecar: Option<Sidecar
             let n = tr.lines.len();
             tr.units = s.units.into_iter().filter(|u| !u.ids.is_empty() && u.ids.iter().all(|&i| i < n)).collect();
             let kind = match s.kind.as_deref() {
+                Some("machine") if s.source.as_deref() == Some("claude") => "machine translation (Claude)",
                 Some("machine") => "machine translation (tekstowo.pl AI)",
                 Some("mine") => "your translation",
                 _ => "translation from tekstowo.pl",
@@ -338,6 +345,9 @@ fn translation_from(lines: Vec<String>, estimated: bool, sidecar: Option<Sidecar
         }
         other => format!("Translation: {other}"),
     };
+    if let (Some(note), true) = (s.note.as_deref(), matches!(s.state.as_str(), "none" | "not_found" | "mismatch")) {
+        tr.status = format!("{} · {note}", tr.status);
+    }
     tr
 }
 
@@ -496,7 +506,7 @@ pub fn render_status(frame: &mut Frame, area: Rect, status: &str) {
 /// Enter in the Lyrics pane: look the playing song's translation up in the background.
 pub fn fetch_translation(ctx: &Ctx) {
     let Some(song) = ctx.current_song() else { return };
-    status_info!("Looking up the Polish translation on tekstowo.pl…");
+    status_info!("Looking up the Polish translation (tekstowo.pl, else Claude)…");
     run_then_reload(ctx, vec!["lyrics".into(), "translate".into(), song.file.clone()]);
 }
 
@@ -512,6 +522,8 @@ mod tests {
         Sidecar {
             state: "translated".into(),
             kind: Some("human".into()),
+            source: Some("tekstowo.pl".into()),
+            note: None,
             original_hash: Some(lines_hash(lines)),
             original_lang: Some("en".into()),
             pairing: Some(pairing.into()),
@@ -589,9 +601,23 @@ mod tests {
         let tr = translation_from(orig.clone(), false, Some(polish));
         assert!(tr.units.is_empty() && tr.action.is_none() && tr.status == "Polish original");
         let tr = translation_from(orig.clone(), false, None);
-        assert_eq!((tr.status.as_str(), tr.action), ("No Polish translation", Some("look it up on tekstowo.pl")));
+        assert_eq!((tr.status.as_str(), tr.action), ("No Polish translation", Some("translate")));
         // ids out of range (a sidecar written for other lyrics) are dropped
         let s = sidecar(&orig, "line", vec![unit(&[5], &["pięć"])]);
         assert!(translation_from(orig, false, Some(s)).units.is_empty());
+    }
+
+    #[test]
+    fn machine_translation_by_claude_and_why_there_is_none() {
+        let orig = lines(&["one"]);
+        let mut s = sidecar(&orig, "line", vec![unit(&[0], &["jeden"])]);
+        s.kind = Some("machine".into());
+        s.source = Some("claude".into());
+        assert_eq!(translation_from(orig.clone(), false, Some(s)).status, "Polish: machine translation (Claude)");
+        let mut s = sidecar(&orig, "line", Vec::new());
+        s.state = "none".into();
+        s.note = Some("no machine translation: no `claude` (Claude Code CLI) on PATH".into());
+        let tr = translation_from(orig, false, Some(s));
+        assert!(tr.status.starts_with("tekstowo.pl has no Polish translation · no machine translation: no `claude`"));
     }
 }
