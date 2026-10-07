@@ -48,11 +48,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       scrobbler config (macOS awk rejects the newlines in `-v rule=...`; the `awk … && mv` hides it, prints "set
       the 90%-without-a-seek rule" anyway and leaves a .tmp file). Pass the rule with `\n` escapes, fail loudly,
       no .tmp left (found by the CI worker 2026-10-07; fix approved by the user). Done: the rule goes through ENVIRON.
-- [ ] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed
+- [x] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed
       pause owned by mpd-player with a wall-clock deadline (works with rormpc closed, across sleep and restarts);
       at the deadline it resumes only if still paused by this timer; a play by anyone cancels the timer. Remove
       Mute for… (module, commands, menu items, slider countdown, docs) in the same change; reuse its deadline and
-      generation/error plumbing. Test on a scratch MPD.
+      generation/error plumbing. Test on a scratch MPD. Done in rormpc d29d92c, rormpc-tools 731768f (worker): `pause start|extend|
+      resume|cancel`, pause.json; resumes only while MPD is still paused on the same song; the gap neither starts
+      nor ends a silence while the timer holds the pause; an old mute.json restores its saved volume once. rormpc:
+      `om` → ShowPauseMenu (`op` is ShowDecoders), `paused · 12:34` on the volume slider; `ShowMuteMenu` stays a
+      serde alias until the dotfiles config says `"om": ShowPauseMenu` (switch it after installing). Known limits:
+      play then pause on the same song while the daemon is down cannot be told apart and resumes; an MPD restart
+      (new song ids) cancels the timer. Not installed yet.
 - [ ] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue
       filter and the ordinary filters (approved 2026-10-07; see the item under "Done: live Queue plan view").
 - [ ] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
