@@ -40,6 +40,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
       and the rormpc installer smoke test, plus `push` in rormpc's ci.yml; triggers as in "Tests and GitHub
       Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes).
+- [ ] Installer on macOS: `rormpc_install.sh companions` silently fails to add the listen rule to a fresh
+      scrobbler config (macOS awk rejects the newlines in `-v rule=...`; the `awk … && mv` hides it, prints "set
+      the 90%-without-a-seek rule" anyway and leaves a .tmp file). Pass the rule with `\n` escapes, fail loudly,
+      no .tmp left (found by the CI worker 2026-10-07; fix approved by the user).
 - [ ] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed
       pause owned by mpd-player with a wall-clock deadline (works with rormpc closed, across sleep and restarts);
       at the deadline it resumes only if still paused by this timer; a play by anyone cancels the timer. Remove
@@ -556,9 +560,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: they only matter once pushed to GitHub; the local tests are in "Next, in order".
 - [x] Mute: build "Pause for…"? Decided 2026-10-07: the user wants no "Mute for…" at all, only "Pause for…" (queued in Next).
       Checked: listed as "maybe later".
-- [ ] Mute: has a queue replaced by Sources… unmuted you in use?
+- [x] Mute: has a queue replaced by Sources… unmuted you in use? Closed 2026-10-07: moot, "Mute for…" is being replaced by "Pause for…".
       Checked: only observable in your use; the code path passes through a stop, which unmutes.
-- [ ] Does the modal DIM backdrop look right in Ghostty?
+- [x] Does the modal DIM backdrop look right in Ghostty? Answered 2026-10-07: yes, it looks right.
       Checked: the DIM cells were verified through herdr; the strength in Ghostty needs your eyes.
 - [x] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)? Decided 2026-10-07: yes; done 2026-10-07 (rormpc-tools v0.2.31 pushed and installed with `companions`, rormpc 1a691fc installed, dotfiles 7e15624 adds `V` and the `≋` column; Hammerspoon picks up `shuffle prev` on its next restart).
       Checked: main is 6 commits ahead of origin (the plan view's mpd-player swaps, the soundtrack genre, `shuffle
