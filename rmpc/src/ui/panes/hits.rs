@@ -1597,10 +1597,13 @@ enum Source {
     Library,
     /// my own charts: songs by my plays in the chosen listening years
     Mine,
+    /// the songs of all my stored MPD playlists (not the generated ones), by my plays
+    Playlists,
 }
 
 impl Source {
-    const ALL: [Source; 5] = [Source::Billboard, Source::Mine, Source::Library, Source::Likes, Source::Recs];
+    const ALL: [Source; 6] =
+        [Source::Billboard, Source::Mine, Source::Library, Source::Playlists, Source::Likes, Source::Recs];
 
     fn label(self) -> &'static str {
         match self {
@@ -1609,6 +1612,7 @@ impl Source {
             Source::Recs => "recommended",
             Source::Library => "whole library",
             Source::Mine => "my charts",
+            Source::Playlists => "my playlists",
         }
     }
 
@@ -1623,7 +1627,7 @@ impl Source {
 #[derive(Debug, Clone)]
 struct Filters {
     source: Source,
-    /// likes only: false = by plays, true = rediscover
+    /// likes, library and playlists: false = by plays, true = rediscover
     rediscover: bool,
     by_range: bool,
     decades: [bool; 8],
@@ -1649,7 +1653,7 @@ impl Default for Filters {
 impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
         let mut rows = vec![FilterRow::Source];
-        if matches!(self.source, Source::Likes | Source::Library) {
+        if matches!(self.source, Source::Likes | Source::Library | Source::Playlists) {
             rows.push(FilterRow::Sort);
         }
         // recommendations have no year to filter on
@@ -1781,10 +1785,14 @@ impl Filters {
                 args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
             }
             Source::Mine => args.extend(["--source".to_owned(), "mine".to_owned()]),
+            Source::Playlists => {
+                args.extend(["--source".to_owned(), "playlists".to_owned(), "--sort".to_owned()]);
+                args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
+            }
         }
-        // likes, library and my charts without any decade ticked = all years (a chart needs a period);
-        // recommendations have no year
-        let all_years = matches!(self.source, Source::Likes | Source::Library | Source::Mine)
+        // likes, library, my playlists and my charts without any decade ticked = all years (a chart needs a
+        // period); recommendations have no year
+        let all_years = matches!(self.source, Source::Likes | Source::Library | Source::Mine | Source::Playlists)
             && !self.by_range
             && !self.decades.iter().any(|d| *d);
         if self.source != Source::Recs && !all_years {
@@ -1862,10 +1870,13 @@ impl Filters {
             Some("recs") => Source::Recs,
             Some("library") => Source::Library,
             Some("mine") => Source::Mine,
+            Some("playlists") => Source::Playlists,
             _ => Source::Billboard,
         };
         f.rediscover = args.sort.as_deref() == Some("rediscover");
-        if matches!(f.source, Source::Likes | Source::Library | Source::Mine) && args.period.is_none() {
+        if matches!(f.source, Source::Likes | Source::Library | Source::Mine | Source::Playlists)
+            && args.period.is_none()
+        {
             f.decades = [false; 8]; // all years
         }
         f
@@ -2154,6 +2165,25 @@ mod tests {
         let back = Filters::from_args(&HitsArgs { genre: Some(f.genre_spec()), ..HitsArgs::default() });
         assert_eq!(back.genre_spec(), f.genre_spec());
         assert_eq!(back.genres.len(), GENRES.len() + 1);
+    }
+
+    #[test]
+    fn playlists_source_round_trips_with_all_years_and_sort() {
+        let mut f = Filters::default();
+        f.source = Source::Library.next(1);
+        assert_eq!(f.source, Source::Playlists);
+        assert!(f.rows().contains(&FilterRow::Sort));
+        f.decades = [false; 8];
+        f.rediscover = true;
+        let args = f.args("x.json");
+        assert!(args.windows(4).any(|w| w == ["--source", "playlists", "--sort", "rediscover"]));
+        assert!(!args.contains(&"--years".to_owned()));
+        let back = Filters::from_args(&HitsArgs {
+            source: Some("playlists".to_owned()),
+            sort: Some("rediscover".to_owned()),
+            ..HitsArgs::default()
+        });
+        assert_eq!((back.source, back.rediscover, back.decades), (Source::Playlists, true, [false; 8]));
     }
 
     #[test]
