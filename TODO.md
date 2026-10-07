@@ -106,8 +106,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "no MusicBrainz match"), 7 failed (no YouTube result within 5 s of the chart recording's length: Macarena
       Bayside Boys Mix, Walk Like an Egyptian, Believe, Breathe, Happy, Low, Surfin' U.S.A.). Review: `hits fetch
       status`, or the Hits pane's "Fetch missing…".
-- [ ] Asked 2026-10-07: "in Hits, all my playlists as a source" (in Polish: "w Hits jako źródło moje playlisty
+- [x] Asked 2026-10-07: "in Hits, all my playlists as a source" (in Polish: "w Hits jako źródło moje playlisty
       wszystkie"). Facts: Hits' Source cycles Billboard US / my charts / whole library / my likes / recommended.
+      Done in rormpc-tools cd664bb (`hits --source playlists`), rormpc 9e56cc4 (Source "my playlists" after "whole
+      library") (worker): every stored playlist's owned songs once, ranked like the library, the playlists in Why;
+      generated playlists left out (GENERATED_PLAYLISTS: Hits/My charts/Library/Likes/Recommendations/My playlists
+      labels, LB, Folder, Skipped, Not finished; Tag … and Live playlists count). Real MPD: 268 songs from 4
+      playlists. Not released yet.
+- [ ] Top 1% review (the user, 2026-10-07): accept the 21 "other recording of the same song" items (`hits fetch
+      accept`), reject the 5 "different song" items (`hits fetch reject`: the staged file is deleted and the
+      rejection stays in the fetch queue state, $XDG_STATE_HOME/rormpc-tools/fetch/queue.json, so `hits fetch
+      add` never queues them again; `hits fetch clear` keeps rejected ones; `hits fetch retry KEY` undoes it).
+      The 2 "no MusicBrainz match" items stay in review.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -589,6 +599,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     merges the selected audio match after a confirmation ("Keep another file…" picks another); not clicked through
     in the TUI because Merge would move a real file to the quarantine.
 
+## Proposed
+
+- [ ] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (from the music-mpd coordinator: the
+      plan view was installed without it; the user's explicit keymap has no `o`).
+- [ ] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
+      timestamped print per media-key command in Hammerspoon (from the music-mpd coordinator).
+
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
@@ -600,6 +617,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       longer sends MPD `previous` in weighted mode once Hammerspoon has restarted with dotfiles 22e3b81. Watch
       whether it happens again; if it does, look at mpd-player's handling of a song it did not start (origin
       "other") right after a Previous, and at the Shuffle view's keys.
+      From the music-mpd coordinator 2026-10-07 (music-mpd-b8 on a scratch MPD 0.24.15, mpd-player 0.2.30, 53
+      previous / 48 next stress run): no song change without a command; the daemon only sends prioid, single
+      oneshot and the gap's play, never next/playid; MPD's `previous` plays current-1 in its random order; after
+      `previous` the song left stays right after the current one with priority 0, so the next `next` replays it
+      before the plan. The 00:15 forward jump was not reproduced.
       Checked: both talk to the real MPD on this Mac; AGENTS.md forbids playback tests on the user's MPD.
 - [x] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)? Decided 2026-10-07: Claude through the Anthropic API (queued in Next).
       Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
