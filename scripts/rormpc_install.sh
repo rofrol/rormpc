@@ -166,10 +166,18 @@ companions() {
   service musicdb 3600 "$tools/musicdb" update
   [ -f "$lb_config" ] || "$HOME/.cargo/bin/ro-listenbrainz-mpd" --create-default-config
   if ! grep -qE '^listen_(fraction|max_seconds|uninterrupted)' "$lb_config"; then
-    # into [submission], i.e. before the [mpd] table; the token and the rest stay as they are
-    awk -v rule="$listen_rule" '/^\[mpd\]/ && !done { print rule "\n"; done = 1 } { print } END { if (!done) print rule }' \
-      "$lb_config" > "$lb_config.tmp" && mv "$lb_config.tmp" "$lb_config"
-    echo "set the 90%-without-a-seek rule in $lb_config (edit the listen_* lines to change it)"
+    # into [submission], i.e. before the [mpd] table; the token and the rest stay as they are. The rule goes in
+    # through the environment: macOS awk rejects a newline in -v
+    if rule="$listen_rule" awk 'BEGIN { rule = ENVIRON["rule"] }
+        /^\[mpd\]/ && !done { print rule "\n"; done = 1 } { print } END { if (!done) print rule }' \
+        "$lb_config" > "$lb_config.tmp" && mv "$lb_config.tmp" "$lb_config"; then
+      echo "set the 90%-without-a-seek rule in $lb_config (edit the listen_* lines to change it)"
+    else
+      rm -f "$lb_config.tmp"
+      echo "error: could not add the listen rule to $lb_config; add these lines before [mpd] by hand:" >&2
+      echo "$listen_rule" >&2
+      exit 1
+    fi
   fi
   if grep -qE '^[[:space:]]*token(_file)?[[:space:]]*=' "$lb_config" || [ -n "${LISTENBRAINZ_TOKEN:-}" ]; then
     service ro-listenbrainz-mpd "" "$HOME/.cargo/bin/ro-listenbrainz-mpd"
