@@ -547,8 +547,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
       its first ~3 s? Decided 2026-10-07: no, Previous always goes back.
       Checked: Sol says leave it out (it fights walking back), MiMo says restart; the TODO marks it undecided.
-- [ ] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch
-      MPD, or will you test the fix live with the media keys?
+- [x] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch
+      MPD, or will you test the fix live with the media keys? Answered 2026-10-07: "I pressed the back key and it jumped as if forward, in Weighted mode, the Shuffle tab"
+      (rormpc open on the Shuffle view). Not reproduced; since `shuffle prev` (rormpc-tools 0.2.31) Previous no
+      longer sends MPD `previous` in weighted mode once Hammerspoon has restarted with dotfiles 22e3b81. Watch
+      whether it happens again; if it does, look at mpd-player's handling of a song it did not start (origin
+      "other") right after a Previous, and at the Shuffle view's keys.
       Checked: both talk to the real MPD on this Mac; AGENTS.md forbids playback tests on the user's MPD.
 - [x] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)? Decided 2026-10-07: Claude through the Anthropic API (queued in Next).
       Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
