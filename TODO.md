@@ -59,6 +59,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       serde alias until the dotfiles config says `"om": ShowPauseMenu` (switch it after installing). Known limits:
       play then pause on the same song while the daemon is down cannot be told apart and resumes; an MPD restart
       (new song ids) cancels the timer. Not installed yet.
+- [ ] Release rormpc-tools v0.2.33 (Pause for…), install rormpc (Pause for…, Hits ▶0) and switch the dotfiles
+      config to `"om": ShowPauseMenu` (decided 2026-10-07: now; the coordinator does it).
 - [ ] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue
       filter and the ordinary filters (approved 2026-10-07; see the item under "Done: live Queue plan view").
 - [ ] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
