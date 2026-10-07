@@ -500,11 +500,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Does the modal DIM backdrop look right in Ghostty?
       Checked: the DIM cells were verified through herdr; the strength in Ghostty needs your eyes.
 - [ ] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)?
-      Checked: main is 5 commits ahead of origin (the plan view's mpd-player swaps and the soundtrack genre); the
-      installed tools are v0.2.30, so neither works in the installed rormpc until a release.
+      Checked: main is 6 commits ahead of origin (the plan view's mpd-player swaps, the soundtrack genre, `shuffle
+      prev`); the installed tools are v0.2.30, so none of them works in the installed rormpc until a release.
 - [ ] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)?
       Checked: mockups and MiMo's ranking in "Soon: playing-song indicator in Hits"; Sol was at its usage limit.
-
 - [ ] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme?
       Checked: the installed binary does not know either name, so adding them now would break loading the
       config; the exact lines are in "Versions: delete a bad version…".
