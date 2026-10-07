@@ -32,8 +32,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
       an Up next song plays ("Test report of 2026-10-06").
       Done in rormpc-tools 893091c (worker).
-- [ ] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc
+- [x] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc
       from master (decided 2026-10-07; the coordinator does it).
+      Done: v0.2.32 pushed and installed with `companions`, rormpc 53751e0 installed.
 - [ ] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
       (decided 2026-10-07; mockups and pitfalls in "Soon: playing-song indicator in Hits").
 - [ ] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
