@@ -401,12 +401,12 @@ impl QueuePane {
                     crate::ui::rormpc_player::open_gap_menu(ctx);
                     Ok(())
                 });
-                let mute = crate::ui::rormpc_mute::remaining().map_or_else(
-                    || "Mute for…".to_owned(),
-                    |left| format!("Muted, unmutes in {}…", crate::ui::rormpc_mute::fmt_remaining(left)),
+                let pause = crate::ui::rormpc_pause::remaining().map_or_else(
+                    || "Pause for…".to_owned(),
+                    |left| format!("Paused, plays on in {}…", crate::ui::rormpc_pause::fmt_remaining(left)),
                 );
-                section.add_item(mute, |ctx| {
-                    crate::ui::rormpc_mute::open_mute_menu(ctx);
+                section.add_item(pause, |ctx| {
+                    crate::ui::rormpc_pause::open_pause_menu(ctx);
                     Ok(())
                 });
                 section.add_item("Sources… (play the library or a playlist)", |ctx| {
