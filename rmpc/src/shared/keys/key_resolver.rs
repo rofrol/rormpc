@@ -47,49 +47,52 @@ impl KeyResolver {
         self.buffer.borrow().iter().map(|k| k.to_string()).join("")
     }
 
-    pub fn handle_timeout(&self, ctx: &Ctx) {
+    /// Resolves the keys buffered when the sequence timeout fired. Returns the
+    /// resolved event for the caller to handle before the next key.
+    pub fn handle_timeout(&self, ctx: &Ctx) -> Option<AppEvent> {
         log::trace!(q:? = self.buffer; "Key timeout occurred");
         let mut buf = self.buffer.borrow_mut();
         if buf.is_empty() {
-            return;
+            return None;
         }
 
         let root = match ctx.input.mode() {
             InputMode::Normal => &self.normal_root,
             InputMode::Insert(_) => &self.insert_root,
         };
-        match ctx.input.mode() {
+        let event = match ctx.input.mode() {
             InputMode::Normal => match self.traverse(&buf, root) {
-                TraverseResult::Exact(action) => {
-                    self.execute_action(action, ctx);
-                }
-                TraverseResult::Ambiguous(action) => {
-                    self.execute_action(action, ctx);
-                }
+                TraverseResult::Exact(action) => Some(Self::execute_action(action)),
+                TraverseResult::Ambiguous(action) => Some(Self::execute_action(action)),
                 // Nothing to do here, just clear the buffer
-                TraverseResult::Mismatch => {}
-                TraverseResult::Prefix => {}
+                TraverseResult::Mismatch => None,
+                TraverseResult::Prefix => None,
             },
             InputMode::Insert(_) => match self.traverse(&buf, root) {
                 TraverseResult::Exact(action) => {
-                    self.flush_insert_buffer(Some(action), std::mem::take(&mut buf), ctx);
+                    Some(Self::flush_insert_buffer(Some(action), std::mem::take(&mut buf)))
                 }
                 TraverseResult::Ambiguous(action) => {
-                    self.flush_insert_buffer(Some(action), std::mem::take(&mut buf), ctx);
+                    Some(Self::flush_insert_buffer(Some(action), std::mem::take(&mut buf)))
                 }
                 TraverseResult::Mismatch => {
-                    self.flush_insert_buffer(None, std::mem::take(&mut buf), ctx);
+                    Some(Self::flush_insert_buffer(None, std::mem::take(&mut buf)))
                 }
                 TraverseResult::Prefix => {
-                    self.flush_insert_buffer(None, std::mem::take(&mut buf), ctx);
+                    Some(Self::flush_insert_buffer(None, std::mem::take(&mut buf)))
                 }
             },
-        }
+        };
 
         buf.clear();
+        event
     }
 
-    pub fn handle_key_event(&self, key: Key, ctx: &Ctx) {
+    /// Resolves one key in the current input mode. Returns the resolved event
+    /// instead of sending it, so the caller handles it before the next key: a
+    /// key that switches the mode (`/` opening a filter) must take effect
+    /// before the keys that arrived in the same input batch are resolved.
+    pub fn handle_key_event(&self, key: Key, ctx: &Ctx) -> Option<AppEvent> {
         self.cancel_timeout(ctx);
 
         let mut buf = self.buffer.borrow_mut();
@@ -98,31 +101,36 @@ impl KeyResolver {
         match ctx.input.mode() {
             InputMode::Normal => match self.traverse(&buf, &self.normal_root) {
                 TraverseResult::Exact(action) => {
-                    self.execute_action(action, ctx);
                     buf.clear();
+                    Some(Self::execute_action(action))
                 }
                 TraverseResult::Ambiguous(_action) => {
                     self.schedule_timeout(ctx);
+                    None
                 }
                 TraverseResult::Mismatch => {
                     buf.clear();
+                    None
                 }
                 TraverseResult::Prefix => {
                     self.schedule_timeout(ctx);
+                    None
                 }
             },
             InputMode::Insert(_) => match self.traverse(&buf, &self.insert_root) {
                 TraverseResult::Exact(action) => {
-                    self.flush_insert_buffer(Some(action), std::mem::take(&mut buf), ctx);
+                    Some(Self::flush_insert_buffer(Some(action), std::mem::take(&mut buf)))
                 }
                 TraverseResult::Ambiguous(_action) => {
                     self.schedule_timeout(ctx);
+                    None
                 }
                 TraverseResult::Mismatch => {
-                    self.flush_insert_buffer(None, std::mem::take(&mut buf), ctx);
+                    Some(Self::flush_insert_buffer(None, std::mem::take(&mut buf)))
                 }
                 TraverseResult::Prefix => {
                     self.schedule_timeout(ctx);
+                    None
                 }
             },
         }
@@ -143,18 +151,12 @@ impl KeyResolver {
         ctx.scheduler.cancel(self.timeout_id);
     }
 
-    fn execute_action(&self, action: Arc<Vec<Actions>>, ctx: &Ctx) {
-        if let Err(err) = ctx.app_event_sender.send(AppEvent::ActionResolved(action.into())) {
-            log::error!(err:?; "Failed to send ActionResolved event");
-        }
+    fn execute_action(action: Arc<Vec<Actions>>) -> AppEvent {
+        AppEvent::ActionResolved(action.into())
     }
 
-    fn flush_insert_buffer(&self, action: Option<Arc<Vec<Actions>>>, buf: Vec<Key>, ctx: &Ctx) {
-        if let Err(err) =
-            ctx.app_event_sender.send(AppEvent::InsertModeFlush((action.map(|a| a.into()), buf)))
-        {
-            log::error!(err:?; "Failed to send InsertModeFlush event");
-        }
+    fn flush_insert_buffer(action: Option<Arc<Vec<Actions>>>, buf: Vec<Key>) -> AppEvent {
+        AppEvent::InsertModeFlush((action.map(|a| a.into()), buf))
     }
 
     fn traverse(&self, keys: &[Key], root: &KeyTreeNode) -> TraverseResult {
@@ -201,6 +203,20 @@ mod test {
         Key { key: KeyCode::Char(ch), modifiers: KeyModifiers::NONE }
     }
 
+    /// Feeds a key and sends the resolved event to the app channel, as the
+    /// event loop handles it.
+    fn press(resolver: &KeyResolver, key: Key, ctx: &Ctx) {
+        if let Some(ev) = resolver.handle_key_event(key, ctx) {
+            ctx.app_event_sender.send(ev).expect("app event channel to be open");
+        }
+    }
+
+    fn timeout(resolver: &KeyResolver, ctx: &Ctx) {
+        if let Some(ev) = resolver.handle_timeout(ctx) {
+            ctx.app_event_sender.send(ev).expect("app event channel to be open");
+        }
+    }
+
     fn resolver() -> KeyResolver {
         let mut cfg = KeyConfig {
             global: HashMap::new(),
@@ -218,6 +234,8 @@ mod test {
         cfg.navigation.insert(vec![k('g'), k('d')].into(), CommonAction::DownHalf);
         cfg.navigation.insert(vec![k('x')].into(), CommonAction::Up);
         cfg.navigation.insert(vec![k('g'), k('a'), k('a')].into(), CommonAction::Right);
+        cfg.navigation.insert(vec![k('/')].into(), CommonAction::EnterSearch);
+        cfg.navigation.insert(vec![k('c')].into(), CommonAction::Left);
 
         let mut insert_cfg = KeyConfig {
             global: HashMap::new(),
@@ -324,7 +342,7 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('x'), &ctx);
+        press(&resolver, k('x'), &ctx);
 
         assert!(resolver.buffer.borrow().is_empty(), "buffer should be cleared after exact action");
 
@@ -346,10 +364,10 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
+        press(&resolver, k('g'), &ctx);
         assert_eq!(resolver.buffer_to_string(), "g");
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         assert!(resolver.buffer.borrow().is_empty(), "buffer should be cleared after timeout");
         match app_event_channel.1.recv_timeout(Duration::from_millis(100)) {
@@ -370,12 +388,12 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_key_event(k('a'), &ctx);
+        press(&resolver, k('g'), &ctx);
+        press(&resolver, k('a'), &ctx);
 
         assert_eq!(resolver.buffer_to_string(), "ga");
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         assert!(
             resolver.buffer.borrow().is_empty(),
@@ -391,11 +409,8 @@ mod test {
     fn handle_key_event_mismatch_clears_buffer(ctx: Ctx) {
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_key_event(
-            Key { key: KeyCode::Char('x'), modifiers: KeyModifiers::SHIFT },
-            &ctx,
-        );
+        press(&resolver, k('g'), &ctx);
+        press(&resolver, Key { key: KeyCode::Char('x'), modifiers: KeyModifiers::SHIFT }, &ctx);
 
         assert!(resolver.buffer.borrow().is_empty(), "buffer should be cleared on mismatch");
     }
@@ -409,8 +424,8 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_key_event(k('d'), &ctx);
+        press(&resolver, k('g'), &ctx);
+        press(&resolver, k('d'), &ctx);
 
         assert!(resolver.buffer.borrow().is_empty(), "buffer should be cleared after exact leaf");
         match app_event_channel.1.recv_timeout(Duration::from_millis(100)) {
@@ -431,9 +446,9 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
+        press(&resolver, k('g'), &ctx);
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         assert!(resolver.buffer.borrow().is_empty(), "buffer should be cleared after timeout");
         match app_event_channel.1.recv_timeout(Duration::from_millis(100)) {
@@ -454,10 +469,10 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_key_event(k('a'), &ctx);
+        press(&resolver, k('g'), &ctx);
+        press(&resolver, k('a'), &ctx);
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         assert!(resolver.buffer.borrow().is_empty(), "buffer should be cleared after timeout");
         match app_event_channel.1.recv_timeout(Duration::from_millis(300)) {
@@ -475,10 +490,10 @@ mod test {
         let ctx = ctx(app_event_channel.clone(), work_request_channel, client_request_channel);
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
+        press(&resolver, k('g'), &ctx);
         assert_eq!(resolver.buffer_to_string(), "g");
 
-        resolver.handle_key_event(k('z'), &ctx);
+        press(&resolver, k('z'), &ctx);
 
         assert!(
             resolver.buffer.borrow().is_empty(),
@@ -503,7 +518,7 @@ mod test {
 
         assert!(resolver.buffer.borrow().is_empty(), "precondition: buffer should be empty");
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(200)) {
             Err(RecvTimeoutError::Timeout) => {}
@@ -521,7 +536,7 @@ mod test {
         ctx.input.insert_mode(BufferId::new());
         let resolver = resolver();
 
-        resolver.handle_key_event(k('z'), &ctx);
+        press(&resolver, k('z'), &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(150)) {
             Ok(AppEvent::InsertModeFlush((None, buf))) => {
@@ -544,7 +559,7 @@ mod test {
         ctx.input.insert_mode(BufferId::new());
         let resolver = resolver();
 
-        resolver.handle_key_event(k('x'), &ctx);
+        press(&resolver, k('x'), &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(150)) {
             Ok(AppEvent::InsertModeFlush((Some(ActionEvent { actions, .. }), buf))) => {
@@ -573,8 +588,8 @@ mod test {
         ctx.input.insert_mode(BufferId::new());
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_timeout(&ctx);
+        press(&resolver, k('g'), &ctx);
+        timeout(&resolver, &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(150)) {
             Ok(AppEvent::InsertModeFlush((Some(ActionEvent { actions, .. }), buf))) => {
@@ -602,10 +617,10 @@ mod test {
         ctx.input.insert_mode(BufferId::new());
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_key_event(k('a'), &ctx);
+        press(&resolver, k('g'), &ctx);
+        press(&resolver, k('a'), &ctx);
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(200)) {
             Ok(AppEvent::InsertModeFlush((None, buf))) => {
@@ -627,8 +642,8 @@ mod test {
         ctx.input.insert_mode(BufferId::new());
         let resolver = resolver();
 
-        resolver.handle_key_event(k('g'), &ctx);
-        resolver.handle_key_event(k('z'), &ctx);
+        press(&resolver, k('g'), &ctx);
+        press(&resolver, k('z'), &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(200)) {
             Ok(AppEvent::InsertModeFlush((None, buf))) => {
@@ -652,11 +667,43 @@ mod test {
 
         assert!(resolver.buffer.borrow().is_empty(), "precondition: buffer should be empty");
 
-        resolver.handle_timeout(&ctx);
+        timeout(&resolver, &ctx);
 
         match app_event_channel.1.recv_timeout(Duration::from_millis(200)) {
             Err(RecvTimeoutError::Timeout) => {}
             other => panic!("expected no event on stray timeout, got {other:?}"),
         }
+    }
+
+    /// `/` and a query in one input batch (`herdr pane send-keys <pane> / c l`,
+    /// a paste): the event loop handles each resolved key before the next
+    /// one, so `/` has opened the filter when `c` and `l` are resolved and
+    /// they are typed into it instead of running as commands.
+    #[rstest]
+    fn keys_in_the_same_batch_as_slash_reach_the_filter(ctx: Ctx) {
+        let resolver = resolver();
+        let mut commands = Vec::new();
+        let mut typed = String::new();
+
+        for key in [k('/'), k('c'), k('l')] {
+            match resolver.handle_key_event(key, &ctx) {
+                Some(AppEvent::ActionResolved(ActionEvent { actions, .. })) => {
+                    if matches!(actions.as_slice(), [Actions::Common(CommonAction::EnterSearch)]) {
+                        ctx.input.insert_mode(BufferId::new());
+                    }
+                    commands.push(actions);
+                }
+                Some(AppEvent::InsertModeFlush((None, buf))) => {
+                    typed.extend(buf.iter().map(|k| k.to_string()));
+                }
+                other => panic!("unexpected event {other:?}"),
+            }
+        }
+
+        assert!(
+            matches!(commands.as_slice(), [a] if matches!(a.as_slice(), [Actions::Common(CommonAction::EnterSearch)])),
+            "only `/` should run as a command, got {commands:?}"
+        );
+        assert_eq!(typed, "cl");
     }
 }
