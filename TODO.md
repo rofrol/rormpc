@@ -570,9 +570,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
 - [x] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper? Answered 2026-10-07: "not sure; maybe extend the rmpc daemon (rmpcd)? ask the models" (consulted; decided: leave it as it is, no helper).
       Checked: the plan makes it conditional ("if a helper is still wanted").
-- [ ] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now?
+- [x] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now? Closed 2026-10-07: the user chose to leave media keys as they are (keep mpd-now-playable).
       Checked: needs those machines and a live test of the keys; nothing on this Mac to verify it.
-- [ ] Start the Rust Now Playing port (`rormpc-now-playable`), or keep mpd-now-playable?
+- [x] Start the Rust Now Playing port (`rormpc-now-playable`), or keep mpd-now-playable? Closed 2026-10-07: the user chose to leave media keys as they are (keep mpd-now-playable).
       Checked: Sol and MiMo both said keep the Python tool; the plan is complete if it is wanted.
 - [x] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc
       pane)? Decided 2026-10-07: yes, the first version (queued in Next).
