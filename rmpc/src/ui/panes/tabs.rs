@@ -109,7 +109,20 @@ impl Pane for TabsPane<'_> {
             return Ok(());
         }
 
-        if !matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
+        // rormpc: the wheel and the ‹ › markers scroll a bar too narrow for its
+        // tabs; the active tab stays
+        let is_click =
+            matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick);
+        let delta = match event.kind {
+            MouseEventKind::ScrollUp => -1,
+            MouseEventKind::ScrollDown => 1,
+            _ if is_click && self.tabs.marker_areas[0].contains(event.into()) => -1,
+            _ if is_click && self.tabs.marker_areas[1].contains(event.into()) => 1,
+            _ if is_click => 0,
+            _ => return Ok(()),
+        };
+        if delta != 0 {
+            self.tabs.scroll(delta);
             return Ok(());
         }
 

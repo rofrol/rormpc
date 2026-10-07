@@ -366,6 +366,13 @@ enable_lyrics_hot_reload: true,
 rormpc reopens the tab that was active when it last ran (saved in `$XDG_STATE_HOME/rormpc/last_tab`, default
 `~/.local/state`, not in the hand-edited config; a tab missing from the config falls back to the first one).
 
+## Tab bar
+
+When the tabs do not fit the width, the bar scrolls instead of cutting them at the right edge: `‹` and `›` at
+its ends mean more tabs on that side. Switching tabs (by key or click) or resizing scrolls the active tab into
+view. The mouse wheel over the bar and a click on `‹`/`›` move the bar one tab without switching tabs, so the
+wheel can never open a tab by accident; a click on a tab opens the tab drawn there.
+
 ## Delete menu (Ctrl-x)
 
 A global key bound to `ExternalCommand(["…/musicdb", "delete"])` (Ctrl-x in my config) doesn't run it: rormpc
