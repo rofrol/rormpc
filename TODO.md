@@ -49,6 +49,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       at the deadline it resumes only if still paused by this timer; a play by anyone cancels the timer. Remove
       Mute for… (module, commands, menu items, slider countdown, docs) in the same change; reuse its deadline and
       generation/error plumbing. Test on a scratch MPD.
+- [ ] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue
+      filter and the ordinary filters (approved 2026-10-07; see the item under "Done: live Queue plan view").
 - [ ] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
       import reviewed, batch accept; the prerequisite `yt-mp3-mb --batch --json` in dotfiles, the `liveplaylist`
       CLI, the rormpc URL modal and pane ("Live playlists: paste a playlist URL…").
@@ -76,7 +78,7 @@ sections, request J/K, a filter that keeps slot 10 and plays its ID, stale state
 59-second-old heartbeat while paused, `stale · 0m` at once when the daemon is killed (MPD sends no Subscription
 event on a client disconnect, so rormpc waits on the daemon's process exit), and fresh again after a restart.
 
-- [ ] Proposed: keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the
+- [x] Approved 2026-10-07 (queued in Next): keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the
       ordinary Queue filter), so a paste or a scripted `send-keys / text` runs the letters as commands. Seen
       2026-10-07 on the scratch MPD (`c` turned consume on).
 
@@ -574,9 +576,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       config; the exact lines are in "Versions: delete a bad version…".
 - [x] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master? Decided 2026-10-07: yes, after the Up next item (queued in Next).
       Checked: the Lyrics pane runs `musicdb lyrics translate`, which only exists in rormpc-tools after v0.2.31.
-- [ ] Up next after an MPD restart: keep re-found entries waiting (a rare request plays twice), trust restored
+- [x] Up next after an MPD restart: keep re-found entries waiting (a rare request plays twice), trust restored
       priorities when the queue's files look unchanged (can drop a request after an MPD crash), or match the
-      scrobbler's listens.jsonl / skips.jsonl?
+      scrobbler's listens.jsonl / skips.jsonl? Decided 2026-10-07: keep them waiting (a request may play twice, none is lost).
       Checked: the worker's analysis (MPD's state file restores priorities after a clean restart, but a replaced
       queue also starts at 0); it recommends keeping them waiting, which is what the code does now. Recorded
       earlier as the user's choice by mistake: that text was a Claude Code input suggestion in the worker's pane.
