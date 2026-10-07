@@ -80,7 +80,10 @@ Ranked chart hits produced by the `hits` CLI ([rormpc-tools](https://github.com/
     hits --years 1985-1992 --top 11-20 -g "+rock +pop -country" --json ~/.cache/rormpc/hits/current.json
 
 A table (rank, percentile, ✓/✗ owned, artist, title, year, plays) with details for the selected row and a
-status line (label, counts, when `hits` ran). Missing songs are dimmed rows with nothing to play. Enter or a
+status line (label, counts, when `hits` ran). Missing songs are dimmed rows with nothing to play. The song
+playing (or paused) is painted like the Queue's playing row (`highlighted_item_style`, also when the row is hidden)
+and its Next cell reads `▶0`, which stays visible under the cursor; every row with its file lights up, and a song
+outside the filter gets no extra row. Enter or a
 double click plays the selected owned song, `a` appends it; the queue is never replaced. A file already in
 the queue is not appended again (from any pane: Directories, Search, Find too): Enter plays its existing entry (the playing one is not restarted, a paused
 one resumes), `a` only says so; the row's menu has "Add another copy" for a deliberate duplicate. The pane re-reads the file when it changes and when the MPD database changes.

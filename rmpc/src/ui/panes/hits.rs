@@ -187,6 +187,16 @@ fn fetch_queue_path() -> PathBuf {
     state.join("rormpc-tools/fetch/queue.json")
 }
 
+/// The Next cell and the row style of a Hits row. The playing (or paused) song shows `▶0` and is painted like the
+/// Queue's playing row, also when hidden (the paint replaces DIM); the ▶ keeps it visible under the cursor style.
+fn next_and_style(next: Option<String>, playing: bool, owned: bool, hidden: bool, highlighted: Style) -> (String, Style) {
+    match (playing, owned && !hidden) {
+        (true, _) => ("▶0".to_owned(), highlighted),
+        (false, true) => (next.unwrap_or_default(), Style::default()),
+        (false, false) => (next.unwrap_or_default(), Style::default().add_modifier(Modifier::DIM)),
+    }
+}
+
 /// One-cell mark of a missing row's fetch state.
 fn fetch_mark(state: &str) -> &'static str {
     match state {
@@ -1246,6 +1256,8 @@ impl Pane for HitsPane {
         let heard: std::collections::HashSet<&str> =
             shuffle.round.as_ref().map(|r| r.heard.iter().map(String::as_str).collect()).unwrap_or_default();
         let hover = self.hover_like;
+        // the song the Queue paints (playing or paused, not stopped): every row with its file lights up
+        let playing_file = ctx.current_song().map(|s| s.file.as_str());
         let rows = self.rows.iter().enumerate().map(|(i, r)| {
             let owned = r.file.is_some();
             let missing_mark = self.fetch_for(r).map_or("✗", |f| fetch_mark(&f.state));
@@ -1268,19 +1280,22 @@ impl Pane for HitsPane {
                 },
             };
             let next = r.file.as_deref().and_then(|f| crate::ui::rormpc_player::next_marker_for_file(ctx, f));
+            let playing = r.file.is_some() && r.file.as_deref() == playing_file;
+            let (next, row_style) =
+                next_and_style(next, playing, owned, r.hidden, ctx.config.theme.highlighted_item_style);
             Row::new(vec![
                 Cell::from(format!("#{}", r.rank)),
                 Cell::from(format!("{:.0}%", r.pct.ceil())),
                 Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
                 like_cell,
-                Cell::from(next.unwrap_or_default()),
+                Cell::from(next),
                 Cell::from(r.artist.clone()),
                 Cell::from(r.title.clone()),
                 Cell::from(if r.year > 0 { r.year.to_string() } else { String::new() }),
                 Cell::from(if owned && r.plays > 0 { r.plays.to_string() } else { String::new() }),
                 Cell::from(Span::styled(state, dim)),
             ])
-            .style(if owned && !r.hidden { Style::default() } else { dim })
+            .style(row_style)
         });
         let header = Row::new(["Rank", "%", "", "♥", "Next", "Artist", "Title", "Year", "Plays", "State"])
             .style(ctx.config.theme.preview_label_style);
@@ -2028,6 +2043,22 @@ mod tests {
         pane.state.select(Some(1), 0);
         pane.focus_filters = true;
         pane
+    }
+
+    #[test]
+    fn playing_row_gets_the_glyph_and_the_highlight_even_when_hidden() {
+        let hl = Style::default().add_modifier(Modifier::BOLD);
+        let dim = Style::default().add_modifier(Modifier::DIM);
+        assert_eq!(next_and_style(Some("0".to_owned()), true, true, false, hl), ("▶0".to_owned(), hl));
+        // a hidden owned row plays: the paint replaces DIM
+        assert_eq!(next_and_style(Some("0".to_owned()), true, true, true, hl), ("▶0".to_owned(), hl));
+        assert_eq!(next_and_style(Some("↑10".to_owned()), false, true, false, hl), ("↑10".to_owned(), Style::default()));
+        assert_eq!(next_and_style(Some("-2".to_owned()), false, true, true, hl), ("-2".to_owned(), dim));
+        assert_eq!(next_and_style(None, false, false, false, hl), (String::new(), dim));
+        // the Next column is 4 cells wide: `▶0` fits as `↑10` and `-10` do
+        for m in ["▶0", "↑10", "-10"] {
+            assert!(unicode_width::UnicodeWidthStr::width(m) <= 4);
+        }
     }
 
     #[rstest]
