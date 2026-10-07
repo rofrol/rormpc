@@ -18,8 +18,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
       `≋` marker, "Find versions…" with a key and Back to the Queue row ("Versions: delete a bad version…").
       Done in 9164204 (worker; checked on a scratch MPD without deleting or merging anything real).
-- [ ] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
+- [x] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
       to keep, rename "Remove duplicate entries" ("Versions: audio fingerprint finds copies").
+      Done in rormpc 2b9b78c, rormpc-tools 21d17a0 (worker; not released).
 - [ ] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
       The LLM fallback waits for its decision below ("Lyrics: Polish translation next to the original").
 - [ ] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item).
@@ -470,6 +471,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
   - Compare only the overlapping part at the best offset; a short intro or a trimmed end must not lower the score.
   - The Queue item "Remove duplicate entries (N)" stays about the same file queued twice; rename it to "Remove
     repeated entries (N)" so it is not read as "copies of a recording".
+  - Done 2026-10-07 (rormpc 2b9b78c, rormpc-tools 21d17a0): `audiomatch.py`; `musicdb versions --json` reads only the
+    fingerprint cache (~/.cache/rormpc-tools/fingerprints.json) and lists missing files; `musicdb versions
+    fingerprint` fills it (the Versions pane in the background, the hourly `update`; 130 files took 3.9 s). On the
+    library: 32 groups suggest "Same recording?", 6 pairs "similar". The worker's own choices: length does not pick
+    the file to keep when lengths differ by more than 25% (a loop or extended mix: only the start was compared, the
+    suggestion says to listen first); files labelled as different versions are never suggested. `a` in Versions
+    merges the selected audio match after a confirmation ("Keep another file…" picks another); not clicked through
+    in the TUI because Merge would move a real file to the quarantine.
 
 ## Needs a decision
 
