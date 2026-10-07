@@ -21,8 +21,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
       to keep, rename "Remove duplicate entries" ("Versions: audio fingerprint finds copies").
       Done in rormpc 2b9b78c, rormpc-tools 21d17a0 (worker; not released).
-- [ ] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
+- [x] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
       The LLM fallback waits for its decision below ("Lyrics: Polish translation next to the original").
+      Done in rormpc 7e6b794, rormpc-tools 69d8201 (worker; tools not released: after v0.2.31).
 - [ ] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item).
 - [ ] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…").
 - [ ] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
@@ -403,6 +404,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     batch only as an explicit command. Pitfalls: wrong song or version matched on tekstowo, instrumental tracks,
     repeated choruses, timestamp offsets, invented lines from the LLM, and `index.json` having one writer
     (`musicdb lyrics`); keep translations out of it or behind the same writer.
+  - Done 2026-10-07 (rormpc 7e6b794, rormpc-tools 69d8201): `musicdb lyrics translate FILE|--current` (one song, on
+    demand; the usual URL first, else the site search, at most 3 requests 2 s apart, a clear User-Agent), accepted
+    only when the page's original overlaps ours by word (Jaccard ≥ 0.45); `<stem>.pl.json` sidecars; language
+    detected once with langdetect (new dependency), `musicdb lyrics lang FILE CODE|auto` overrides it. tekstowo.pl's
+    robots.txt allows song and search pages (its `Disallow: /` names only AI crawler user agents) and its terms
+    allow private use, commercial use is banned. The Lyrics pane: Enter looks the translation up (the pane gets
+    mapped actions, not raw keys, so not `t`), h/l switches original / translation below 100 columns, a stale
+    translation is hidden. Live check: Viva la Vida and Skyfall (their sidecars are in the real lyrics_dir).
 
 ## Previous in the weighted shuffle
 
@@ -516,3 +525,5 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme? Decided 2026-10-07: yes; done together with the release above.
       Checked: the installed binary does not know either name, so adding them now would break loading the
       config; the exact lines are in "Versions: delete a bad version…".
+- [ ] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master?
+      Checked: the Lyrics pane runs `musicdb lyrics translate`, which only exists in rormpc-tools after v0.2.31.
