@@ -25,7 +25,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       The LLM fallback waits for its decision below ("Lyrics: Polish translation next to the original").
       Done in rormpc 7e6b794, rormpc-tools 69d8201 (worker; tools not released: after v0.2.31).
 - [x] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item). Done in dacac50.
-- [ ] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…").
+- [x] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…"). Done (rormpc-tools 529e2da).
 - [ ] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
       locally ("Tests and GitHub Actions…", first two items).
 - [ ] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
@@ -120,7 +120,10 @@ volume set by anyone cancels the timer and stays; a stop or the end of the queue
 every second, also while paused. Tested on a scratch MPD: expiry, extend, unmute, custom `1h30`, `mpc volume`
 during the mute, stop, a restart past the deadline.
 
-- [ ] Not tested: a mute that spans an mpd-player gap silence (the gap pauses at 0:00; mute ignores pauses).
+- [x] Tested 2026-10-07 on a scratch MPD (rormpc-tools 529e2da pins it): a mute that spans an mpd-player gap silence.
+      They leave each other alone: an expiry inside the silence restores the volume and stays paused until the gap
+      presses play; a gap while muted pauses and resumes at volume 0 and the mute's deadline restores it later; a
+      mute started during the silence works (a pause is not a stop).
 - [ ] A queue replaced by Sources… may pass through a stop, which unmutes. Watch whether that happens in use.
 - [ ] Maybe later: "Pause for…" (now that one daemon owns the gap, it no longer fights mpd-gap).
 
