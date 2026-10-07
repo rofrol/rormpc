@@ -113,11 +113,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       generated playlists left out (GENERATED_PLAYLISTS: Hits/My charts/Library/Likes/Recommendations/My playlists
       labels, LB, Folder, Skipped, Not finished; Tag … and Live playlists count). Real MPD: 268 songs from 4
       playlists. Not released yet.
-- [ ] Top 1% review (the user, 2026-10-07): accept the 21 "other recording of the same song" items (`hits fetch
+- [x] Top 1% review (the user, 2026-10-07): accept the 21 "other recording of the same song" items (`hits fetch
       accept`), reject the 5 "different song" items (`hits fetch reject`: the staged file is deleted and the
       rejection stays in the fetch queue state, $XDG_STATE_HOME/rormpc-tools/fetch/queue.json, so `hits fetch
       add` never queues them again; `hits fetch clear` keeps rejected ones; `hits fetch retry KEY` undoes it).
-      The 2 "no MusicBrainz match" items stay in review.
+      The 2 "no MusicBrainz match" items stay in review. Done (worker): 21 accepted into Hits/<decade>s, 5 rejected,
+      2 in review (Love Will Keep Us Together, Shadow Dancing); the fetch queue: 39 ok, 7 failed, 5 rejected.
+- [ ] Release rormpc-tools v0.2.36 (the "my playlists" Hits source) and install rormpc (decided 2026-10-07: now).
+- [ ] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (approved 2026-10-07; from the
+      music-mpd coordinator: the plan view was installed without it).
+- [ ] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
+      timestamped log line per media-key command in Hammerspoon (approved 2026-10-07; edit only, the user
+      reloads Hammerspoon and restarts MPD).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -600,11 +607,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
-
-- [ ] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (from the music-mpd coordinator: the
-      plan view was installed without it; the user's explicit keymap has no `o`).
-- [ ] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
-      timestamped print per media-key command in Hammerspoon (from the music-mpd coordinator).
 
 ## Needs a decision
 
