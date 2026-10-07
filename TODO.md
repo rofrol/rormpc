@@ -35,8 +35,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc
       from master (decided 2026-10-07; the coordinator does it).
       Done: v0.2.32 pushed and installed with `companions`, rormpc 53751e0 installed.
-- [ ] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
-      (decided 2026-10-07; mockups and pitfalls in "Soon: playing-song indicator in Hits").
+- [x] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
+      (decided 2026-10-07; mockups and pitfalls in "Soon: playing-song indicator in Hits"). Done in 81c9248 (worker; not yet installed).
 - [ ] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
       and the rormpc installer smoke test, plus `push` in rormpc's ci.yml; triggers as in "Tests and GitHub
       Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes).
@@ -212,6 +212,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
     not. Guix reportedly packages `mpdris2` (and recently `mpdris2-rs`): check with `guix show mpdris2
     mpdris2-rs` on the pinned channel. Otherwise package rmpcd in roguix-channel. Run it as a Guix Home
     Shepherd service (`home-shepherd-service-type`) and check that it lands on the Hyprland session's D-Bus.
+- [ ] Extend rmpcd instead (asked 2026-10-07: "maybe extend the rmpc daemon? ask the models"). Consulted
+      2026-10-07 (GPT-6.1 Sol, MiMo), both rank it last today: keep mpd-now-playable (+ mpd-mpris on Linux) first,
+      a standalone crate second, rmpcd only as a deliberate commitment to run rmpcd (unused here, early-stage MPRIS,
+      tokio + Lua + zbus; edits near its startup re-conflict on every upstream bump). If rmpcd: AppKit's
+      NSApplication on the main thread, the tokio runtime on a worker thread, `CFRunLoopStop` from the signal path
+      for shutdown, features `now-playing` (macOS) and `mpris` (Linux) so zbus never builds on macOS, one cfg-gated
+      module and a small spawn hook. Both: AirPods / Now Playing Previous should also go to mpd-player's `shuffle
+      prev` (mpd-now-playable's handler, or the port's), so every Previous walks the same history.
 - [ ] Rust instead of the Python tool on macOS. Asked GPT-6.1 Sol and MiMo twice on 2026-10-03; both say keep
       mpd-now-playable (it works, 50 MB RSS is not a real cost), and if it is replaced, by a standalone port,
       not inside rmpcd (rmpcd is the Linux zbus/MPRIS daemon; a macOS stack in it doubles its platforms).
