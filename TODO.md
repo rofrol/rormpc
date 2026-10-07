@@ -62,8 +62,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Release rormpc-tools v0.2.33 (Pause for…), install rormpc (Pause for…, Hits ▶0) and switch the dotfiles
       config to `"om": ShowPauseMenu` (decided 2026-10-07: now; the coordinator does it).
       Done: v0.2.33 pushed and installed, rormpc d553c48 installed, dotfiles `om` → ShowPauseMenu (config loads).
-- [ ] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue
-      filter and the ordinary filters (approved 2026-10-07; see the item under "Done: live Queue plan view").
+- [x] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue
+      filter and the ordinary filters (approved 2026-10-07; see the item under "Done: live Queue plan view"). Done in
+      4257576 (worker): the key resolver sent the resolved action back through the app event channel, behind the
+      keys already queued from the same batch; it now returns it and the event loop handles it before the next
+      key. Checked on a scratch MPD (Queue and Directories filters, consume/single/random unchanged).
 - [ ] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
       import reviewed, batch accept; the prerequisite `yt-mp3-mb --batch --json` in dotfiles, the `liveplaylist`
       CLI, the rormpc URL modal and pane ("Live playlists: paste a playlist URL…").
@@ -91,7 +94,7 @@ sections, request J/K, a filter that keeps slot 10 and plays its ID, stale state
 59-second-old heartbeat while paused, `stale · 0m` at once when the daemon is killed (MPD sends no Subscription
 event on a client disconnect, so rormpc waits on the daemon's process exit), and fresh again after a restart.
 
-- [x] Approved 2026-10-07 (queued in Next): keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the
+- [x] Approved and fixed 2026-10-07 (4257576): keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the
       ordinary Queue filter), so a paste or a scripted `send-keys / text` runs the letters as commands. Seen
       2026-10-07 on the scratch MPD (`c` turned consume on).
 
