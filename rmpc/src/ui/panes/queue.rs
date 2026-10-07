@@ -43,7 +43,7 @@ use crate::{
         sort_mode::{SortMode, SortOptions},
         theme::{
             AlbumSeparator,
-            properties::{Property, SongProperty},
+            properties::{Property, PropertyKindOrText, SongProperty},
         },
     },
     core::command::{create_env, run_external},
@@ -415,6 +415,19 @@ impl QueuePane {
                 });
                 Some(section)
             })
+            // rormpc: the other library files with this song's name (Versions)
+            .list_section(ctx, |mut section| {
+                let song = self.queue.selected()?;
+                let (file, view) = (song.file.clone(), (song.id, self.queue.state.offset()));
+                if !crate::ui::rormpc_versions::has_versions(&file) {
+                    return None;
+                }
+                section.add_item(format!("Find versions…{}", crate::ui::rormpc_versions::key_hint(ctx)), move |ctx| {
+                    crate::ui::rormpc_versions::find_versions(ctx, &file, Some(view));
+                    Ok(())
+                });
+                Some(section)
+            })
             // rormpc: deleting the file is its own section: the same delete menu as Ctrl-x
             .list_section(ctx, |mut section| {
                 let file = self.queue.selected().map(|s| s.file.clone())?;
@@ -538,6 +551,10 @@ impl Pane for QueuePane {
             .split(self.areas[Areas::Table]);
 
         let formats = &config.theme.song_table_format;
+        // rormpc: the Versions column (≋) reads its cache once, in the background
+        if formats.iter().any(|f| matches!(f.prop.kind, PropertyKindOrText::Property(SongProperty::Versions()))) {
+            crate::ui::rormpc_versions::ensure_loaded(&ctx.app_event_sender);
+        }
         // rormpc: the column showing rmpc's like sticker gets a clickable heart (hover shows ♡ on an unrated song)
         let like_idx = formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
         let has_next_col = formats.iter().any(|f| format!("{:?}", f.prop).contains("ShuffleNext"));
@@ -729,7 +746,14 @@ impl Pane for QueuePane {
             self.areas[Areas::Table].height as usize,
         );
 
-        if self.should_center_cursor_on_current && self.find.is_none() {
+        // rormpc: back from "Find versions…": the same row and scroll, by song id (positions may have moved)
+        let back = crate::ui::rormpc_versions::take_queue_view().and_then(|(id, offset)| {
+            self.queue.items.iter().position(|s| s.id == id).map(|idx| (idx, offset))
+        });
+        if let Some((idx, offset)) = back {
+            self.queue.select_idx(idx, ctx.config.scrolloff);
+            self.queue.state.set_offset(offset);
+        } else if self.should_center_cursor_on_current && self.find.is_none() {
             let to_select = ctx.current_song_index().or(self.queue.selected_idx()).or(Some(0));
             self.queue.select_idx_opt(to_select, usize::MAX);
             self.should_center_cursor_on_current = false;
@@ -761,6 +785,7 @@ impl Pane for QueuePane {
             }
             UiEvent::SongChanged if self.find.is_some() => {} // a song change never moves the filtered cursor
             UiEvent::Database => {
+                crate::ui::rormpc_versions::changed(&ctx.app_event_sender); // a deletion or download changes groups
                 self.queue.filter_active = false;
                 self.queue.items.clone_from(&ctx.queue);
                 self.queue.unmark_all();
@@ -1171,6 +1196,7 @@ impl Pane for QueuePane {
                 }
                 QueueActions::TogglePlanView => {} // handled before either Queue view claims input
                 QueueActions::Find => self.start_find(ctx),
+                QueueActions::FindVersions => self.find_versions(ctx),
                 QueueActions::JumpToCurrent => {
                     if let Some((idx, _)) = ctx.status.songid.and_then(|id| {
                         self.queue.items.iter().enumerate().find(|(_, song)| song.id == id)
@@ -1783,6 +1809,16 @@ pub(crate) fn find_matches(songs: &[Song], query: &str) -> crate::ui::rormpc_fil
 /// the selected one and shows the whole queue on it; Esc restores the cursor and the scroll. The filtered list
 /// is a view rebuilt from MPD's queue by song id, so no action ever uses a filtered position as a queue position.
 impl QueuePane {
+    /// rormpc: "Find versions…" (`QueueActions::FindVersions`) for the song under the cursor.
+    fn find_versions(&self, ctx: &Ctx) {
+        if let Some(song) = self.queue.selected() {
+            let view = (song.id, self.queue.state.offset());
+            crate::ui::rormpc_versions::find_versions(ctx, &song.file, Some(view));
+        } else {
+            status_info!("No song selected");
+        }
+    }
+
     fn start_find(&mut self, ctx: &Ctx) {
         if let Some(f) = &mut self.find {
             f.typing = true;
@@ -1890,6 +1926,7 @@ impl QueuePane {
                     self.end_find(ctx, false);
                     return Ok(false); // the usual jump, now on the whole queue
                 }
+                QueueActions::FindVersions => return Ok(false), // by file: the filtered row is fine
                 _ => {
                     event.claim_queue();
                     status_warn!("Not while the queue is filtered: {close} clears the filter");

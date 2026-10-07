@@ -458,6 +458,11 @@ impl CmpByProp {
                 let rank = |id| crate::ui::rormpc_player::next_rank(id).unwrap_or(i64::MAX);
                 CmpByProp::cmp(Some(rank(a.id)), Some(rank(b.id)))
             }
+            // rormpc: songs with other versions first
+            SongProperty::Versions() => {
+                let without = |f: &str| !crate::ui::rormpc_versions::has_versions(f);
+                CmpByProp::cmp(Some(without(&a.file)), Some(without(&b.file)))
+            }
         }
     }
 }

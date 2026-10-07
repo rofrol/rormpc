@@ -163,8 +163,8 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 
 ## Versions pane
 
-Song names that several different library files share, from `musicdb versions --json` (rormpc-tools 0.2.2 or
-newer). A play matched only by artist + title to such a name counts for no file until it is decided here, once
+Song names that several different library files share, from `musicdb versions --json --all` (rormpc-tools 0.2.2
+or newer; resolved groups are listed too, dimmed with ✓, after the open ones). A play matched only by artist + title to such a name counts for no file until it is decided here, once
 per source track (a Spotify URI, a recording MBID, or the name for plays without an id); later plays of the same
 track follow the decision. Left: the groups, open ones first, most plays first, then YouTube ids / MBIDs found
 on several files. Right: the group's files (length, version label, plays) and the played tracks (source, plays,
@@ -186,8 +186,28 @@ h / l (Left / Right) move between the list, the files and the tracks; Enter open
 - on a file: "Preview from 0:00 / 0:30 / 1:00 / 2:00" and "Stop the preview" (mpv, else ffplay, outside MPD, so
   listening to compare never scrobbles or counts as a skip; it stops when you leave the tab), "Label: original /
   live / remix / edit / cover / other", "Same recording: keep this file, merge the others…" (asks first; the
-  others go to the quarantine with aliases, like `musicdb dedupe`), and for a shared id "These files are fine
-  (shared-ok)…".
+  others go to the quarantine with aliases, like `musicdb dedupe`), "Delete this file…", and for a shared id
+  "These files are fine (shared-ok)…".
+
+"Delete this file…" first asks what the file is. "A copy of <other file> (same recording): merge it…" runs the
+merge for that pair (`musicdb versions same OTHER FILE`, after a confirmation): the copy goes to the quarantine
+with an alias and its plays and decisions move to the file that stays. "A different recording I don't want: delete
+it…" opens the delete menu (Ctrl-x; Trash by default, Ctrl-y undoes, the Deleted pane lists it): its plays and
+decisions stay with the deleted file, never moved to another version; "+ delete the history" deletes them too.
+The deletion checks `musicdb delete --preview` again before it runs (nothing is deleted when the file is gone) and
+the status bar shows musicdb's last line only when it has finished, or why it failed. Deleting the last other file
+of a group is allowed: the group leaves the list and the cursor takes the next group.
+
+From the Queue, "Find versions…" (its context menu, or `V`: QueueActions `FindVersions`; add `"V": FindVersions`
+to an explicit Queue keymap) opens this pane on the song's group with its file selected, without a filter and
+without playing anything; Esc (or h on the group list) goes back to the Queue, to the same row and scroll. The
+Queue column `Versions()` shows `≋` on songs whose group has several owned files and is blank otherwise; the
+membership is read once in the background (`musicdb versions --json --all`, or this pane's own load) and again
+after a deletion, a merge or a library update, never per row. Sorting by the column puts those songs first.
+
+```ron
+(prop: (kind: Property(Versions()), default: (kind: Text(""))), label_prop: (kind: Text("≋")), width: "1"),
+```
 
 A decision whose file is gone, or whose group changed since (a download, a deletion), shows as "review" and is
 open again. At startup, when the hourly `musicdb update` found open items (`~/.cache/rormpc-tools/doctor.json`),
