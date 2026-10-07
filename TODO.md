@@ -26,8 +26,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in rormpc 7e6b794, rormpc-tools 69d8201 (worker; tools not released: after v0.2.31).
 - [x] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item). Done in dacac50.
 - [x] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…"). Done (rormpc-tools 529e2da).
-- [ ] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
+- [x] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
       locally ("Tests and GitHub Actions…", first two items).
+      Done: rormpc-tools e354b97 (179 tests), ro-listenbrainz-mpd 862c08a (12 tests); no bugs found.
 - [ ] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
       an Up next song plays ("Test report of 2026-10-06").
 
@@ -321,11 +322,11 @@ the launchd bootout/bootstrap race (error 5), missing libsqlite3-dev on Linux.
 
 Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI second):
 
-- [ ] rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a
+- [ ] (tests done locally 2026-10-07, e354b97; the workflow waits for the CI decision) rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a
       ListenBrainz outage still let `update` sync and export; play counts, and a local listen counted once with its
       ListenBrainz copy (same timestamp); skips import and the Skipped playlist; delete/undo with the journal;
       mpd-gap state transitions on a fake clock and fake MPD status. Workflow on Ubuntu, ~1-2 min.
-- [ ] ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule
+- [ ] (tests done locally 2026-10-07, 862c08a; the workflow waits for the CI decision) ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule
       (fraction, max seconds, uninterrupted: seek restarts, pause neutral) and the local log lines. ~2-4 min.
 - [ ] rormpc: installer smoke test on Ubuntu: fresh user, `loginctl enable-linger`, `XDG_RUNTIME_DIR` and the user
       D-Bus, MPD with a generated tone, fake token and API URL, `rormpc_install.sh companions`, then assert units and
