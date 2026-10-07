@@ -189,6 +189,34 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 ])),
 ```
 
+## Live playlists pane
+
+Public YouTube playlists followed by `liveplaylist` (rormpc-tools newer than 0.2.33): left the subscriptions (`!`
+when the last check failed, the number of new items), right the selected one's items in playlist order with their
+decision (`?` to review, `✓` accepted, `✗` rejected) and state (to review, queued, downloading, needs match, ready,
+in library, failed, gone upstream). Left/Right moves between the two lists. The footer shows the download's progress
+(from the CLI's stderr and its `status.json`), the last download's errors, and for the selected item its error,
+the uncertain MusicBrainz proposal, its file or its video link.
+
+The URL modal lives here: Enter (or the context menu) → "Add a playlist URL…"; with no subscription yet, Enter
+opens it directly. Adding lists the playlist (no download) and every item waits for review, the first import too.
+The menu also has "Accept" / "Reject (never download it)" for the selected item, "Accept all pending (N)", "Check
+for new tracks", "Check all playlists", "Download queued (N)" and "Cancel the download". The add keys work too:
+add accepts the selected item, add all accepts every pending item; delete rejects the selected item.
+
+Accepting queues the items (`liveplaylist accept ID ... --no-download`), then starts `liveplaylist download` unless
+one runs (it downloads everything queued, also what is accepted while it runs). Every command runs with argv in a
+background thread; "Cancel the download" sends SIGTERM, which stops yt-dlp and queues the item again. Songs already
+in the library are referenced, uncertain downloads wait as "needs match" outside the library until accepted as
+they are, and the MPD playlist (named after the YouTube playlist) holds only accepted, ready, still listed items.
+Nothing runs on a timer: checking is "Check for new tracks". The pane reloads when shown.
+
+```ron
+(name: "Live", pane: Split(size: "100%", direction: Vertical, panes: [
+    (pane: Pane(LivePlaylists()), size: "100%", borders: "ALL", border_symbols: Rounded),
+])),
+```
+
 ## Versions pane
 
 Song names that several different library files share, from `musicdb versions --json --all` (rormpc-tools 0.2.2

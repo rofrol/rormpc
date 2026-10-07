@@ -10,6 +10,7 @@ use directories::DirectoriesPane;
 use either::Either;
 use header::HeaderPane;
 use deleted::DeletedPane;
+use live_playlists::LivePlaylistsPane;
 use up_next::UpNextPane;
 use shuffle::ShufflePane;
 use versions::VersionsPane;
@@ -79,6 +80,7 @@ pub mod album_art;
 pub mod cava;
 pub mod directories;
 pub mod deleted;
+pub mod live_playlists;
 pub mod empty;
 #[cfg(debug_assertions)]
 pub mod frame_count;
@@ -333,6 +335,9 @@ impl<'panes> PaneContainer<'panes> {
                 PaneType::Shuffle => {
                     Some((pane.pane.clone(), Box::new(ShufflePane::new()) as Box<dyn BoxedPane>))
                 }
+                PaneType::LivePlaylists => {
+                    Some((pane.pane.clone(), Box::new(LivePlaylistsPane::new()) as Box<dyn BoxedPane>))
+                }
                 _ => None,
             })
     }
@@ -379,7 +384,7 @@ impl<'panes> PaneContainer<'panes> {
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
             )),
-            p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext | PaneType::Shuffle) => Ok(Panes::Others(
+            p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext | PaneType::Shuffle | PaneType::LivePlaylists) => Ok(Panes::Others(
                 self.others
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
