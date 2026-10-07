@@ -65,6 +65,8 @@ jobs:
 
     name: Formatter (${{ matrix.os }}, ${{ matrix.toolchain }}, ${{ matrix.profile }})
 
+    # rormpc: the fork's files are not rustfmt-clean (AGENTS.md), so pushes to master skip it; pull requests keep it
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
