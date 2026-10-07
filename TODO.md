@@ -82,6 +82,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Changed 2026-10-07 (the user: "ask the claude CLI, the way pi does it"): no API key; it calls the Claude
       Code CLI (`claude -p`, no tools or MCP, no session) like ~/.claude/skills/claude/ask_claude.py, on the user's
       Claude Code login.
+- [ ] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit,
+      and mouse scroll does nothing; also 3 jumps to Directories"). The bar cuts "Ver…" at the right edge
+      (Hits, Queue, Up next, Shuffle, Directories, Artists, Album Artists, Albums, Playlists, Lyrics, Deleted,
+      Ver…); the wheel over it should scroll it or the bar should wrap/shrink; the digit keys should match the
+      tabs' order (3 should be Up next, the third tab, not Directories). Reported to the herdr coordinator.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
