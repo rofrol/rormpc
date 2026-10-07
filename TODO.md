@@ -77,12 +77,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Release rormpc-tools v0.2.34 (Live playlists), install rormpc (Live playlists pane, keys sent with `/`) and
       add a "Live playlists" tab after Playlists in the dotfiles config (decided 2026-10-07: now).
       Done: v0.2.34 pushed and installed, rormpc 1cb1b3b installed, dotfiles 9474d93 (tab + `gl`; the config loads).
-- [ ] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided
+- [x] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided
       2026-10-07): line by line with the stanza as context, labelled "machine translation", the key from the
       user's rormpc-tools config (never in the repo); the model id from the claude-api reference.
       Changed 2026-10-07 (the user: "ask the claude CLI, the way pi does it"): no API key; it calls the Claude
       Code CLI (`claude -p`, no tools or MCP, no session) like ~/.claude/skills/claude/ask_claude.py, on the user's
-      Claude Code login.
+      Claude Code login. Done in rormpc-tools 6ac635f, rormpc e621bef (worker): `claude -p` (default
+      claude-sonnet-5-5, `translate_model` in config.toml or RORMPC_TRANSLATE_MODEL), strict JSON per stanza, line
+      counts checked with one retry, nothing stored on a mismatch; never replaces "mine" or a human translation.
+      One live call on invented lyrics (4.4 s). Not released yet.
 - [ ] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit,
       and mouse scroll does nothing; also 3 jumps to Directories"). The bar cuts "Ver…" at the right edge
       (Hits, Queue, Up next, Shuffle, Directories, Artists, Album Artists, Albums, Playlists, Lyrics, Deleted,
