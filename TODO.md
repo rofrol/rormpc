@@ -130,14 +130,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       gets `log_file "~/.local/state/mpd/log"` and `log_level "verbose"` (backup mpd.conf.bak-2026-10-07; the log
       is not trimmed: turn it down after the investigation). Takes effect after the user restarts Hammerspoon and
       MPD (`brew services restart mpd`).
-- [ ] Media keys through Karabiner, not Hammerspoon (found 2026-10-07: Hammerspoon's systemDefined tap never sees
+- [x] Media keys through Karabiner, not Hammerspoon (found 2026-10-07: Hammerspoon's systemDefined tap never sees
       the MacBook's F7/F8/F9: Karabiner maps them to consumer keys from its virtual HID device, which go straight
       to Now Playing, so Previous went mpd-now-playable → MPD `previous` and counted a skip; the Input Monitoring
       permission did not change that). Decided by the user: a Karabiner complex modification catches F7/F8/F9
       without fn and runs a small script (prev: `shuffle prev` to mpd-player when it is subscribed and
       shuffle.json has `trail`, else `mpc prev`; play/pause: `mpc toggle`; next: `mpc next`), logging each command
       to ~/.local/state/hammerspoon/media-keys.log's successor; Shift+F7/F8/F9 pass through to the Now Playing app;
-      fn+F7 stays F7. Remove the media-key code from Hammerspoon.
+      fn+F7 stays F7. Remove the media-key code from Hammerspoon. Done (worker): dotfiles d0f17c6 (scripts/mpd-media-key,
+      log ~/.local/state/media-keys/media-keys.log), 8b466bb (Karabiner rule), 268c9c5 (Hammerspoon override
+      removed); rormpc 6c430c6 (RORMPC.md). Verified with a real F7 on 2026-10-07 18:40: `shuffle prev` sent, mpd-player
+      went back to the song that really played before, recorded as "back" (no skip), prev.jsonl "confirmed".
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
