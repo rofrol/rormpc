@@ -212,7 +212,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
     not. Guix reportedly packages `mpdris2` (and recently `mpdris2-rs`): check with `guix show mpdris2
     mpdris2-rs` on the pinned channel. Otherwise package rmpcd in roguix-channel. Run it as a Guix Home
     Shepherd service (`home-shepherd-service-type`) and check that it lands on the Hyprland session's D-Bus.
-- [ ] Extend rmpcd instead (asked 2026-10-07: "maybe extend the rmpc daemon? ask the models"). Consulted
+- [x] Extend rmpcd instead (asked 2026-10-07: "maybe extend the rmpc daemon? ask the models"). Consulted
       2026-10-07 (GPT-6.1 Sol, MiMo), both rank it last today: keep mpd-now-playable (+ mpd-mpris on Linux) first,
       a standalone crate second, rmpcd only as a deliberate commitment to run rmpcd (unused here, early-stage MPRIS,
       tokio + Lua + zbus; edits near its startup re-conflict on every upstream bump). If rmpcd: AppKit's
@@ -220,6 +220,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
       for shutdown, features `now-playing` (macOS) and `mpris` (Linux) so zbus never builds on macOS, one cfg-gated
       module and a small spawn hook. Both: AirPods / Now Playing Previous should also go to mpd-player's `shuffle
       prev` (mpd-now-playable's handler, or the port's), so every Previous walks the same history.
+      Decided 2026-10-07 (the user): leave it as it is; no Bluetooth headphones or Now Playing widget are used to
+      switch songs, so mpd-now-playable stays unchanged and rmpcd is not extended.
 - [ ] Rust instead of the Python tool on macOS. Asked GPT-6.1 Sol and MiMo twice on 2026-10-03; both say keep
       mpd-now-playable (it works, 50 MB RSS is not a real cost), and if it is replaced, by a standalone port,
       not inside rmpcd (rmpcd is the Linux zbus/MPRIS daemon; a macOS stack in it doubles its platforms).
@@ -540,7 +542,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: both talk to the real MPD on this Mac; AGENTS.md forbids playback tests on the user's MPD.
 - [x] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)? Decided 2026-10-07: Claude through the Anthropic API (queued in Next).
       Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
-- [x] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper? Answered 2026-10-07: "not sure; maybe extend the rmpc daemon (rmpcd)? ask the models" (consulting).
+- [x] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper? Answered 2026-10-07: "not sure; maybe extend the rmpc daemon (rmpcd)? ask the models" (consulted; decided: leave it as it is, no helper).
       Checked: the plan makes it conditional ("if a helper is still wanted").
 - [ ] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now?
       Checked: needs those machines and a live test of the keys; nothing on this Mac to verify it.
