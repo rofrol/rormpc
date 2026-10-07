@@ -123,9 +123,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done: v0.2.36 pushed and installed, rormpc 22deb27 installed.
 - [x] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (approved 2026-10-07; from the
       music-mpd coordinator: the plan view was installed without it). Done: dotfiles 5c46056; `o` opens the plan view.
-- [ ] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
+- [x] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
       timestamped log line per media-key command in Hammerspoon (approved 2026-10-07; edit only, the user
-      reloads Hammerspoon and restarts MPD).
+      reloads Hammerspoon and restarts MPD). Done (worker): dotfiles 06fa6b7 logs each media-key event and mpc
+      command to ~/.local/state/hammerspoon/media-keys.log (capped at 4000 lines); /opt/homebrew/etc/mpd/mpd.conf
+      gets `log_file "~/.local/state/mpd/log"` and `log_level "verbose"` (backup mpd.conf.bak-2026-10-07; the log
+      is not trimmed: turn it down after the investigation). Takes effect after the user restarts Hammerspoon and
+      MPD (`brew services restart mpd`).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
