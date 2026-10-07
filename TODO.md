@@ -119,9 +119,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       add` never queues them again; `hits fetch clear` keeps rejected ones; `hits fetch retry KEY` undoes it).
       The 2 "no MusicBrainz match" items stay in review. Done (worker): 21 accepted into Hits/<decade>s, 5 rejected,
       2 in review (Love Will Keep Us Together, Shadow Dancing); the fetch queue: 39 ok, 7 failed, 5 rejected.
-- [ ] Release rormpc-tools v0.2.36 (the "my playlists" Hits source) and install rormpc (decided 2026-10-07: now).
-- [ ] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (approved 2026-10-07; from the
-      music-mpd coordinator: the plan view was installed without it).
+- [x] Release rormpc-tools v0.2.36 (the "my playlists" Hits source) and install rormpc (decided 2026-10-07: now).
+      Done: v0.2.36 pushed and installed, rormpc 22deb27 installed.
+- [x] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (approved 2026-10-07; from the
+      music-mpd coordinator: the plan view was installed without it). Done: dotfiles 5c46056; `o` opens the plan view.
 - [ ] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
       timestamped log line per media-key command in Hammerspoon (approved 2026-10-07; edit only, the user
       reloads Hammerspoon and restarts MPD).
