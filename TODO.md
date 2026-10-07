@@ -29,8 +29,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
       locally ("Tests and GitHub Actions…", first two items).
       Done: rormpc-tools e354b97 (179 tests), ro-listenbrainz-mpd 862c08a (12 tests); no bugs found.
-- [ ] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
+- [x] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
       an Up next song plays ("Test report of 2026-10-06").
+      Done in rormpc-tools 893091c (worker).
 - [ ] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc
       from master (decided 2026-10-07; the coordinator does it).
 - [ ] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
@@ -143,10 +144,19 @@ counts as played. The Queue menu keeps Weighted shuffle, Silence, Mute for… an
 "Clear queue…" asks first (Cancel is the default); Sources… leaves out empty playlists; menus are as wide as their
 longest label (within the terminal).
 
-- [ ] Same race with random off: entries are moved after the current song, so skipping past them leaves them
+- [x] Same race with random off: entries are moved after the current song, so skipping past them leaves them
       before it. Telling that apart from the user jumping to a later song needs more than positions; not done.
-- [ ] mpd-player down while an Up next song plays: it stays waiting. After an MPD restart the re-found entries
+- [x] mpd-player down while an Up next song plays: it stays waiting. After an MPD restart the re-found entries
       carry no priority yet, so "priority 0 = started" cannot be used at startup.
+
+Fixed 2026-10-07 (rormpc-tools 893091c): MPD resets a song's priority to 0 whenever it starts, random on or off, and a
+`playid` jump resets only the song jumped to. Every waiting entry now gets 255, 254, … also with random off (MPD
+ignores them there), so "priority 0 = started" holds in both modes and at startup (checked before any write;
+`"marked": true` in upnext.json guards state from older versions). Priority writes skip the playing song. Verified
+on a scratch MPD. Decided 2026-10-07 (the user): after an MPD restart, entries re-found by file under new ids stay
+waiting (a restored 0 is ambiguous with a replaced queue); the cost is a rare request that plays twice. While
+cleaning up, the worker's `pkill -f bin/mpd-player` also killed the real daemon (launchd restarted it); the lesson
+is in rormpc-tools' AGENTS.md.
 
 ## Media keys and Now Playing (outside the TUI)
 
