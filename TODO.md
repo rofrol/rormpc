@@ -15,8 +15,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       while it runs, `mpc prev` without it. Done: rormpc afc55ac, dotfiles 22e3b81 (Hammerspoon not reloaded). Both
       send it only when mpd-player is subscribed and its shuffle.json has `trail`, so until the rormpc-tools
       release they keep plain `mpc prev`. mpd-player's `playid` starts playback even when MPD was paused.
-- [ ] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
+- [x] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
       `≋` marker, "Find versions…" with a key and Back to the Queue row ("Versions: delete a bad version…").
+      Done in 9164204 (worker; checked on a scratch MPD without deleting or merging anything real).
 - [ ] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
       to keep, rename "Remove duplicate entries" ("Versions: audio fingerprint finds copies").
 - [ ] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
@@ -364,6 +365,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     and scroll position. No autoplay.
   - Pitfalls: re-check the preview before running (the queue or library may have changed), stale group
     membership after a delete, the same file queued twice, background failures shown, never "done" early.
+  - Done 2026-10-07 (9164204): `Versions()` song property (`≋`), cached from one `musicdb versions --json --all`
+    and read again after a delete, merge or library update; "Find versions…" in the Queue menu and `V`
+    (QueueActions::FindVersions); the delete menu re-checks the preview and reports musicdb's last line when
+    done; the Versions pane now lists resolved groups too (dimmed). Your explicit keymap and theme need
+    `"V": FindVersions` and the column `(prop: (kind: Property(Versions()), default: (kind: Text(""))),
+    label_prop: (kind: Text("≋")), width: "1")`; a column before Year/Plays shifts their SortByColumn numbers.
 
 ## Lyrics: Polish translation next to the original
 
@@ -497,3 +504,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       installed tools are v0.2.30, so neither works in the installed rormpc until a release.
 - [ ] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)?
       Checked: mockups and MiMo's ranking in "Soon: playing-song indicator in Hits"; Sol was at its usage limit.
+
+- [ ] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme?
+      Checked: the installed binary does not know either name, so adding them now would break loading the
+      config; the exact lines are in "Versions: delete a bad version…".
