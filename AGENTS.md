@@ -62,3 +62,9 @@ A file for [guiding AI coding agents](https://agents.md/).
   `lsof -iTCP:6650`); `mpc kill` did not stop it.
 - Don't `export XDG_STATE_HOME` in a shell that then runs `herdr-job`: herdr-job keeps its own state there and
   reports the job as "lost". Pass it to the command with `env` instead.
+
+## Coordination
+
+- One TODO coordinator owns rormpc and rormpc-tools: their TODO, workers, releases and installs (decided by the user
+  on 2026-10-07; the session started with "rób TODO po kolei", herdr agent `todo-rormpc`). The music-mpd
+  coordinator keeps music-data and sends rormpc requests to it as text; other sessions do not release or install.
