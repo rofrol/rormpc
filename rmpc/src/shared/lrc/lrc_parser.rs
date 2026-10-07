@@ -280,13 +280,60 @@ impl FromStr for Lrc {
     }
 }
 
+/// rormpc: the file-order line ids behind `Lrc::lines`, the way `musicdb lyrics
+/// translate` numbers them: every line with a timestamp tag gets the next id
+/// (whether its timestamps parse or not). Returns the text of each id
+/// and the id of each entry `Lrc::from_str` pushes (a line with several
+/// timestamps pushes one per timestamp).
+pub(crate) fn timed_line_ids(s: &str) -> (Vec<String>, Vec<usize>) {
+    let (metadata, lyrics_start_line) = parse_metadata_only(s);
+    let (mut texts, mut ids) = (Vec::new(), Vec::new());
+    for line in s.lines().skip(lyrics_start_line) {
+        let line_content = line.trim();
+        if !line_content.starts_with('[') {
+            continue;
+        }
+        let mut timestamps = Vec::new();
+        let mut remaining = line_content;
+        while let Some((TagParseResult::Timestamp(timestamp), chars_consumed)) =
+            parse_next_tag(remaining)
+        {
+            timestamps.push(timestamp);
+            remaining = &remaining[chars_consumed..];
+        }
+        if timestamps.is_empty() {
+            continue;
+        }
+        for timestamp in timestamps {
+            if parse_timestamp(&timestamp, metadata.offset).is_some() {
+                ids.push(texts.len());
+            }
+        }
+        texts.push(remaining.trim().to_owned());
+    }
+    (texts, ids)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use std::time::Duration;
 
-    use super::parse_metadata_only;
+    use super::{parse_metadata_only, timed_line_ids};
     use crate::shared::lrc::{Lrc, lyrics::LrcLine};
+
+    #[test]
+    fn timed_line_ids_follow_the_parsed_lines() {
+        let input = "[ar:A]\n[re:lrclib.net #1]\n\n[00:01.00]one\n[00:02.00]\nnot timed\n[00:03.00][00:09.00] chorus \n[0:x]bad\n[00:04.00]two";
+        let lrc: Lrc = input.parse().unwrap();
+        let (texts, ids) = timed_line_ids(input);
+        assert_eq!(texts, vec!["one", "", "chorus", "bad", "two"]);
+        assert_eq!(ids, vec![0, 1, 2, 2, 4]);
+        assert_eq!(ids.len(), lrc.lines.len());
+        for (line, id) in lrc.lines.iter().zip(&ids) {
+            assert_eq!(line.content, texts[*id]);
+        }
+    }
 
     #[test]
     fn lrc() {

@@ -7,16 +7,20 @@ use ratatui::{
 
 use super::Pane;
 use crate::{
-    config::theme::properties::Alignment,
-    ctx::Ctx,
+    config::{keys::CommonAction, theme::properties::Alignment},
+    ctx::{Ctx, LyricsResult},
     shared::{
         ext::duration::DurationExt,
         keys::ActionEvent,
-        lrc::Lrc,
+        lrc::{Lrc, LrcOffset},
         macros::status_error,
         mpd_query::run_status_update,
     },
-    ui::UiEvent,
+    ui::{
+        UiEvent,
+        rormpc_filter::binding,
+        rormpc_lyrics::{self, Fallback, Translation, View},
+    },
 };
 
 #[derive(Debug)]
@@ -24,28 +28,153 @@ pub struct LyricsPane {
     current_lyrics: Option<Lrc>,
     /// rormpc: plain lyrics or a note when there is no .lrc
     fallback: Option<crate::ui::rormpc_lyrics::Fallback>,
+    /// rormpc: the Polish translation beside the lyrics, or a status saying why
+    /// there is none
+    translation: Option<Translation>,
+    /// rormpc: the original line id of each `current_lyrics` line
+    line_ids: Vec<usize>,
+    /// rormpc: a narrow pane shows the translation instead of the original
+    /// (h/l)
+    show_polish: bool,
+    /// rormpc: `musicdb lyrics translate` runs
+    fetching: bool,
     initialized: bool,
     last_requested_line_idx: usize,
 }
 
 impl LyricsPane {
     pub fn new(_ctx: &Ctx) -> Self {
-        Self { current_lyrics: None, fallback: None, initialized: false, last_requested_line_idx: 0 }
+        Self {
+            current_lyrics: None,
+            fallback: None,
+            translation: None,
+            line_ids: Vec::new(),
+            show_polish: false,
+            fetching: false,
+            initialized: false,
+            last_requested_line_idx: 0,
+        }
     }
 
     fn update_lyrics(&mut self, ctx: &Ctx) -> Result<()> {
         self.current_lyrics = None;
+        self.translation = None;
+        self.line_ids.clear();
 
         let lrc = ctx.find_lrc()?;
         self.fallback = None;
-        let Some((_, lrc)) = lrc else {
+        let Some((result, lrc)) = lrc else {
             self.fallback = crate::ui::rormpc_lyrics::fallback(ctx);
+            if let Some(Fallback::Plain(lines)) = &self.fallback {
+                self.translation = rormpc_lyrics::translation(ctx, lines.clone(), true);
+            }
             return Ok(());
         };
 
+        if let LyricsResult::Lrc(path) | LyricsResult::Index(path) = &result {
+            let (texts, ids) = crate::shared::lrc::timed_line_ids(&std::fs::read_to_string(path)?);
+            if ids.len() == lrc.lines.len() {
+                self.line_ids = ids;
+                self.translation = rormpc_lyrics::translation(ctx, texts, false);
+            }
+        }
         self.current_lyrics = Some(lrc);
         Ok(())
     }
+
+    /// rormpc: the status row and, with a translation, both columns (or the
+    /// chosen one in a narrow pane). Returns the area left for the original
+    /// alone, None when everything is drawn.
+    fn render_translation(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Option<Rect> {
+        let Some(tr) = &self.translation else { return Some(area) };
+        let wide = area.width >= rormpc_lyrics::TWO_COLUMNS_MIN_WIDTH;
+        let view = match (tr.units.is_empty(), wide, self.show_polish) {
+            (true, ..) => View::Original,
+            (false, true, _) => View::Both,
+            (false, false, false) => View::Original,
+            (false, false, true) => View::Polish,
+        };
+        let nav = &ctx.config.keybinds.navigation;
+        let key = |want: fn(&CommonAction) -> bool, fallback: &str| {
+            binding(nav, want).unwrap_or_else(|| fallback.to_owned())
+        };
+        let mut status = if self.fetching {
+            "Looking up the Polish translation on tekstowo.pl…".to_owned()
+        } else {
+            tr.status.clone()
+        };
+        if let (Some(action), false) = (tr.action, self.fetching) {
+            status = format!(
+                "{status} · {}: {action}",
+                key(|a| matches!(a, CommonAction::Confirm), "Enter")
+            );
+        }
+        if !tr.units.is_empty() && !wide {
+            let (left, right) = (
+                key(|a| matches!(a, CommonAction::Left), "h"),
+                key(|a| matches!(a, CommonAction::Right), "l"),
+            );
+            status = format!(
+                "{status} · {left}/{right}: {}",
+                if self.show_polish { "original" } else { "translation" }
+            );
+        }
+        let status_rows =
+            textwrap::wrap(&status, usize::from(area.width).max(1)).len().min(3) as u16;
+        let body = if area.height > status_rows + 1 && !status.is_empty() {
+            let [body, _, status_area] = Layout::vertical([
+                Constraint::Fill(1),
+                Constraint::Length(1),
+                Constraint::Length(status_rows),
+            ])
+            .areas(area);
+            rormpc_lyrics::render_status(frame, status_area, &status);
+            body
+        } else {
+            area
+        };
+        if view == View::Original {
+            return Some(body);
+        }
+        let (current, reached) = if let Some(lrc) = &self.current_lyrics {
+            let (idx, reached) = current_line(lrc, ctx.status.elapsed, ctx.config.lyrics_offset);
+            schedule_next_line(&mut self.last_requested_line_idx, lrc, idx, ctx);
+            (self.line_ids.get(idx).copied(), reached)
+        } else {
+            let current = rormpc_lyrics::estimated_line(&tr.lines, ctx);
+            (current, current.is_some())
+        };
+        rormpc_lyrics::render_translation(frame, body, ctx, tr, current, reached, view);
+        None
+    }
+}
+
+/// Try to schedule the next line to be displayed on time
+fn schedule_next_line(
+    last_requested_line_idx: &mut usize,
+    lrc: &Lrc,
+    current_line_idx: usize,
+    ctx: &Ctx,
+) {
+    let offset = ctx.config.lyrics_offset;
+    if *last_requested_line_idx != current_line_idx + 1
+        && let Some(line) = lrc.lines.get(current_line_idx + 1)
+    {
+        *last_requested_line_idx = current_line_idx + 1;
+        ctx.scheduler
+            .schedule(line.time(offset).saturating_sub(ctx.status.elapsed), run_status_update);
+    }
+}
+
+/// The line closest to `elapsed` among those already reached, and whether any
+/// was reached.
+fn current_line(lrc: &Lrc, elapsed: std::time::Duration, offset: LrcOffset) -> (usize, bool) {
+    lrc.lines
+        .iter()
+        .enumerate()
+        .filter(|line| elapsed >= line.1.time(offset))
+        .min_by(|a, b| a.1.time(offset).abs_diff(elapsed).cmp(&b.1.time(offset).abs_diff(elapsed)))
+        .map_or((0, false), |result| (result.0, true))
 }
 
 fn align_text(text: Text, alignment: Alignment) -> Text {
@@ -58,6 +187,9 @@ fn align_text(text: Text, alignment: Alignment) -> Text {
 
 impl Pane for LyricsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
+        let Some(area) = self.render_translation(frame, area, ctx) else {
+            return Ok(());
+        };
         let Some(lrc) = &self.current_lyrics else {
             if let Some(fallback) = &self.fallback {
                 crate::ui::rormpc_lyrics::render(frame, area, ctx, fallback);
@@ -66,16 +198,7 @@ impl Pane for LyricsPane {
         };
         let offset = ctx.config.lyrics_offset;
 
-        let elapsed = ctx.status.elapsed;
-        let (current_line_idx, first_line_reached) = lrc
-            .lines
-            .iter()
-            .enumerate()
-            .filter(|line| elapsed >= line.1.time(offset))
-            .min_by(|a, b| {
-                a.1.time(offset).abs_diff(elapsed).cmp(&b.1.time(offset).abs_diff(elapsed))
-            })
-            .map_or((0, false), |result| (result.0, true));
+        let (current_line_idx, first_line_reached) = current_line(lrc, ctx.status.elapsed, offset);
 
         let rows = area.height;
         let areas = Layout::vertical((0..rows).map(|_| Constraint::Length(1))).split(area);
@@ -167,14 +290,7 @@ impl Pane for LyricsPane {
             }
         }
 
-        // Try to schedule the next line to be displayed on time
-        if self.last_requested_line_idx != current_line_idx + 1
-            && let Some(line) = lrc.lines.get(current_line_idx + 1)
-        {
-            self.last_requested_line_idx = current_line_idx + 1;
-            ctx.scheduler
-                .schedule(line.time(offset).saturating_sub(ctx.status.elapsed), run_status_update);
-        }
+        schedule_next_line(&mut self.last_requested_line_idx, lrc, current_line_idx, ctx);
 
         Ok(())
     }
@@ -194,6 +310,7 @@ impl Pane for LyricsPane {
     fn on_event(&mut self, event: &mut UiEvent, _is_visible: bool, ctx: &Ctx) -> Result<()> {
         match event {
             UiEvent::SongChanged | UiEvent::Reconnected | UiEvent::LyricsIndexed => {
+                self.fetching = false;
                 if let Err(err) = self.update_lyrics(ctx) {
                     status_error!("Failed to load lyrics file: '{err}'");
                 }
@@ -205,7 +322,23 @@ impl Pane for LyricsPane {
         Ok(())
     }
 
-    fn handle_action(&mut self, _event: &mut ActionEvent, _ctx: &mut Ctx) -> Result<()> {
+    fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        // rormpc: Enter looks the Polish translation up, h/l switches original
+        // / translation in a narrow pane
+        let Some(tr) = &self.translation else { return Ok(()) };
+        match event.claim_common() {
+            Some(CommonAction::Confirm) if tr.action.is_some() && !self.fetching => {
+                self.fetching = true;
+                rormpc_lyrics::fetch_translation(ctx);
+                ctx.render()?;
+            }
+            Some(CommonAction::Left | CommonAction::Right) if !tr.units.is_empty() => {
+                self.show_polish = !self.show_polish;
+                ctx.render()?;
+            }
+            Some(_) => event.abandon(),
+            None => {}
+        }
         Ok(())
     }
 }

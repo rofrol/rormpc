@@ -290,6 +290,16 @@ file's length, not checked yet). LRCLIB matches by length, so YouTube rips with 
 menu's "Choose lyrics…" lists LRCLIB's entries for the song with their length difference and takes the one picked
 (`musicdb lyrics use`).
 
+A Polish translation shows beside the original (the original left, Polish right, both left-aligned) when
+`musicdb lyrics translate` has found one on tekstowo.pl. Enter in the Lyrics pane looks it up for the playing song,
+in the background and only on request; the status row under the lyrics says what there is (a human or machine
+translation, none on tekstowo.pl, a Polish original, lyrics changed since) and what Enter does. The current line is
+highlighted on both sides: `.lrc` lines carry their timestamps over to the translation, plain `.txt` lyrics estimate
+the line from the song's progress (the status says so). A translation that does not pair line by line (merged or
+split verses) is aligned by stanza and gets no highlight on its side. Below 100 columns the pane shows one column,
+and h/l switches between the original and the translation. The translation lives in `<song stem>.pl.json` next to
+the lyrics; `musicdb lyrics lang FILE CODE` overrides the detected language (`pl`: no translation).
+
 ```ron
 lyrics_dir: "~/.local/share/rormpc-tools/lyrics",
 enable_lyrics_hot_reload: true,
