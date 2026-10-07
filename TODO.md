@@ -91,9 +91,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (Hits, Queue, Up next, Shuffle, Directories, Artists, Album Artists, Albums, Playlists, Lyrics, Deleted,
       Ver…); the wheel over it should scroll it or the bar should wrap/shrink; the digit keys should match the
       tabs' order (3 should be Up next, the third tab, not Directories). Reported to the herdr coordinator.
+      Decided 2026-10-07: digits follow the tab order (1 Hits … 9 Playlists, 0 Live playlists); the coordinator
+      changes the dotfiles keymap, a worker the bar.
 - [ ] Asked 2026-10-07: "download the top 1% of music" (in Polish: "ściągnij top 1% muzyki"). Facts: Hits' Top %
       is the share of a chart cohort (Billboard year-end, per year); `hits fetch` is a verified import queue for
-      missing songs (rormpc: "Fetch missing…"). Scope to confirm before downloading: which charts and years.
+      missing songs (rormpc: "Fetch missing…"). Scope decided 2026-10-07: Billboard year-end, all years, the top 1%
+      of each year's chart, the missing songs through `hits fetch` (verified).
 - [ ] Asked 2026-10-07: "in Hits, all my playlists as a source" (in Polish: "w Hits jako źródło moje playlisty
       wszystkie"). Facts: Hits' Source cycles Billboard US / my charts / whole library / my likes / recommended.
 
