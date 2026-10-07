@@ -67,9 +67,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       4257576 (worker): the key resolver sent the resolved action back through the app event channel, behind the
       keys already queued from the same batch; it now returns it and the event loop handles it before the next
       key. Checked on a scratch MPD (Queue and Directories filters, consume/single/random unchanged).
-- [ ] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
+- [x] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
       import reviewed, batch accept; the prerequisite `yt-mp3-mb --batch --json` in dotfiles, the `liveplaylist`
-      CLI, the rormpc URL modal and pane ("Live playlists: paste a playlist URL…").
+      CLI, the rormpc URL modal and pane ("Live playlists: paste a playlist URL…"). Done (worker): rormpc-tools 9212507
+      (`yt-mp3-mb --batch --json`), ffa991f..e7a6212 (`liveplaylist`), rormpc aef0abc (`Pane(LivePlaylists())`, the URL
+      input from its Enter menu). Not tested: a real download from a live playlist (the one allowed live listing
+      returned 0 items); the UI was checked on a scratch MPD with hand-made items. Needs a release and a
+      `Pane(LivePlaylists())` tab in the user's config (snippet in RORMPC.md).
 - [ ] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided
       2026-10-07): line by line with the stanza as context, labelled "machine translation", the key from the
       user's rormpc-tools config (never in the repo); the model id from the claude-api reference.
