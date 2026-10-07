@@ -88,13 +88,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       One live call on invented lyrics (4.4 s). Released 2026-10-07: v0.2.35 pushed and installed, rormpc 6474e92
       installed; dotfiles be85114 renumbers the digit keys (1 Hits … 0 Live playlists; gy Lyrics, gd Deleted,
       gf Search).
-- [ ] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit,
+- [x] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit,
       and mouse scroll does nothing; also 3 jumps to Directories"). The bar cuts "Ver…" at the right edge
       (Hits, Queue, Up next, Shuffle, Directories, Artists, Album Artists, Albums, Playlists, Lyrics, Deleted,
       Ver…); the wheel over it should scroll it or the bar should wrap/shrink; the digit keys should match the
       tabs' order (3 should be Up next, the third tab, not Directories). Reported to the herdr coordinator.
       Decided 2026-10-07: digits follow the tab order (1 Hits … 9 Playlists, 0 Live playlists); the coordinator
-      changes the dotfiles keymap, a worker the bar.
+      changes the dotfiles keymap, a worker the bar. Done: dotfiles be85114 (digits), rormpc 7249c32 (worker): the bar
+      scrolls the active tab into view, ‹ › mark hidden tabs, the wheel over the bar and a click on ‹ › scroll it
+      without switching, a click hits the tab drawn there. Not installed yet.
 - [ ] Asked 2026-10-07: "download the top 1% of music" (in Polish: "ściągnij top 1% muzyki"). Facts: Hits' Top %
       is the share of a chart cohort (Billboard year-end, per year); `hits fetch` is a verified import queue for
       missing songs (rormpc: "Fetch missing…"). Scope decided 2026-10-07: Billboard year-end, all years, the top 1%
