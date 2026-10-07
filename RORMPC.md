@@ -66,12 +66,15 @@ they work with rormpc closed. It is independent of rormpc: `rormpc_install.sh` n
 The plist runs the uv tool venv's Python, so after `uv tool upgrade mpd-now-playable` or a reinstall rerun
 `mpd-now-playable install-launchagent --force`, or launchd keeps restarting a dead path.
 
-On this setup Hammerspoon (`~/.hammerspoon/init.lua`) overrides the keyboard keys, because a browser playing media
-takes Now Playing and with it the keys: Play/Next/Previous are consumed and sent to MPD with `mpc`
-(toggle/next/prev); with Shift held they pass through to the Now Playing app. The menu bar ♪ item turns the
-override off and on. Previous sends `shuffle prev` to mpd-player (channel `rormpc`) when mpd-player is subscribed
-and its `shuffle.json` has `trail`, else plain `mpc prev`. Volume, mute and fast-forward/rewind are left alone;
-AirPods/Bluetooth buttons never reach Hammerspoon and still go to the Now Playing app.
+On this setup Karabiner-Elements (`~/.config/karabiner/karabiner.json`, profile ISO) overrides the MacBook's
+F7/F8/F9, because a browser playing media takes Now Playing and with it the keys: a complex modification runs
+`~/scripts/mpd-media-key prev|toggle|next`, which sends `mpc prev`/`toggle`/`next`. It has to be Karabiner:
+its `fn_function_keys` turns F7/F8/F9 into consumer keys from its virtual keyboard, which go straight to the Now
+Playing app, so an event tap (Hammerspoon's, until 2026-10-07) never sees them. Shift+F7/F8/F9 still send the
+media key to the Now Playing app; fn+F7/F8/F9 stay plain F-keys. Previous sends `shuffle prev` to mpd-player
+(channel `rormpc`) when mpd-player is subscribed and its `shuffle.json` has `trail`, else plain `mpc prev`. Each
+press appends a line (key, command, exit status) to `~/.local/state/media-keys/media-keys.log`. Volume and mute
+are left alone; AirPods/Bluetooth buttons and external keyboards' media keys still go to the Now Playing app.
 
 On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-mpris or mpDris2; see TODO.md).
 
