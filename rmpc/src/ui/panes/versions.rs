@@ -5,11 +5,17 @@
 //! separate player (mpv, else ffplay), never through MPD, whose scrobbler would log a listen or a skip.
 //! "Delete this file…" asks whether the file is a copy (merged, `musicdb versions same`) or a recording I don't
 //! want (the delete menu); the Queue's "Find versions…" opens a group here, and Back / Esc returns there.
+//! Files whose audio matches (musicdb's chromaprint scores) are suggested as one recording, with the file to keep
+//! and why; Add (`a`) asks to merge them, the kept file changeable there, never merged by itself. Missing
+//! fingerprints are computed in the background (`musicdb versions fingerprint`), then the list reloads.
 
 use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use anyhow::Result;
@@ -61,6 +67,15 @@ struct Report {
     groups: Vec<Group>,
     #[serde(default)]
     shared: Vec<Shared>,
+    #[serde(default)]
+    audio: AudioSummary,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct AudioSummary {
+    /// fpcalc is installed: `musicdb versions fingerprint` can compute them
+    #[serde(default)]
+    available: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +87,41 @@ struct Group {
     tracks: Vec<Track>,
     #[serde(default)]
     pending: Vec<String>,
+    #[serde(default)]
+    audio: GroupAudio,
+}
+
+/// musicdb's audio comparison of the group's files.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct GroupAudio {
+    /// files that sound like one recording, with the file to keep
+    #[serde(default)]
+    same: Vec<SameAudio>,
+    /// every pair at the "similar" score or more (the "same" ones too)
+    #[serde(default)]
+    pairs: Vec<AudioPair>,
+    #[serde(default)]
+    missing: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SameAudio {
+    files: Vec<String>,
+    score: f64,
+    keep: String,
+    #[serde(default)]
+    keep_reason: String,
+    #[serde(default)]
+    reason: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AudioPair {
+    a: String,
+    b: String,
+    score: f64,
+    #[serde(default)]
+    kind: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -207,6 +257,8 @@ pub struct VersionsPane {
     file_idx: usize,
     track_idx: usize,
     job: Arc<Mutex<Job>>,
+    /// `musicdb versions fingerprint` runs
+    fingerprinting: Arc<AtomicBool>,
     preview: Arc<Mutex<Preview>>,
     /// the live filter of the group list: its text, whether it takes keys now, "unresolved only"
     filter: BufferId,
@@ -223,6 +275,9 @@ pub struct VersionsPane {
     back: Option<crate::config::tabs::TabName>,
     /// `rormpc_versions`' change count this pane last loaded for
     generation: u64,
+    /// files a background fingerprint run was started for: never started again for them (an unreadable file
+    /// stays missing only if musicdb could not record it)
+    fingerprint_tried: std::collections::HashSet<String>,
 }
 
 fn run(args: &[&str]) -> Result<String, String> {
@@ -452,6 +507,7 @@ impl VersionsPane {
             file_idx: 0,
             track_idx: 0,
             job: Arc::new(Mutex::new(Job::default())),
+            fingerprinting: Arc::new(AtomicBool::new(false)),
             preview: Arc::new(Mutex::new(Preview::default())),
             filter: BufferId::new(),
             typing: false,
@@ -462,7 +518,46 @@ impl VersionsPane {
             jump: None,
             back: None,
             generation: crate::ui::rormpc_versions::generation(),
+            fingerprint_tried: std::collections::HashSet::new(),
         }
+    }
+
+    /// Fingerprint the files the report says are missing, once per file, in the background; reload after it.
+    fn fingerprint_missing(&mut self, ctx: &Ctx) {
+        if !self.report.audio.available {
+            return;
+        }
+        let new: Vec<String> = self
+            .report
+            .groups
+            .iter()
+            .flat_map(|g| g.audio.missing.iter())
+            .filter(|f| !self.fingerprint_tried.contains(*f))
+            .cloned()
+            .collect();
+        if new.is_empty() {
+            return;
+        }
+        if self.fingerprinting.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.fingerprint_tried.extend(new);
+        let (job, running, sender) = (Arc::clone(&self.job), Arc::clone(&self.fingerprinting), ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            if let Err(err) = run(&["versions", "fingerprint"]) {
+                status_warn!("audio fingerprints: {err}");
+            }
+            running.store(false, Ordering::Release);
+            job.lock().expect("versions job lock").reload = true;
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+
+    /// The audio-match suggestion Add acts on: the one with the selected file, else the group's first.
+    fn same_audio(&self) -> Option<&SameAudio> {
+        let g = self.group()?;
+        let file = (self.focus == Focus::Files).then(|| g.files.get(self.file_idx)).flatten();
+        file.and_then(|f| g.audio.same.iter().find(|s| s.files.contains(&f.file))).or_else(|| g.audio.same.first())
     }
 
     fn entry_key(&self, e: Entry) -> Option<String> {
@@ -534,6 +629,12 @@ impl VersionsPane {
                 "{enter} actions: accept the suggestion, which file it is, not owned · {left} files · {search} filter"
             ),
         };
+        if self.same_audio().is_some() && !self.typing {
+            let add = key(is_add, "a");
+            h.push_str(" · ");
+            h.push_str(&add);
+            h.push_str(" merge the audio match…");
+        }
         if self.filter_active() && self.focus == Focus::List {
             h.push_str(&format!(" · {close} clear the filter"));
         } else if self.back.is_some() {
@@ -775,6 +876,13 @@ impl VersionsPane {
                             });
                         }
                     }
+                    if let Some(s) = group.as_ref().and_then(|g| g.audio.same.iter().find(|s| s.files.contains(&file))) {
+                        let (job, s, files) = (Arc::clone(&job), s.clone(), group.as_ref().map(|g| g.files.clone()));
+                        section.add_item(format!("Same recording? {}%: merge…", percent(s.score)), move |ctx| {
+                            confirm_audio_same(ctx, job, &s, &files.unwrap_or_default());
+                            Ok(())
+                        });
+                    }
                     if !others.is_empty() && group.is_some() {
                         let (job, file, others) = (Arc::clone(&job), file.clone(), others.clone());
                         section.add_item("Same recording: keep this file, merge the others…", move |ctx| {
@@ -845,6 +953,7 @@ impl VersionsPane {
                 if g.pending.is_empty() { "nothing open".to_owned() } else { format!("{} open", g.pending.len()) },
                 dim,
             )));
+            head.extend(audio_lines(g));
             for (i, f) in g.files.iter().enumerate() {
                 let marks = if f.markers.is_empty() { String::new() } else { format!(" [{}]", f.markers.join(",")) };
                 files.push(Row::new(vec![
@@ -964,6 +1073,125 @@ fn what_to_delete(ctx: &Ctx, job: Arc<Mutex<Job>>, file: String, others: Vec<Str
     modal!(ctx, menu);
 }
 
+/// The plain Add key (`a` by default): here it merges an audio match instead of queueing.
+fn is_add(a: &CommonAction) -> bool {
+    use crate::config::keys::actions::{AddKind, AddOpts, Position};
+    matches!(a, CommonAction::AddOptions { kind: AddKind::Action(AddOpts { position: Position::EndOfQueue, all: false, .. }) })
+}
+
+fn percent(score: f64) -> u32 {
+    (score * 100.0).round() as u32
+}
+
+/// "1. name" of a file in the group's numbering.
+fn numbered(files: &[VFile], file: &str) -> String {
+    files.iter().position(|f| f.file == file).map_or_else(|| base(file).to_owned(), |i| format!("{}. {}", i + 1, base(file)))
+}
+
+fn file_numbers(files: &[VFile], of: &[String]) -> String {
+    of.iter()
+        .filter_map(|f| files.iter().position(|x| x.file == *f))
+        .map(|i| (i + 1).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The group's audio comparison under its name: copies to merge, similar pairs, files not compared yet.
+fn audio_lines(g: &Group) -> Vec<Line<'static>> {
+    let dim = Style::default().add_modifier(Modifier::DIM);
+    let mut lines = Vec::new();
+    for s in &g.audio.same {
+        let keep = g.files.iter().position(|f| f.file == s.keep).map_or_else(String::new, |i| format!("{}", i + 1));
+        let why = if s.keep_reason.is_empty() { String::new() } else { format!(" ({})", human_reason(&s.keep_reason)) };
+        lines.push(Line::from(format!(
+            "Same recording? {}: files {}; keep {keep}{why}",
+            human_reason(&s.reason),
+            file_numbers(&g.files, &s.files)
+        )));
+    }
+    for p in g.audio.pairs.iter().filter(|p| p.kind == "similar") {
+        lines.push(Line::from(Span::styled(
+            format!(
+                "Files {}: similar audio (another master or edit?), {}%",
+                file_numbers(&g.files, &[p.a.clone(), p.b.clone()]).replace(", ", " and "),
+                percent(p.score)
+            ),
+            dim,
+        )));
+    }
+    if !g.audio.missing.is_empty() {
+        lines.push(Line::from(Span::styled(
+            format!("audio not compared yet: {} of {} files without a fingerprint", g.audio.missing.len(), g.files.len()),
+            dim,
+        )));
+    }
+    lines
+}
+
+/// Add on an audio match: merge the others into the suggested file, after a confirmation that names it and why;
+/// "Keep another file…" picks a different one to keep (then the usual "Same recording" confirmation).
+fn confirm_audio_same(ctx: &Ctx, job: Arc<Mutex<Job>>, s: &SameAudio, files: &[VFile]) {
+    let others: Vec<String> = s.files.iter().filter(|f| **f != s.keep).cloned().collect();
+    let why = if s.keep_reason.is_empty() { String::new() } else { format!(": {}", human_reason(&s.keep_reason)) };
+    let message = vec![
+        format!("Same recording? {}", human_reason(&s.reason)),
+        format!("Keep {}{why}", numbered(files, &s.keep)),
+        format!(
+            "Merge into it (like, missing tags, lyrics; the others go to the quarantine): {}",
+            others.iter().map(|f| numbered(files, f)).collect::<Vec<_>>().join(", ")
+        ),
+    ];
+    let args = args_same(&s.keep, &others);
+    let (job2, all, numbers) = (Arc::clone(&job), s.files.clone(), files.to_vec());
+    modal!(
+        ctx,
+        ConfirmModal::builder()
+            .ctx(ctx)
+            .message(message)
+            .action(Action::CustomButtons {
+                buttons: vec![
+                    ("Cancel", Box::new(|_: &Ctx| Ok(()))),
+                    (
+                        "Merge",
+                        Box::new(move |ctx: &Ctx| {
+                            run_then_reload(ctx, job, args);
+                            Ok(())
+                        }),
+                    ),
+                    (
+                        "Keep another file…",
+                        Box::new(move |ctx: &Ctx| {
+                            choose_keep(ctx, job2, all, &numbers);
+                            Ok(())
+                        }),
+                    ),
+                ],
+            })
+            .build()
+    );
+}
+
+/// Which file of an audio match to keep; the others are merged into it after the usual confirmation.
+fn choose_keep(ctx: &Ctx, job: Arc<Mutex<Job>>, all: Vec<String>, files: &[VFile]) {
+    let labels: Vec<String> = all.iter().map(|f| format!("Keep {}", numbered(files, f))).collect();
+    let menu = MenuModal::new(ctx)
+        .width(80) // file names are long
+        .list_section(ctx, move |mut section| {
+            for (keep, label) in all.iter().zip(labels) {
+                let (job, keep) = (Arc::clone(&job), keep.clone());
+                let others: Vec<String> = all.iter().filter(|f| **f != keep).cloned().collect();
+                section.add_item(label, move |ctx| {
+                    confirm_same(ctx, job, keep, others);
+                    Ok(())
+                });
+            }
+            Some(section)
+        })
+        .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
+        .build();
+    modal!(ctx, menu);
+}
+
 /// Files of the groups with several owned files (the Queue's `≋` column).
 fn member_files(r: &Report) -> std::collections::HashSet<String> {
     r.groups.iter().filter(|g| g.files.len() > 1).flat_map(|g| g.files.iter().map(|f| f.file.clone())).collect()
@@ -1039,6 +1267,7 @@ impl Pane for VersionsPane {
             let mut j = self.job.lock().expect("versions job lock");
             (j.report.take(), std::mem::take(&mut j.reload), j.loading, j.error.clone())
         };
+        let fingerprinting = self.fingerprinting.load(Ordering::Acquire);
         // a deletion or a merge elsewhere (the delete menu, the Queue) changes the groups
         let generation = crate::ui::rormpc_versions::generation();
         if reload || generation != self.generation {
@@ -1047,6 +1276,7 @@ impl Pane for VersionsPane {
         }
         if let Some(r) = fresh {
             self.take_report(r);
+            self.fingerprint_missing(ctx);
         }
         let [body, hint_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(area);
         let [left, right] = Layout::horizontal([Constraint::Percentage(30), Constraint::Min(40)]).spacing(2).areas(body);
@@ -1104,6 +1334,7 @@ impl Pane for VersionsPane {
         }
 
         let open = open_items(&self.report);
+        let audio_note = if fingerprinting { " · comparing audio…" } else { "" };
         let mut preview = self.preview.lock().expect("preview lock");
         let preview_text = if preview.playing() { format!(" · preview: {}", preview.what) } else { String::new() };
         drop(preview);
@@ -1112,14 +1343,16 @@ impl Pane for VersionsPane {
         let status = match (loading, error) {
             (_, Some(err)) => Span::styled(format!(" musicdb: {err}"), Style::default().add_modifier(Modifier::BOLD)),
             (true, None) if self.entries.is_empty() => Span::styled(" reading musicdb versions…", dim),
-            _ if open == 0 => Span::styled(format!(" clean{preview_text}{mpd_note}"), dim),
-            _ => Span::styled(format!(" open items: {open}{preview_text}{mpd_note}"), dim),
+            _ if open == 0 => Span::styled(format!(" clean{audio_note}{preview_text}{mpd_note}"), dim),
+            _ => Span::styled(format!(" open items: {open}{audio_note}{preview_text}{mpd_note}"), dim),
         };
         frame.render_widget(Paragraph::new(Line::from(status)), footer);
 
         let (head, files, tracks) = self.details();
+        let width = usize::from(right.width.max(1));
+        let head_rows: usize = head.iter().map(|l| l.width().div_ceil(width).max(1)).sum();
         let [head_area, files_area, tracks_area, info_area] = Layout::vertical([
-            Constraint::Length(head.len().max(1) as u16 + 1),
+            Constraint::Length(head_rows.max(1) as u16 + 1),
             Constraint::Length(files.len() as u16 + 2),
             Constraint::Min(3),
             Constraint::Length(9), // track, suggested file and why (both wrap), the listen-length note
@@ -1267,6 +1500,11 @@ impl Pane for VersionsPane {
             CommonAction::Top if self.focus == Focus::List => self.state.first(),
             CommonAction::Bottom if self.focus == Focus::List => self.state.last(),
             CommonAction::Confirm | CommonAction::ContextMenu => self.open_menu(ctx),
+            ref a if is_add(a) && self.same_audio().is_some() => {
+                if let (Some(s), Some(g)) = (self.same_audio().cloned(), self.group()) {
+                    confirm_audio_same(ctx, Arc::clone(&self.job), &s, &g.files.clone());
+                }
+            }
             CommonAction::Close if self.focus != Focus::List => self.focus = Focus::List,
             CommonAction::EnterSearch | CommonAction::FocusInput => self.start_filter(ctx),
             CommonAction::Select if self.focus == Focus::List => {
@@ -1393,6 +1631,31 @@ mod tests {
         assert_eq!((pane.focus, pane.file_idx), (Focus::Files, 1));
         assert!(!pane.filter_active());
         assert_eq!(member_files(&two_groups()).len(), 4);
+    }
+
+    #[test]
+    fn audio_matches_read_as_suggestions_and_add_takes_the_selected_files_one() {
+        let mut r = two_groups();
+        r.groups[0].audio = serde_json::from_str(
+            r#"{"same": [{"files": ["Mix/a.mp3", "Mix/b.mp3"], "score": 0.929, "keep": "Mix/b.mp3",
+                          "keep_reason": "longer: 443 s vs 218 s", "reason": "audio match 93% over the first 117 s"}],
+                "pairs": [{"a": "Mix/a.mp3", "b": "Mix/b.mp3", "score": 0.929, "kind": "same"}],
+                "missing": []}"#,
+        )
+        .expect("test audio");
+        r.groups[1].audio.pairs.push(AudioPair { a: "Other/a.mp3".into(), b: "Other/b.mp3".into(), score: 0.81, kind: "similar".into() });
+        r.groups[1].audio.missing.push("Other/a.mp3".into());
+        let text = |g: &Group| audio_lines(g).iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(text(&r.groups[0]), ["Same recording? audio match 93% over the first 1:57: files 1, 2; keep 2 (longer: 7:23 vs 3:38)"]);
+        assert_eq!(text(&r.groups[1]), [
+            "Files 1 and 2: similar audio (another master or edit?), 81%",
+            "audio not compared yet: 1 of 2 files without a fingerprint"
+        ]);
+        let mut pane = VersionsPane::new();
+        pane.take_report(r);
+        assert_eq!(pane.same_audio().map(|s| s.keep.as_str()), Some("Mix/b.mp3"));
+        pane.state.select(Some(1), 0);
+        assert!(pane.same_audio().is_none()); // similar audio is never offered for merging
     }
 
     #[test]

@@ -133,7 +133,7 @@ on a filtered position: while filtered, moving, sorting and the context menu wai
 
 Queue (ContextMenu, e.g. Ctrl-z): besides upstream's items, Like ♥ / Dislike ✗ / Clear like (rmpc's like
 sticker) and, in its own section, "Move library file to Trash…" with a confirmation (the same as Ctrl-x,
-`musicdb delete`); "Remove" is renamed "Remove from queue (keep file)", and "Remove duplicate entries (N)…"
+`musicdb delete`); "Remove" is renamed "Remove from queue (keep file)", and "Remove repeated entries (N)…"
 collapses a file queued several times to one entry (the playing one, else the first), after a confirmation (such
 entries carry a dim `⧉` in the first column);
 library files stay. Hits rows: Play now, Add to queue, like
@@ -188,6 +188,14 @@ h / l (Left / Right) move between the list, the files and the tracks; Enter open
   live / remix / edit / cover / other", "Same recording: keep this file, merge the others…" (asks first; the
   others go to the quarantine with aliases, like `musicdb dedupe`), "Delete this file…", and for a shared id
   "These files are fine (shared-ok)…".
+
+Files whose audio matches (musicdb's chromaprint comparison within the group: 0.88 or more) show "Same recording?
+audio match 93% …: files 1, 2; keep 1 (official channel …)" under the group name, with the file to keep and why
+(an MBID or the official channel, then the longer, the higher bitrate, the more played). Add (`a`) or the file
+menu's "Same recording? 93%: merge…" asks first, and "Keep another file…" there picks a different file to keep;
+nothing is merged by itself. Pairs at 0.72-0.88 show as "similar audio (another master or edit?)", with no merge
+offered. Files without a fingerprint are computed in the background (`musicdb versions fingerprint`, needs
+fpcalc; the footer says "comparing audio…"), then the list reloads.
 
 "Delete this file…" first asks what the file is. "A copy of <other file> (same recording): merge it…" runs the
 merge for that pair (`musicdb versions same OTHER FILE`, after a confirmation): the copy goes to the quarantine

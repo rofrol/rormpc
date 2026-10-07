@@ -454,8 +454,8 @@ impl QueuePane {
                         match crate::ui::rormpc_actions::duplicate_ids(&ctx.queue, ctx.current_song().map(|s| s.id))
                             .len()
                         {
-                            0 => "Remove duplicate entries (none)".to_owned(),
-                            n => format!("Remove duplicate entries ({n})…"),
+                            0 => "Remove repeated entries (none)".to_owned(),
+                            n => format!("Remove repeated entries ({n})…"),
                         },
                         |ctx| {
                             let current = ctx.current_song().map(|s| s.id);
