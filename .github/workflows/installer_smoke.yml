@@ -1,0 +1,184 @@
+# Smoke test of `scripts/rormpc_install.sh companions` on Ubuntu, as done by hand in an Ubuntu VM on 2026-10-03:
+# a fresh user with a lingering systemd user session, an MPD playing a generated tone, a fake ListenBrainz token
+# and API URL; then the units, the config, `status` and a reinstall are checked. The companions come from their
+# pinned tags unless the tools_ref / lb_ref inputs (RORMPC_TOOLS_REF / RO_LB_REF) name a commit to test.
+#
+# Written without a run on GitHub: only workflow_dispatch and workflow_call until it has passed once; then add
+# push to master, pull_request, a weekly schedule and release tags like the other workflows.
+name: Installer smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      tools_ref:
+        description: "rormpc-tools tag or commit (empty: the pinned tag)"
+        required: false
+        default: ""
+      lb_ref:
+        description: "ro-listenbrainz-mpd tag or commit (empty: the pinned tag)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      tools_ref:
+        type: string
+        required: false
+        default: ""
+      lb_ref:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  companions-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RORMPC_TOOLS_REF: ${{ inputs.tools_ref }}
+      RO_LB_REF: ${{ inputs.lb_ref }}
+      LB_CONFIG: /home/ci/.config/listenbrainz-mpd/config.toml
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: System packages (the scrobbler's build dependencies from the installer's hint, MPD)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev libsqlite3-dev mpd mpc
+          # the package's system MPD would take port 6600 from the user's
+          sudo systemctl disable --now mpd.service mpd.socket || true
+
+      - name: Fresh user with a lingering systemd user session
+        run: |
+          sudo useradd --create-home --shell /bin/bash ci
+          sudo loginctl enable-linger ci
+          uid="$(id -u ci)"
+          # start blocks until the user manager is up (Type=notify), so its bus exists afterwards
+          sudo systemctl start "user@$uid.service"
+          test -S "/run/user/$uid/bus"
+          # as-ci SCRIPT: run SCRIPT as ci in that session, with the refs under test
+          sudo tee /usr/local/bin/as-ci > /dev/null <<'SH'
+          #!/bin/bash
+          uid="$(id -u ci)"
+          exec sudo -u ci env HOME=/home/ci USER=ci \
+            XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+            PATH="/home/ci/.local/bin:/home/ci/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
+            RORMPC_TOOLS_REF="${RORMPC_TOOLS_REF:-}" RO_LB_REF="${RO_LB_REF:-}" \
+            bash -euo pipefail -c "$1"
+          SH
+          sudo chmod 755 /usr/local/bin/as-ci
+          as-ci 'systemctl --user is-system-running --wait || systemctl --user --failed'
+          sudo install -o ci -m 755 scripts/rormpc_install.sh /home/ci/rormpc_install.sh
+
+      - name: uv and Rust for the user
+        run: |
+          as-ci 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+          as-ci 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal'
+          as-ci 'uv --version && cargo --version'
+
+      - name: MPD playing a generated tone
+        run: |
+          as-ci '
+            mkdir -p ~/Music ~/.config/mpd ~/.local/state/mpd
+            # 6 s of 440 Hz, 16-bit mono WAV: a listen (90% without a seek) counts within each play
+            python3 - <<PY
+          import math, struct, wave
+          with wave.open("/home/ci/Music/tone.wav", "wb") as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
+              w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 440 * i / 44100)))
+                                     for i in range(6 * 44100)))
+          PY
+            cat > ~/.config/mpd/mpd.conf <<CONF
+          music_directory "~/Music"
+          db_file "~/.local/state/mpd/database"
+          state_file "~/.local/state/mpd/state"
+          bind_to_address "127.0.0.1"
+          port "6600"
+          audio_output {
+            type "null"
+            name "null"
+          }
+          CONF
+            systemd-run --user --unit=ci-mpd mpd --no-daemon --stderr ~/.config/mpd/mpd.conf
+            for _ in $(seq 100); do mpc status >/dev/null 2>&1 && break; sleep 0.1; done
+            mpc update --wait
+            # several entries: each play is a new song to the scrobbler, not a repeat of the same one
+            for _ in 1 2 3 4 5; do mpc add tone.wav; done
+            mpc repeat on
+            mpc play
+          '
+
+      - name: Fake ListenBrainz token and API URL
+        run: |
+          as-ci '
+            mkdir -p ~/.config/listenbrainz-mpd
+            printf "[submission]\ntoken = \"ci-fake-token\"\n# nothing listens here: submissions fail and are cached\napi_url = \"http://127.0.0.1:9\"\n\n[mpd]\naddress = \"127.0.0.1:6600\"\n" > "'"$LB_CONFIG"'"
+          '
+          sudo grep -E '^(token|api_url) ' "$LB_CONFIG" | sudo tee /home/ci/lb-before > /dev/null
+
+      - name: rormpc_install.sh companions
+        run: as-ci '~/rormpc_install.sh companions'
+
+      - name: Units are enabled and active
+        run: |
+          as-ci '
+            systemctl --user is-enabled rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
+            systemctl --user is-active rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
+          '
+
+      - name: The scrobbler counts a listen without crashing
+        run: |
+          as-ci '
+            log=~/.local/share/listenbrainz-mpd/listens.jsonl
+            # deadline: a few plays of the 6 s tone; the listen is logged locally even though the API fails
+            for _ in $(seq 120); do [ -s "$log" ] && break; sleep 1; done
+            cat "$log"
+            for unit in rormpc-ro-listenbrainz-mpd rormpc-mpd-player; do
+              systemctl --user show -p NRestarts --value "$unit.service" | grep -qx 0 || { echo "$unit restarted" >&2; exit 1; }
+            done
+          '
+
+      - name: Config has the listen rule in [submission] and the token untouched
+        run: |
+          sudo cat "$LB_CONFIG"
+          test "$(sudo grep -c '^listen_' "$LB_CONFIG")" = 3
+          # all three before the [mpd] table
+          sudo awk '/^\[mpd\]/ { mpd = 1 } /^listen_/ && mpd { exit 1 }' "$LB_CONFIG"
+          sudo grep -E '^(token|api_url) ' "$LB_CONFIG" | sudo diff /home/ci/lb-before -
+
+      - name: musicdb update runs without a crash
+        run: |
+          # failed network steps (no ListenBrainz user configured) are reported and make it exit 1; a traceback
+          # is a bug
+          as-ci 'systemctl --user start rormpc-musicdb.service' || true
+          sudo journalctl --no-pager _SYSTEMD_USER_UNIT=rormpc-musicdb.service | tee musicdb.log
+          ! grep -q Traceback musicdb.log
+
+      - name: status
+        run: |
+          as-ci '~/rormpc_install.sh status' | tee status.txt
+          grep -q '^rormpc-tools ' status.txt
+          grep -q '^ro-listenbrainz-mpd ' status.txt
+          grep -q '^timer active' status.txt
+          grep -qx 'scrobbler service: active' status.txt
+          grep -qx 'mpd-player service: active' status.txt
+          grep -qx 'ListenBrainz token: set' status.txt
+          grep -q '^listen rule: listen_fraction = 0.9 listen_max_seconds = 0 listen_uninterrupted = true' status.txt
+
+      - name: Reinstall keeps the config and restarts the units
+        run: |
+          as-ci '~/rormpc_install.sh companions'
+          test "$(sudo grep -c '^listen_' "$LB_CONFIG")" = 3
+          sudo grep -E '^(token|api_url) ' "$LB_CONFIG" | sudo diff /home/ci/lb-before -
+          as-ci 'systemctl --user is-active rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service'
+
+      - name: Logs
+        if: always()
+        run: |
+          sudo journalctl --no-pager _UID="$(id -u ci)" | tail -n 300 || true

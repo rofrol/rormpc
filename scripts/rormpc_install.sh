@@ -12,7 +12,8 @@ usage="usage: rormpc_install.sh install|rollback|list|companions [--local] [--ga
               update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
               playback daemon (silence between songs: --gap is the default until rormpc chooses one, 0 = none;
               Up next). --local: both from checkouts in
-              \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). Needs uv and cargo.
+              \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). \$RORMPC_TOOLS_REF and \$RO_LB_REF
+              (a tag or commit) replace the pinned tags, for CI to test a companion's commit. Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
   status      what of the above is installed and running, and the tools rormpc's features run
 
@@ -154,8 +155,12 @@ companions() {
     uv tool install --force --editable "$RORMPC_TOOLS_DIR"
     cargo install --locked --path "$RO_LB_DIR"
   else
-    uv tool install --force "rormpc-tools @ git+$RORMPC_TOOLS_REPO@$RORMPC_TOOLS_TAG"
-    cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
+    uv tool install --force "rormpc-tools @ git+$RORMPC_TOOLS_REPO@${RORMPC_TOOLS_REF:-$RORMPC_TOOLS_TAG}"
+    if [ -n "${RO_LB_REF:-}" ]; then
+      cargo install --locked --git "$RO_LB_REPO" --rev "$RO_LB_REF"
+    else
+      cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
+    fi
   fi || { echo "building ro-listenbrainz-mpd failed; on Debian/Ubuntu it needs: sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev" >&2; exit 1; }
   local tools; tools="$(uv tool dir --bin)"
   service musicdb 3600 "$tools/musicdb" update
