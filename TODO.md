@@ -40,6 +40,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
       and the rormpc installer smoke test, plus `push` in rormpc's ci.yml; triggers as in "Tests and GitHub
       Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes).
+- [ ] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed
+      pause owned by mpd-player with a wall-clock deadline (works with rormpc closed, across sleep and restarts);
+      at the deadline it resumes only if still paused by this timer; a play by anyone cancels the timer. Remove
+      Mute for… (module, commands, menu items, slider countdown, docs) in the same change; reuse its deadline and
+      generation/error plumbing. Test on a scratch MPD.
+- [ ] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
+      import reviewed, batch accept; the prerequisite `yt-mp3-mb --batch --json` in dotfiles, the `liveplaylist`
+      CLI, the rormpc URL modal and pane ("Live playlists: paste a playlist URL…").
+- [ ] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided
+      2026-10-07): line by line with the stanza as context, labelled "machine translation", the key from the
+      user's rormpc-tools config (never in the repo); the model id from the claude-api reference.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -519,21 +530,21 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch
       MPD, or will you test the fix live with the media keys?
       Checked: both talk to the real MPD on this Mac; AGENTS.md forbids playback tests on the user's MPD.
-- [ ] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)?
+- [x] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)? Decided 2026-10-07: Claude through the Anthropic API (queued in Next).
       Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
-- [ ] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper?
+- [x] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper? Answered 2026-10-07: "not sure; maybe extend the rmpc daemon (rmpcd)? ask the models" (consulting).
       Checked: the plan makes it conditional ("if a helper is still wanted").
 - [ ] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now?
       Checked: needs those machines and a live test of the keys; nothing on this Mac to verify it.
 - [ ] Start the Rust Now Playing port (`rormpc-now-playable`), or keep mpd-now-playable?
       Checked: Sol and MiMo both said keep the Python tool; the plan is complete if it is wanted.
-- [ ] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc
-      pane)?
+- [x] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc
+      pane)? Decided 2026-10-07: yes, the first version (queued in Next).
       Checked: a multi-repository feature with downloads; the plan is agreed but not ordered.
 - [x] CI: push GitHub Actions workflows (rormpc-tools, ro-listenbrainz-mpd, rormpc installer smoke test, `push`
       trigger in ci.yml)? Decided 2026-10-07: yes (queued in Next).
       Checked: they only matter once pushed to GitHub; the local tests are in "Next, in order".
-- [ ] Mute: build "Pause for…"?
+- [x] Mute: build "Pause for…"? Decided 2026-10-07: the user wants no "Mute for…" at all, only "Pause for…" (queued in Next).
       Checked: listed as "maybe later".
 - [ ] Mute: has a queue replaced by Sources… unmuted you in use?
       Checked: only observable in your use; the code path passes through a stop, which unmutes.
