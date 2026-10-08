@@ -40,7 +40,7 @@ use crate::{
 };
 
 mod input_section;
-mod list_section;
+pub mod list_section;
 pub mod modal;
 mod multi_action_section;
 mod select_section;

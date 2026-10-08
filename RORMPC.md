@@ -139,8 +139,30 @@ Missing songs can be fetched from a missing row's menu: "Fetch this song", "Fetc
 "Fetch all N missing…" (confirmed). This queues them in `hits fetch` (rormpc-tools), a verified import queue that
 keeps running when rormpc closes: it downloads one song at a time with pauses, and only an exact match of the
 chart's recording goes into `Hits/<decade>s`; anything else waits for review. The `✗` column then shows the state:
-`…` queued, `↓` fetching, `?` review (menu: Accept / Reject the download), `!` failed (menu: Retry, the details say
-why), `+` arrived (the result reruns to show it as owned); the status line counts them.
+`…` queued, `↓` fetching, `?` review, `!` failed (the details say why), `+` arrived (the result reruns to show it as
+owned); the status line counts them.
+
+"Downloads (N to review)", the first row of the filter column, lists every download in review (`?`) or failed (`!`)
+across all results, not only the one on screen; queued and fetching ones are a count in its status line. The cursor
+stays on the same song when the queue changes. The details put the chart song (expected) beside the staged file
+(downloaded): artist, title and length, a length off by more than the fetch's 5 s highlighted, "uploader ≠ artist"
+when the file was tagged from the YouTube channel (MusicBrainz knew no recording for it), and the reason in plain
+words. Enter (or the menu) decides; the same items are in a `?` / `!` chart row's menu:
+
+- Preview the download / Stop the preview: the staged file in mpv, else ffplay, outside MPD (the Versions pane's
+  player); nothing plays until asked, one preview at a time, and it stops before any decision, when the view is
+  left and when the pane hides.
+- Open on YouTube.
+- Accept as the chart song (`hits fetch accept --as-chart`): the chart's artist and title, the YouTube channel,
+  video title and URL in a comment, never the chart's recording MBID (the file was not identified as it); Hits then
+  matches it by name. Accept with current tags moves it as it is. Either fails, and the item stays in review, when
+  the staged file is gone.
+- Reject the download… (confirmed): the file is deleted and the song is not fetched again; Retry in the song's menu
+  undoes it.
+- Try another candidate (`hits fetch another`): the upload's video id is stored as rejected and the worker takes the
+  next YouTube search result; a failed item offers it too, beside Retry. Retry also skips rejected videos.
+
+Esc or the Downloads row again goes back to the chart; Apply does too.
 
 ```ron
 (name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [

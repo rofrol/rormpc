@@ -5,11 +5,13 @@
 //! replaced. The ranking itself stays in `hits`: the filter
 //! column on the left (h/l moves between it and the table) runs `hits --json` in a background thread on Apply.
 //! Missing songs can be fetched through `hits fetch` (a verified import queue): the menu queues them and starts
-//! the worker, and each missing row shows its state from the queue file.
+//! the worker, and each missing row shows its state from the queue file. "Downloads" in the filter column lists
+//! every download waiting for review or failed, across all results, with the chart song beside what was
+//! downloaded; a preview plays outside MPD (the Versions pane's player) and stops before any decision.
 
 use std::{
     path::PathBuf,
-    process::Command,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
     time::SystemTime,
 };
@@ -19,7 +21,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     prelude::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, TableState, Wrap},
 };
@@ -42,9 +44,10 @@ use crate::{
         modals::{
             confirm_modal::{Action, ConfirmModal},
             input_modal::InputModal,
-            menu::modal::MenuModal,
+            menu::{list_section::ListSection, modal::MenuModal},
         },
         rormpc_actions,
+        rormpc_preview::{self, Preview},
     },
 };
 
@@ -173,6 +176,144 @@ struct FetchItem {
     /// what MusicBrainz identified the download as
     #[serde(default)]
     found: Option<String>,
+    #[serde(default)]
+    year: Option<i32>,
+    #[serde(default)]
+    url: Option<String>,
+    /// how the download was identified (acoustid, mb-url, ...)
+    #[serde(default)]
+    method: Option<String>,
+    #[serde(default)]
+    file: Option<String>,
+    /// the rest comes only from `hits fetch status --json` (the Downloads view)
+    #[serde(default)]
+    channel: Option<String>,
+    #[serde(default)]
+    video_title: Option<String>,
+    /// seconds of the chart recording on `MusicBrainz`
+    #[serde(default)]
+    chart_length: Option<u32>,
+    #[serde(default)]
+    staged: Option<Staged>,
+    /// the staged file's artist is the uploader channel (a download without a `MusicBrainz` match is tagged from
+    /// `YouTube`)
+    #[serde(default)]
+    tags_from_channel: bool,
+}
+
+/// The staged file of an item in review, as `hits fetch status --json` read it.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct Staged {
+    #[serde(default)]
+    exists: bool,
+    #[serde(default)]
+    artist: String,
+    #[serde(default)]
+    title: String,
+    /// measured seconds
+    #[serde(default)]
+    length: Option<u32>,
+}
+
+impl FetchItem {
+    fn in_downloads(&self) -> bool {
+        matches!(self.state.as_str(), "review" | "failed")
+    }
+
+    fn busy(&self) -> bool {
+        matches!(self.state.as_str(), "queued" | "searching" | "downloading" | "verifying")
+    }
+}
+
+/// State shared with the thread that runs `hits fetch status --json` for the Downloads view.
+#[derive(Debug, Default)]
+struct DownloadsJob {
+    running: bool,
+    /// the queue changed during a run: read it once more
+    again: bool,
+    ready: Option<std::result::Result<Vec<FetchItem>, String>>,
+}
+
+/// More than this between the chart recording and the download is highlighted (`hits fetch`'s `DURATION_SLACK`).
+const LENGTH_SLACK: i64 = 5;
+
+fn mmss(s: u32) -> String {
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
+/// The downloaded length with its difference to the chart's ("3:45 (-1 s)"), and whether it is off by more than
+/// the slack the fetch allows.
+fn length_cell(expected: Option<u32>, got: Option<u32>) -> (String, bool) {
+    match (expected, got) {
+        (_, None) => ("?".to_owned(), false),
+        (None, Some(g)) => (mmss(g), false),
+        (Some(e), Some(g)) => {
+            let diff = i64::from(g) - i64::from(e);
+            let text = if diff == 0 { mmss(g) } else { format!("{} ({diff:+} s)", mmss(g)) };
+            (text, diff.abs() > LENGTH_SLACK)
+        }
+    }
+}
+
+/// A few words for the Downloads table's "Why" column.
+fn short_reason(f: &FetchItem) -> &'static str {
+    let text = f.reason.as_deref().or(f.error.as_deref()).unwrap_or_default();
+    match f.state.as_str() {
+        "review" if text.starts_with("no MusicBrainz match") => "no MB match",
+        "review" if text.starts_with("other recording") => "other recording",
+        "review" if text.starts_with("different song") => "different song",
+        "review" => "to review",
+        _ if text.contains("rejected before") => "all rejected",
+        _ if text.starts_with("no YouTube upload") => "no upload fits",
+        _ if text.contains("429") => "YouTube 429",
+        _ => "failed",
+    }
+}
+
+/// Why an item is in review or failed, in plain words.
+fn plain_reason(f: &FetchItem) -> String {
+    let reason = f.reason.as_deref().unwrap_or_default();
+    let error = f.error.as_deref().unwrap_or_default();
+    if f.state == "review" {
+        if reason.starts_with("no MusicBrainz match") {
+            return "MusicBrainz knows no recording for this upload, so its tags came from YouTube (the uploader and \
+                    the video title). Listen to it: if it is the chart song, accept it as the chart song."
+                .to_owned();
+        }
+        if reason.starts_with("other recording") {
+            return "MusicBrainz says this is another recording of the same song (a re-recording, a live or an \
+                    album version), not the one that charted."
+                .to_owned();
+        }
+        if let Some(what) = reason.strip_prefix("different song: ") {
+            return format!("MusicBrainz identifies the upload as a different song: {what}.");
+        }
+        return reason.to_owned();
+    }
+    if error.contains("rejected before") {
+        return format!("Every YouTube candidate was rejected before ({error}).");
+    }
+    if let Some(rest) = error.strip_prefix("no YouTube upload within ") {
+        return format!(
+            "No YouTube upload fits: none within {rest}. Retry later (search results change), or hide the song."
+        );
+    }
+    if error.contains("429") {
+        return "YouTube refused more requests (429): retry in an hour.".to_owned();
+    }
+    format!("The fetch failed: {error}")
+}
+
+/// Open a URL in the default browser, in the background.
+fn open_url(url: &str) {
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    match Command::new(opener).arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+        Ok(mut child) => {
+            status_info!("Opened {url}");
+            std::thread::spawn(move || child.wait()); // reap it
+        }
+        Err(err) => status_error!("{}", crate::shared::dependencies::cannot_run(opener, &err)),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -250,6 +391,16 @@ pub struct HitsPane {
     explorer: Arc<Mutex<Explorer>>,
     fetch: Vec<FetchItem>,
     fetch_mtime: Option<SystemTime>,
+    /// the Downloads view (its row in the filter column): review and failed fetch items instead of the chart rows
+    downloads: bool,
+    dl_items: Vec<FetchItem>,
+    dl_state: DirState<TableState>,
+    /// the queue file's mtime the shown Downloads were read for; `dl_read` false reads them on the next render
+    dl_mtime: Option<SystemTime>,
+    dl_read: bool,
+    dl_job: Arc<Mutex<DownloadsJob>>,
+    dl_error: Option<String>,
+    preview: Arc<Mutex<Preview>>,
     /// the pins file as last read: a genre pinned elsewhere (Queue's "Pin genre…") gets its checkbox on the next render
     pins_mtime: Option<SystemTime>,
     job: Arc<Mutex<Job>>,
@@ -272,6 +423,14 @@ impl HitsPane {
             explorer: Arc::new(Mutex::new(Explorer::default())),
             fetch: Vec::new(),
             fetch_mtime: None,
+            downloads: false,
+            dl_items: Vec::new(),
+            dl_state: DirState::default(),
+            dl_mtime: None,
+            dl_read: false,
+            dl_job: Arc::new(Mutex::new(DownloadsJob::default())),
+            dl_error: None,
+            preview: Arc::new(Mutex::new(Preview::default())),
             pins_mtime: None,
             job: Arc::new(Mutex::new(Job::default())),
             path: PathBuf::from(expand_home(&path)),
@@ -377,7 +536,7 @@ impl HitsPane {
         let path = self.path.to_string_lossy().into_owned();
         let missing = self.rows.iter().filter(|x| x.file.is_none() && !x.hidden).count();
         let item = self.fetch_for(r).cloned();
-        let busy = self.fetch.iter().any(|f| matches!(f.state.as_str(), "queued" | "searching" | "downloading" | "verifying"));
+        let busy = self.fetch.iter().any(FetchItem::busy);
         let pane = self.clone_for_fetch();
         let rank = r.rank;
         menu.list_section(ctx, move |mut section| {
@@ -416,24 +575,12 @@ impl HitsPane {
                         Ok(())
                     });
                 }
-                Some("review") => {
-                    let f = item.clone().expect("review item");
-                    let (a, b) = (pane.clone(), pane.clone());
-                    let (k1, k2) = (f.key.clone(), f.key.clone());
-                    section.add_item("Accept the download into the library", move |ctx| {
-                        a.fetch_decision(ctx, "accept", k1);
-                        Ok(())
-                    });
-                    section.add_item("Reject the download (never again)", move |ctx| {
-                        b.fetch_decision(ctx, "reject", k2);
-                        Ok(())
-                    });
-                }
-                Some("failed" | "rejected") => {
-                    let f = item.clone().expect("failed item");
+                Some("review" | "failed") => pane.decision_items(&mut section, item.as_ref().expect("fetch item")),
+                Some("rejected") => {
+                    let f = item.clone().expect("rejected item");
                     let a = pane.clone();
-                    section.add_item("Retry fetching this song", move |ctx| {
-                        a.fetch_decision(ctx, "retry", f.key.clone());
+                    section.add_item("Retry fetching this song (another upload)", move |ctx| {
+                        a.fetch_decision(ctx, "retry", &[], f.key.clone());
                         Ok(())
                     });
                 }
@@ -452,7 +599,7 @@ impl HitsPane {
 
     /// What the fetch helpers need, cheap to clone into menu callbacks.
     fn clone_for_fetch(&self) -> FetchHandle {
-        FetchHandle { job: Arc::clone(&self.job), command: self.command.clone() }
+        FetchHandle { job: Arc::clone(&self.job), command: self.command.clone(), preview: Arc::clone(&self.preview) }
     }
 
     fn selected(&self) -> Option<&HitsRow> {
@@ -579,7 +726,18 @@ impl HitsPane {
             CommonAction::Up => self.filter_sel = snap(&rows, self.filter_sel.saturating_sub(1), false),
             CommonAction::Top => self.filter_sel = snap(&rows, 0, true),
             CommonAction::Bottom => self.filter_sel = snap(&rows, rows.len() - 1, false),
-            CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => self.apply(ctx),
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => {
+                self.leave_downloads();
+                self.apply(ctx);
+            }
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::Downloads => {
+                if self.downloads {
+                    self.leave_downloads();
+                } else {
+                    self.enter_downloads();
+                }
+                return true;
+            }
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::AddGenre => {
                 self.ask_genre(ctx);
                 return true;
@@ -777,8 +935,10 @@ impl HitsPane {
             .take(apply_idx)
             .skip(self.filter_offset)
             .map(|(i, row)| {
-                let text = filters.line(*row);
-                let label_style = if matches!(
+                let text = if *row == FilterRow::Downloads { self.downloads_label() } else { filters.line(*row) };
+                let label_style = if *row == FilterRow::Downloads && self.downloads {
+                    ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD) // the view is open
+                } else if matches!(
                     row,
                     FilterRow::Heading(_) | FilterRow::Source | FilterRow::Sort | FilterRow::Mode | FilterRow::Apply
                 ) {
@@ -1045,7 +1205,10 @@ impl HitsPane {
                         lines.push(field("From", candidate.clone()));
                     }
                     if f.state == "review" {
-                        lines.push(Line::from(Span::styled("menu: Accept / Reject the fetched file", dim)));
+                        lines.push(Line::from(Span::styled(
+                            "menu: Preview, Accept as the chart song, Reject, … (all of them: Downloads, top left)",
+                            dim,
+                        )));
                     }
                 } else {
                     lines.push(Line::default());
@@ -1086,6 +1249,257 @@ fn open_genre_actions(ctx: &Ctx, explorer: Arc<Mutex<Explorer>>, genre: String, 
 }
 
 impl HitsPane {
+    /// "Downloads (2 to review)", else "Downloads (3 failed)": the filter column's entry, counted over the whole
+    /// queue (every result), not only the rows on screen.
+    fn downloads_label(&self) -> String {
+        let review = self.fetch.iter().filter(|f| f.state == "review").count();
+        let failed = self.fetch.iter().filter(|f| f.state == "failed").count();
+        match (review, failed) {
+            (0, 0) => "Downloads".to_owned(),
+            (0, n) => format!("Downloads ({n} failed)"),
+            (n, _) => format!("Downloads ({n} to review)"),
+        }
+    }
+
+    fn enter_downloads(&mut self) {
+        self.downloads = true;
+        self.dl_read = false; // read the status now, also when the queue did not change
+        self.focus_filters = false;
+    }
+
+    /// Back to the chart; a preview stops with the view.
+    fn leave_downloads(&mut self) {
+        if self.downloads {
+            self.downloads = false;
+            self.preview.lock().expect("preview lock").stop();
+        }
+    }
+
+    /// `hits fetch status --json` in the background when the queue file changed since the list on screen was read
+    /// (it adds the staged file's tags and length, and the chart length). One run at a time; a change during a run
+    /// reads once more after it.
+    fn load_downloads(&mut self, ctx: &Ctx) {
+        if self.dl_read && self.dl_mtime == self.fetch_mtime {
+            return;
+        }
+        self.dl_read = true;
+        self.dl_mtime = self.fetch_mtime;
+        let mut job = self.dl_job.lock().expect("downloads lock");
+        if job.running {
+            job.again = true;
+            return;
+        }
+        job.running = true;
+        drop(job);
+        let (job, command, sender) = (Arc::clone(&self.dl_job), self.command.clone(), ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            loop {
+                let out = Command::new(&command[0]).args(&command[1..]).args(["fetch", "status", "--json"]).output();
+                let result = match out {
+                    Ok(o) if o.status.success() => serde_json::from_slice::<FetchQueue>(&o.stdout)
+                        .map(|q| q.items)
+                        .map_err(|e| format!("hits fetch status: {e}")),
+                    Ok(o) => Err(format!("hits fetch status: {}", last_line(&o.stderr, "failed"))),
+                    Err(err) => Err(crate::shared::dependencies::cannot_run(&command[0], &err)),
+                };
+                let mut j = job.lock().expect("downloads lock");
+                j.ready = Some(result);
+                if !std::mem::take(&mut j.again) {
+                    j.running = false;
+                    break;
+                }
+            }
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+
+    /// Show a fresh status: review first, then failed, each in queue order; the cursor stays on the same song,
+    /// else at the same place.
+    fn set_downloads(&mut self, items: Vec<FetchItem>) {
+        let keep = self.selected_download().map(|f| f.key.clone());
+        let old = self.dl_state.get_selected().unwrap_or(0);
+        let (mut list, failed): (Vec<_>, Vec<_>) =
+            items.into_iter().filter(FetchItem::in_downloads).partition(|f| f.state == "review");
+        list.extend(failed);
+        self.dl_items = list;
+        self.dl_state.set_content_and_viewport_len(self.dl_items.len(), self.state_viewport());
+        let idx = keep
+            .and_then(|k| self.dl_items.iter().position(|f| f.key == k))
+            .unwrap_or_else(|| old.min(self.dl_items.len().saturating_sub(1)));
+        self.dl_state.select((!self.dl_items.is_empty()).then_some(idx), 0);
+    }
+
+    fn selected_download(&self) -> Option<&FetchItem> {
+        self.dl_state.get_selected().and_then(|i| self.dl_items.get(i))
+    }
+
+    fn open_download_menu(&self, ctx: &Ctx) {
+        let Some(f) = self.selected_download().cloned() else { return };
+        let pane = self.clone_for_fetch();
+        let busy = self.fetch.iter().any(FetchItem::busy);
+        let mut menu = MenuModal::new(ctx).list_section(ctx, |mut section| {
+            pane.decision_items(&mut section, &f);
+            Some(section)
+        });
+        if busy {
+            let command = self.command.clone();
+            menu = menu.list_section(ctx, move |section| {
+                Some(section.item("Stop fetching after the current song", move |_| {
+                    let _ = Command::new(&command[0]).args(&command[1..]).args(["fetch", "cancel"]).status();
+                    Ok(())
+                }))
+            });
+        }
+        let menu = menu.list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(())))).build();
+        modal!(ctx, menu);
+    }
+
+    /// The Downloads view: the list where the chart table was, the comparison where its details were.
+    fn render_downloads(&mut self, frame: &mut Frame, main: Rect, details: Rect, ctx: &Ctx) {
+        let [table_area, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(2)]).areas(main);
+        self.table_area = table_area;
+        self.dl_state.set_content_and_viewport_len(self.dl_items.len(), self.state_viewport());
+        let dim = Style::default().add_modifier(Modifier::DIM);
+        let loading = self.dl_job.lock().expect("downloads lock").running;
+        if self.dl_items.is_empty() {
+            let text =
+                if loading { "Reading the fetch queue…" } else { "Nothing waits for review and nothing failed." };
+            frame.render_widget(Paragraph::new(Line::from(Span::styled(format!(" {text}"), dim))), table_area);
+        } else {
+            let rows = self.dl_items.iter().map(|f| {
+                Row::new(vec![
+                    Cell::from(fetch_mark(&f.state)),
+                    Cell::from(f.artist.clone()),
+                    Cell::from(f.title.clone()),
+                    Cell::from(f.year.filter(|y| *y > 0).map(|y| y.to_string()).unwrap_or_default()),
+                    Cell::from(Span::styled(short_reason(f), dim)),
+                ])
+            });
+            let header = Row::new(["", "Artist", "Title", "Year", "Why"]).style(ctx.config.theme.preview_label_style);
+            let table = Table::new(rows, [
+                Constraint::Length(1),
+                Constraint::Percentage(35),
+                Constraint::Percentage(65),
+                Constraint::Length(4),
+                Constraint::Length(15),
+            ])
+            .header(header)
+            .column_spacing(1)
+            .style(ctx.config.as_text_style())
+            .row_highlight_style(ctx.config.theme.current_item_style);
+            frame.render_stateful_widget(table, table_area, self.dl_state.as_render_state_ref());
+        }
+        let count = |states: &[&str]| self.fetch.iter().filter(|f| states.contains(&f.state.as_str())).count();
+        let (queued, fetching) = (count(&["queued"]), count(&["searching", "downloading", "verifying"]));
+        let mut status = format!(" Downloads · {} to review · {} failed", count(&["review"]), count(&["failed"]));
+        if queued + fetching > 0 {
+            status = format!("{status} · {queued} queued, {fetching} fetching");
+        }
+        let status = match &self.dl_error {
+            Some(err) => Span::styled(format!(" {err}"), Style::default().add_modifier(Modifier::BOLD)),
+            None => Span::styled(status, dim),
+        };
+        // a playing preview takes the hint's place, so it is seen however narrow the pane
+        let mut preview = self.preview.lock().expect("preview lock");
+        let hint = if preview.playing() {
+            Span::styled(
+                format!(" ▶ preview: {} · Enter: Stop the preview", preview.what),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::styled(" Enter: preview, accept, reject, another candidate · Esc: back to the chart", dim)
+        };
+        drop(preview);
+        frame.render_widget(Paragraph::new(vec![Line::from(status), Line::from(hint)]), footer);
+        self.render_download_details(frame, details, ctx);
+    }
+
+    /// Expected (the chart) beside downloaded (the staged file): a length off by more than the fetch's slack is
+    /// highlighted, and "uploader ≠ artist" says the tags came from the `YouTube` channel.
+    fn render_download_details(&self, frame: &mut Frame, area: Rect, ctx: &Ctx) {
+        let Some(f) = self.selected_download() else {
+            frame.render_widget(Paragraph::new("No download selected."), area);
+            return;
+        };
+        let key = ctx.config.theme.preview_label_style;
+        let dim = Style::default().add_modifier(Modifier::DIM);
+        let bold = Style::default().add_modifier(Modifier::BOLD);
+        let warn = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        let field =
+            |name: &str, value: String| Line::from(vec![Span::styled(format!("{name}: "), key), Span::raw(value)]);
+        let [head, compare, rest] =
+            Layout::vertical([Constraint::Length(3), Constraint::Length(4), Constraint::Min(0)]).areas(area);
+        let year = f.year.filter(|y| *y > 0).map(|y| format!(" · {y}")).unwrap_or_default();
+        frame.render_widget(
+            Paragraph::new(vec![
+                Line::from(Span::styled(f.title.clone(), bold)),
+                Line::from(format!("{}{year}", f.artist)),
+            ]),
+            head,
+        );
+        let staged = f.staged.clone().filter(|s| s.exists && f.state == "review");
+        let none = || Cell::from(Span::styled("—", dim));
+        let (got_artist, got_title, got_length) = match &staged {
+            Some(s) => {
+                let (length, off) = length_cell(f.chart_length, s.length);
+                let artist_style = if f.tags_from_channel { warn } else { Style::default() };
+                (
+                    Cell::from(Span::styled(s.artist.clone(), artist_style)),
+                    Cell::from(s.title.clone()),
+                    Cell::from(Span::styled(length, if off { warn } else { Style::default() })),
+                )
+            }
+            None => (none(), none(), none()),
+        };
+        let expected_length = f.chart_length.map_or_else(|| "?".to_owned(), mmss);
+        let rows = vec![
+            Row::new(vec![Cell::from("Artist"), Cell::from(f.artist.clone()), got_artist]),
+            Row::new(vec![Cell::from("Title"), Cell::from(f.title.clone()), got_title]),
+            Row::new(vec![Cell::from("Length"), Cell::from(expected_length), got_length]),
+        ];
+        let table = Table::new(rows, [Constraint::Length(6), Constraint::Percentage(50), Constraint::Percentage(50)])
+            .header(Row::new(["", "Expected", "Downloaded"]).style(key))
+            .column_spacing(1)
+            .style(ctx.config.as_text_style());
+        frame.render_widget(table, compare);
+
+        let mut lines = Vec::new();
+        if f.state == "review" && staged.is_none() && f.staged.is_some() {
+            lines.push(Line::from(Span::styled("The staged file is gone: Accept fails; try another candidate.", warn)));
+        }
+        if f.tags_from_channel && staged.is_some() {
+            lines.push(Line::from(Span::styled("uploader ≠ artist: the tags came from the YouTube channel", warn)));
+        }
+        lines.push(Line::default());
+        lines.push(field("Why", plain_reason(f)));
+        if let Some(channel) = f.channel.as_deref().filter(|c| !c.is_empty()) {
+            let video = f.video_title.as_deref().unwrap_or_default();
+            let upload = if video.is_empty() { channel.to_owned() } else { format!("{channel} · {video}") };
+            lines.push(field("Upload", upload));
+        }
+        if let Some(url) = &f.url {
+            lines.push(field("URL", url.clone()));
+        }
+        if let Some(method) = f.method.as_deref().filter(|m| !m.is_empty()) {
+            lines.push(field("Matched by", method.to_owned()));
+        }
+        if let Some(found) = f.found.as_deref().filter(|_| f.state == "review" && !f.tags_from_channel) {
+            lines.push(field("Identified as", found.to_owned()));
+        }
+        if let Some(file) = f.file.as_deref().filter(|_| f.state == "review") {
+            lines.push(Line::from(Span::styled(file.to_owned(), dim)));
+        }
+        lines.push(Line::default());
+        let actions: &[&str] = match (f.state.as_str(), f.url.is_some()) {
+            ("review", _) => &["Preview", "Open on YouTube", "Accept as the chart song", "Accept with current tags",
+                "Reject", "Try another candidate"],
+            (_, true) => &["Open on YouTube", "Try another candidate", "Retry"],
+            (_, false) => &["Retry"],
+        };
+        lines.push(Line::from(Span::styled(format!("Enter: {}", actions.join(" · ")), dim)));
+        frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rest);
+    }
+
     /// " · fetch: 2 queued, 1 review" for the songs of this result that are in the fetch queue.
     fn fetch_summary(&self) -> String {
         let mut counts: Vec<(&str, usize)> = Vec::new();
@@ -1114,6 +1528,7 @@ impl HitsPane {
 struct FetchHandle {
     job: Arc<Mutex<Job>>,
     command: Vec<String>,
+    preview: Arc<Mutex<Preview>>,
 }
 
 impl FetchHandle {
@@ -1124,44 +1539,135 @@ impl FetchHandle {
         let mut args = vec!["fetch".to_owned()];
         args.extend(add);
         std::thread::spawn(move || {
-            let hits = |args: &[String]| Command::new(&command[0]).args(&command[1..]).args(args).output();
             if args.len() > 1 {
-                match hits(&args) {
+                match Command::new(&command[0]).args(&command[1..]).args(&args).output() {
                     Ok(out) if out.status.success() => status_info!("{}", last_line(&out.stdout, "queued")),
                     Ok(out) => return status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
                     Err(err) => return status_error!("{}", crate::shared::dependencies::cannot_run(&command[0], &err)),
                 }
             }
-            match hits(&["fetch".to_owned(), "run".to_owned()]) {
-                Ok(out) if out.status.success() => {
-                    let summary = last_line(&out.stdout, "fetch: nothing to do");
-                    status_info!("{summary}");
-                    if !summary.contains("fetch: 0 new") && summary.starts_with("fetch:") {
-                        job.lock().expect("hits job lock").rerun = true;
+            run_worker(&job, &command);
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+
+    /// One decision on a queued song (`hits fetch VERB [EXTRA] KEY`), with the preview stopped first (accept moves
+    /// the file, reject and another delete it). Then accept reruns `hits`, retry and another start the worker,
+    /// after the decision is written, so the worker finds the item queued.
+    fn fetch_decision(&self, ctx: &Ctx, verb: &'static str, extra: &'static [&'static str], key: String) {
+        self.preview.lock().expect("preview lock").stop();
+        let (job, command, sender) = (Arc::clone(&self.job), self.command.clone(), ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            let out =
+                Command::new(&command[0]).args(&command[1..]).args(["fetch", verb]).args(extra).arg(&key).output();
+            match out {
+                Ok(out) if out.status.success() => match verb {
+                    "accept" => job.lock().expect("hits job lock").rerun = true,
+                    "retry" | "another" => {
+                        let _ = sender.send(AppEvent::RequestRender);
+                        run_worker(&job, &command);
                     }
-                }
-                Ok(out) => status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
+                    _ => {}
+                },
+                Ok(out) => status_error!("hits fetch {verb}: {}", last_line(&out.stderr, "failed")),
                 Err(err) => status_error!("{}", crate::shared::dependencies::cannot_run(&command[0], &err)),
             }
             let _ = sender.send(AppEvent::RequestRender);
         });
     }
 
-    /// accept / reject / retry one queued song, then (retry) start the worker or (accept) rerun `hits`.
-    fn fetch_decision(&self, ctx: &Ctx, verb: &'static str, key: String) {
-        let (job, command, sender) = (Arc::clone(&self.job), self.command.clone(), ctx.app_event_sender.clone());
-        std::thread::spawn(move || {
-            let ok = Command::new(&command[0]).args(&command[1..]).args(["fetch", verb, &key]).status().is_ok_and(|s| s.success());
-            if !ok {
-                status_error!("hits fetch {verb} failed");
-            } else if verb == "accept" {
+    /// The decisions on a download in review or a failed one: the chart row's menu and the Downloads view share
+    /// them. Preview / Stop play the staged file outside MPD; nothing plays until asked.
+    fn decision_items(&self, section: &mut ListSection, f: &FetchItem) {
+        let staged = f.file.clone().filter(|file| f.state == "review" && std::path::Path::new(file).is_file());
+        if let Some(file) = staged {
+            let (preview, what) = (Arc::clone(&self.preview), f.title.clone());
+            section.add_item("Preview the download", move |_| {
+                rormpc_preview::start(&preview, std::path::Path::new(&file), 0, format!("{what} (download)"));
+                Ok(())
+            });
+            if self.preview.lock().expect("preview lock").playing() {
+                let preview = Arc::clone(&self.preview);
+                section.add_item("Stop the preview", move |_| {
+                    preview.lock().expect("preview lock").stop();
+                    Ok(())
+                });
+            }
+        }
+        if let Some(url) = f.url.clone() {
+            section.add_item("Open on YouTube", move |_| {
+                open_url(&url);
+                Ok(())
+            });
+        }
+        if f.state == "review" {
+            let (a, b, k1, k2) = (self.clone(), self.clone(), f.key.clone(), f.key.clone());
+            section.add_item("Accept as the chart song (chart artist and title)", move |ctx| {
+                a.fetch_decision(ctx, "accept", &["--as-chart"], k1);
+                Ok(())
+            });
+            section.add_item("Accept with current tags", move |ctx| {
+                b.fetch_decision(ctx, "accept", &[], k2);
+                Ok(())
+            });
+            let (c, key, title) = (self.clone(), f.key.clone(), f.title.clone());
+            section.add_item("Reject the download…", move |ctx| {
+                c.confirm_reject(ctx, key, &title);
+                Ok(())
+            });
+        }
+        if f.url.is_some() {
+            let (a, key) = (self.clone(), f.key.clone());
+            section.add_item("Try another candidate (skip this upload)", move |ctx| {
+                a.fetch_decision(ctx, "another", &[], key);
+                Ok(())
+            });
+        }
+        if f.state == "failed" {
+            let (a, key) = (self.clone(), f.key.clone());
+            section.add_item("Retry fetching this song", move |ctx| {
+                a.fetch_decision(ctx, "retry", &[], key);
+                Ok(())
+            });
+        }
+    }
+
+    /// Reject is durable (the song is never fetched again), so it asks first and says how to undo it.
+    fn confirm_reject(&self, ctx: &Ctx, key: String, title: &str) {
+        let message = vec![format!(
+            "Reject the download of '{title}'?\n\nThe staged file is deleted and the song is not fetched again. \
+             Retry (the song's menu in Hits) undoes it and fetches another upload, skipping this one."
+        )];
+        let pane = self.clone();
+        let go = move |ctx: &Ctx| -> Result<()> {
+            pane.fetch_decision(ctx, "reject", &[], key.clone());
+            Ok(())
+        };
+        modal!(
+            ctx,
+            ConfirmModal::builder()
+                .ctx(ctx)
+                .message(message)
+                .action(Action::CustomButtons {
+                    buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Reject", Box::new(go))],
+                })
+                .build()
+        );
+    }
+}
+
+/// `hits fetch run` until the queue is done (a second worker exits at once); reruns `hits` when songs arrived.
+fn run_worker(job: &Mutex<Job>, command: &[String]) {
+    match Command::new(&command[0]).args(&command[1..]).args(["fetch", "run"]).output() {
+        Ok(out) if out.status.success() => {
+            let summary = last_line(&out.stdout, "fetch: nothing to do");
+            status_info!("{summary}");
+            if !summary.contains("fetch: 0 new") && summary.starts_with("fetch:") {
                 job.lock().expect("hits job lock").rerun = true;
             }
-            let _ = sender.send(AppEvent::RequestRender);
-        });
-        if verb == "retry" {
-            self.start_fetch(ctx, Vec::new());
         }
+        Ok(out) => status_error!("hits fetch: {}", last_line(&out.stderr, "failed")),
+        Err(err) => status_error!("{}", crate::shared::dependencies::cannot_run(&command[0], &err)),
     }
 }
 
@@ -1173,6 +1679,12 @@ fn expand_home(path: &str) -> String {
     match (path.strip_prefix("~/"), std::env::var("HOME")) {
         (Some(rest), Ok(home)) => format!("{home}/{rest}"),
         _ => path.to_owned(),
+    }
+}
+
+impl Drop for HitsPane {
+    fn drop(&mut self) {
+        self.preview.lock().expect("preview lock").stop(); // never leave a player running after rormpc quits
     }
 }
 
@@ -1225,7 +1737,27 @@ impl Pane for HitsPane {
         self.filter_area = list_area;
         self.apply_area = apply_area;
         self.scroll_filters(0); // the pane may have been resized
+        self.reload_fetch();
         self.render_filters(frame, list_area, ctx);
+        if self.downloads {
+            self.load_downloads(ctx);
+            let ready = self.dl_job.lock().expect("downloads lock").ready.take();
+            match ready {
+                Some(Ok(items)) => {
+                    self.dl_error = None;
+                    self.set_downloads(items);
+                }
+                Some(Err(err)) => self.dl_error = Some(err),
+                None => {}
+            }
+            // the comparison needs room: the details take more of the width than the chart's
+            let [_, main, details] =
+                Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(40)])
+                    .spacing(2)
+                    .areas(area);
+            self.render_downloads(frame, main, details, ctx);
+            return Ok(());
+        }
         let searching = self.typing || !self.query.is_empty();
         let [search_area, table_area, footer] = Layout::vertical([
             Constraint::Length(u16::from(searching)),
@@ -1245,7 +1777,6 @@ impl Pane for HitsPane {
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
 
-        self.reload_fetch();
         self.reload_pins();
         let dim = Style::default().add_modifier(Modifier::DIM);
         // the source being played, when it is a Hits snapshot: rows outside it and rows heard in this round
@@ -1359,6 +1890,11 @@ impl Pane for HitsPane {
         Ok(())
     }
 
+    fn on_hide(&mut self, _ctx: &Ctx) -> Result<()> {
+        self.preview.lock().expect("preview lock").stop(); // a preview never outlives the view it was started in
+        Ok(())
+    }
+
     fn on_event(&mut self, event: &mut UiEvent, is_visible: bool, ctx: &Ctx) -> Result<()> {
         if matches!(event, UiEvent::Database | UiEvent::Reconnected) && is_visible {
             self.loaded_mtime = None;
@@ -1380,6 +1916,7 @@ impl Pane for HitsPane {
             if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick) {
                 self.focus_filters = true;
                 self.filter_sel = self.filter_rows().len().saturating_sub(1);
+                self.leave_downloads();
                 self.apply(ctx);
                 ctx.render()?;
             }
@@ -1422,6 +1959,24 @@ impl Pane for HitsPane {
             return Ok(());
         }
         let row = usize::from(event.y.saturating_sub(self.table_area.y + 1)); // +1: header row
+        if self.downloads {
+            match event.kind {
+                MouseEventKind::LeftClick | MouseEventKind::DoubleClick => {
+                    self.focus_filters = false;
+                    if let Some(idx) = self.dl_state.get_at_rendered_row(row) {
+                        self.dl_state.select(Some(idx), ctx.config.scrolloff);
+                        if matches!(event.kind, MouseEventKind::DoubleClick) {
+                            self.open_download_menu(ctx);
+                        }
+                    }
+                }
+                MouseEventKind::ScrollUp => self.dl_state.scroll_up(ctx.config.scroll_amount, ctx.config.scrolloff),
+                MouseEventKind::ScrollDown => self.dl_state.scroll_down(ctx.config.scroll_amount, ctx.config.scrolloff),
+                _ => return Ok(()),
+            }
+            ctx.render()?;
+            return Ok(());
+        }
         let on_like = event.x == self.like_x() && event.y > self.table_area.y;
         if matches!(event.kind, MouseEventKind::Moved) {
             let hover = if on_like { self.state.get_at_rendered_row(row) } else { None };
@@ -1487,7 +2042,7 @@ impl Pane for HitsPane {
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
         if let Some(action) = event.claim_queue() {
             if matches!(action, QueueActions::JumpToCurrent) {
-                if self.jump_to_current(ctx) {
+                if !self.downloads && self.jump_to_current(ctx) {
                     ctx.render()?;
                 }
                 return Ok(()); // recognized even without a match: never fall through to playback
@@ -1507,6 +2062,28 @@ impl Pane for HitsPane {
             return Ok(());
         }
         let (scrolloff, wrap) = (ctx.config.scrolloff, ctx.config.wrap_navigation);
+        if self.downloads {
+            match action {
+                CommonAction::Left => self.focus_filters = true,
+                // Enter never plays here: it opens the decisions, Preview among them
+                CommonAction::ContextMenu | CommonAction::Confirm => self.open_download_menu(ctx),
+                CommonAction::Down => self.dl_state.next(scrolloff, wrap),
+                CommonAction::Up => self.dl_state.prev(scrolloff, wrap),
+                CommonAction::DownHalf => self.dl_state.next_half_viewport(scrolloff),
+                CommonAction::UpHalf => self.dl_state.prev_half_viewport(scrolloff),
+                CommonAction::PageDown => self.dl_state.next_viewport(scrolloff),
+                CommonAction::PageUp => self.dl_state.prev_viewport(scrolloff),
+                CommonAction::Top => self.dl_state.first(),
+                CommonAction::Bottom => self.dl_state.last(),
+                CommonAction::Close => self.leave_downloads(),
+                _ => {
+                    event.abandon();
+                    return Ok(());
+                }
+            }
+            ctx.render()?;
+            return Ok(());
+        }
         match action {
             CommonAction::Left => self.focus_filters = true,
             CommonAction::ContextMenu => self.open_context_menu(ctx),
@@ -1563,6 +2140,8 @@ fn snap(rows: &[FilterRow], i: usize, forward: bool) -> usize {
 enum FilterRow {
     /// group title on its own line; the cursor skips it
     Heading(&'static str),
+    /// the Downloads view: every fetch item in review or failed (its label counts them, see `downloads_label`)
+    Downloads,
     Source,
     Sort,
     Mode,
@@ -1652,7 +2231,7 @@ impl Default for Filters {
 
 impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
-        let mut rows = vec![FilterRow::Source];
+        let mut rows = vec![FilterRow::Downloads, FilterRow::Source];
         if matches!(self.source, Source::Likes | Source::Library | Source::Playlists) {
             rows.push(FilterRow::Sort);
         }
@@ -1885,6 +2464,7 @@ impl Filters {
     fn line(&self, row: FilterRow) -> String {
         let check = |on: bool| if on { "[x]" } else { "[ ]" };
         match row {
+            FilterRow::Downloads => "Downloads".to_owned(), // the pane draws it with its counts
             FilterRow::Source => format!("Source: ‹{}›", self.source.label()),
             FilterRow::Sort => format!("Sort:   {}", if self.rediscover { "‹rediscover›" } else { "‹by plays›" }),
             // my charts filter the years I listened, the other sources the songs' release years
@@ -1936,7 +2516,8 @@ impl Filters {
         self.enabled(row)
             && matches!(
                 row,
-                FilterRow::ClearGenres
+                FilterRow::Downloads
+                    | FilterRow::ClearGenres
                     | FilterRow::ClearArtists
                     | FilterRow::AddGenre
                     | FilterRow::Explore
@@ -1965,7 +2546,7 @@ impl Filters {
             FilterRow::ClearArtists => {}
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
-            FilterRow::Heading(_) | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
+            FilterRow::Heading(_) | FilterRow::Downloads | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
         }
     }
 
@@ -2223,6 +2804,78 @@ mod tests {
         let mut cleared = back;
         cleared.toggle(FilterRow::ClearArtists);
         assert!(cleared.artists.is_empty() && !cleared.args("x").iter().any(|a| a.starts_with("--artist")));
+    }
+
+    fn item(key: &str, state: &str) -> FetchItem {
+        serde_json::from_value(serde_json::json!({
+            "key": key, "artist": "Captain & Tennille", "title": "Love Will Keep Us Together", "year": 1975,
+            "state": state, "reason": "no MusicBrainz match", "url": "https://www.youtube.com/watch?v=vid1",
+            "file": "/staging/x.mp3", "channel": "some uploader", "video_title": "a video", "chart_length": 226,
+            "staged": {"exists": true, "artist": "some uploader", "title": "a video", "length": 225, "comment": ""},
+            "tags_from_channel": true, "rejected_ids": ["old"],
+        }))
+        .expect("a fetch item")
+    }
+
+    #[test]
+    fn length_difference_beyond_the_fetch_slack_is_highlighted() {
+        assert_eq!(length_cell(Some(226), Some(225)), ("3:45 (-1 s)".to_owned(), false));
+        assert_eq!(length_cell(Some(213), Some(248)), ("4:08 (+35 s)".to_owned(), true));
+        assert_eq!(length_cell(Some(268), Some(268)), ("4:28".to_owned(), false));
+        assert_eq!(length_cell(None, Some(10)), ("0:10".to_owned(), false));
+        assert_eq!(length_cell(Some(10), None), ("?".to_owned(), false));
+    }
+
+    #[test]
+    fn reasons_in_plain_words() {
+        let mut f = item("k", "review");
+        assert_eq!(short_reason(&f), "no MB match");
+        assert!(plain_reason(&f).contains("tags came from YouTube"));
+        f.reason = Some("different song: ABBA - Waterloo".to_owned());
+        assert_eq!(short_reason(&f), "different song");
+        assert!(plain_reason(&f).ends_with("a different song: ABBA - Waterloo."));
+        f.state = "failed".to_owned();
+        f.reason = None;
+        f.error = Some("no other YouTube candidate: all 3 were rejected before".to_owned());
+        assert_eq!(short_reason(&f), "all rejected");
+        f.error = Some("no YouTube upload within 5 s of the chart recording (219 s) without live words".to_owned());
+        assert_eq!(short_reason(&f), "no upload fits");
+        assert!(plain_reason(&f).starts_with("No YouTube upload fits: none within 5 s of the chart recording (219 s)"));
+    }
+
+    #[test]
+    fn downloads_list_review_then_failed_and_keep_the_cursor_by_key() {
+        let mut pane = pane();
+        let all = |order: &[(&str, &str)]| order.iter().map(|(k, s)| item(k, s)).collect::<Vec<_>>();
+        pane.set_downloads(all(&[("a", "failed"), ("b", "review"), ("c", "ok"), ("d", "review"), ("e", "rejected")]));
+        let keys: Vec<&str> = pane.dl_items.iter().map(|f| f.key.as_str()).collect();
+        assert_eq!(keys, ["b", "d", "a"]);
+        pane.dl_state.select(Some(1), 0); // d
+        pane.set_downloads(all(&[("x", "review"), ("a", "failed"), ("b", "review"), ("d", "review")]));
+        assert_eq!(pane.selected_download().map(|f| f.key.as_str()), Some("d"), "the same song after a reload");
+        pane.set_downloads(all(&[("x", "review"), ("a", "failed")]));
+        assert_eq!(pane.dl_state.get_selected(), Some(1), "d is gone: the same place, clamped");
+        pane.set_downloads(Vec::new());
+        assert_eq!(pane.selected_download().map(|f| f.key.clone()), None);
+    }
+
+    #[rstest]
+    fn downloads_entry_counts_the_whole_queue_and_leaving_it_stops_the_view(ctx: Ctx) {
+        let mut pane = pane();
+        assert_eq!(pane.downloads_label(), "Downloads");
+        pane.fetch = vec![item("a", "failed")];
+        assert_eq!(pane.downloads_label(), "Downloads (1 failed)");
+        pane.fetch.extend([item("b", "review"), item("c", "review"), item("d", "queued")]);
+        assert_eq!(pane.downloads_label(), "Downloads (2 to review)");
+        let f = Filters::default();
+        assert_eq!(f.rows()[0], FilterRow::Downloads);
+        assert!(f.hoverable(FilterRow::Downloads));
+        pane.filters = Some(f);
+        pane.filter_sel = 0;
+        assert!(pane.filter_action(&CommonAction::Confirm, &ctx));
+        assert!(pane.downloads && !pane.focus_filters && !pane.dl_read);
+        pane.leave_downloads();
+        assert!(!pane.downloads);
     }
 
     #[test]
