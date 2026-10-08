@@ -143,13 +143,24 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       log ~/.local/state/media-keys/media-keys.log), 8b466bb (Karabiner rule), 268c9c5 (Hammerspoon override
       removed); rormpc 6c430c6 (RORMPC.md). Verified with a real F7 on 2026-10-07 18:40: `shuffle prev` sent, mpd-player
       went back to the song that really played before, recorded as "back" (no skip), prev.jsonl "confirmed".
-- [ ] Asked 2026-10-08: "can I see it in rormpc to decide? ask the models" (in Polish: "i mogę to jakoś zobaczyć
+- [x] Asked 2026-10-08: "can I see it in rormpc to decide? ask the models" (in Polish: "i mogę to jakoś zobaczyć
       w rormpc, żeby zdecydować? pytaj modeli"), about the 2 top 1% downloads waiting in `hits fetch` review
       (Love Will Keep Us Together, Shadow Dancing; reason "no MusicBrainz match"). Facts: the Hits pane marks such
       rows `?` in the `✗` column, its menu has Accept / Reject the download, the details say why; the row is only
       visible in a Hits result that contains it (Billboard US, its year), and there is no preview of the staged
       file. Consult the models (consult skill) on how to review fetch items in rormpc (e.g. a list of everything in
       review across results, listening to the staged file before deciding), record the outcome here.
+      Consulted 2026-10-08 by a worker (GPT-6.1 Sol, MiMo, round 20261008-024751-c31f); both agreed on the first
+      points. Verified in the code: a "no MusicBrainz match" file is tagged from YouTube (artist = the uploader
+      channel), and `hits fetch accept` moves it as is, so the chart row stays missing and the library gains a
+      song by the channel; `retry` would download the same top video again. Act on: "Accept as the chart song"
+      (the chart's artist and title, the YouTube source in a comment, never the chart's MBID) beside "Accept with
+      current tags"; a "Downloads (N to review)" list in the Hits filter column for all review and failed items;
+      details with expected vs downloaded (length difference highlighted, channel · video title, reason in plain
+      words); a preview outside MPD reusing the Versions player (stopped before Accept/Reject); "Try another
+      candidate" skipping rejected video ids; "Open on YouTube". Consider: a tag edit while staged; accept failing
+      when the staged file is gone. Today the two items can be heard with `mpv` on the staged files in
+      ~/.local/state/rormpc-tools/fetch/staging/ and are best not accepted as they are.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -632,6 +643,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
+
+- [ ] Review fetch downloads in rormpc (from the 2026-10-08 consultation): `hits fetch accept --as-chart KEY`
+      (chart artist/title, YouTube source in a comment, no MBID; accept fails on a missing staged file; retry skips
+      rejected video ids) in rormpc-tools; in the Hits pane a "Downloads (N to review)" list, expected vs
+      downloaded details, Preview / Stop, Open on YouTube, Accept as the chart song, Accept with current tags,
+      Reject (durable, confirmed), Try another candidate.
 
 ## Needs a decision
 
