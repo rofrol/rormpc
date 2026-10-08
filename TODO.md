@@ -161,12 +161,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       candidate" skipping rejected video ids; "Open on YouTube". Consider: a tag edit while staged; accept failing
       when the staged file is gone. Today the two items can be heard with `mpv` on the staged files in
       ~/.local/state/rormpc-tools/fetch/staging/ and are best not accepted as they are.
-- [ ] Review fetch downloads in rormpc (approved 2026-10-08, the whole design from the consultation): `hits fetch accept --as-chart KEY`
+- [x] Review fetch downloads in rormpc (approved 2026-10-08, the whole design from the consultation): `hits fetch accept --as-chart KEY`
       (chart artist/title, YouTube source in a comment, no MBID; accept fails on a missing staged file; retry skips
       rejected video ids) in rormpc-tools; in the Hits pane a "Downloads (N to review)" list, expected vs
       downloaded details, Preview / Stop, Open on YouTube, Accept as the chart song, Accept with current tags,
       Reject (durable, confirmed), Try another candidate.
 
+      Done in rormpc-tools 609d8dc, rormpc c1db024 (worker): `hits fetch accept --as-chart`, `hits fetch another`, rejected
+      video ids skipped, accept fails on a missing file; Hits "Downloads (N to review)" first in the filter column,
+      expected vs downloaded details, a shared preview player (rormpc_preview.rs, also used by Versions), and a
+      retry race fixed (the worker starts only after the decision is written). Not released yet.
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two
