@@ -171,7 +171,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       video ids skipped, accept fails on a missing file; Hits "Downloads (N to review)" first in the filter column,
       expected vs downloaded details, a shared preview player (rormpc_preview.rs, also used by Versions), and a
       retry race fixed (the worker starts only after the decision is written). Not released yet.
-- [ ] Release rormpc-tools v0.2.37 (Downloads review) and install rormpc (decided 2026-10-08: now).
+- [x] Release rormpc-tools v0.2.37 (Downloads review) and install rormpc (decided 2026-10-08: now).
+      Done: v0.2.37 pushed and installed, rormpc 059a876 installed.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
