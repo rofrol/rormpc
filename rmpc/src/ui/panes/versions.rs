@@ -11,7 +11,7 @@
 
 use std::{
     path::PathBuf,
-    process::{Child, Command, Stdio},
+    process::Command,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -49,6 +49,7 @@ use crate::{
             menu::modal::MenuModal,
         },
         rormpc_filter::{binding, find},
+        rormpc_preview::{self, Preview},
     },
 };
 
@@ -217,36 +218,6 @@ struct Job {
     reload: bool,
 }
 
-/// The preview player: its process, file and start.
-#[derive(Debug, Default)]
-struct Preview {
-    child: Option<Child>,
-    what: String,
-}
-
-impl Preview {
-    fn stop(&mut self) {
-        if let Some(mut c) = self.child.take() {
-            let _ = c.kill();
-            let _ = c.wait();
-        }
-        self.what.clear();
-    }
-
-    /// Still playing? Clears itself when the player has ended.
-    fn playing(&mut self) -> bool {
-        match self.child.as_mut().map(Child::try_wait) {
-            Some(Ok(None)) => true,
-            Some(_) => {
-                self.child = None;
-                self.what.clear();
-                false
-            }
-            None => false,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct VersionsPane {
     report: Report,
@@ -325,21 +296,6 @@ fn config_music_dir(text: &str) -> Option<String> {
         let (k, v) = l.split_once('=')?;
         (k.trim() == "music_dir").then(|| v.trim().trim_matches('"').to_owned())
     })
-}
-
-/// The player command for a preview: mpv, else ffplay; none if neither is installed.
-fn player_command(path: &std::path::Path, start: u32) -> Option<Command> {
-    if which::which("mpv").is_ok() {
-        let mut c = Command::new("mpv");
-        c.args(["--no-video", "--really-quiet", &format!("--start={start}")]).arg(path);
-        return Some(c);
-    }
-    if which::which("ffplay").is_ok() {
-        let mut c = Command::new("ffplay");
-        c.args(["-nodisp", "-autoexit", "-loglevel", "quiet", "-ss", &start.to_string()]).arg(path);
-        return Some(c);
-    }
-    None
 }
 
 fn mmss(s: u64) -> String {
@@ -1032,19 +988,7 @@ impl VersionsPane {
 
 /// Play `dir/file` from `start` in the preview player, replacing a running preview.
 fn start_preview(preview: &Mutex<Preview>, dir: &std::path::Path, file: &str, start: u32) {
-    let mut p = preview.lock().expect("preview lock");
-    p.stop();
-    let Some(mut cmd) = player_command(&dir.join(file), start) else {
-        status_error!("preview needs mpv or ffplay");
-        return;
-    };
-    match cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
-        Ok(child) => {
-            p.child = Some(child);
-            p.what = format!("{} from {}", base(file), mmss(start.into()));
-        }
-        Err(err) => status_error!("preview: {err}"),
-    }
+    rormpc_preview::start(preview, &dir.join(file), start, format!("{} from {}", base(file), mmss(start.into())));
 }
 
 /// "Delete this file…" first asks what the file is. A copy of another file in the group is merged into it
