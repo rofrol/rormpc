@@ -141,6 +141,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       log ~/.local/state/media-keys/media-keys.log), 8b466bb (Karabiner rule), 268c9c5 (Hammerspoon override
       removed); rormpc 6c430c6 (RORMPC.md). Verified with a real F7 on 2026-10-07 18:40: `shuffle prev` sent, mpd-player
       went back to the song that really played before, recorded as "back" (no skip), prev.jsonl "confirmed".
+- [ ] Asked 2026-10-08: "can I see it in rormpc to decide? ask the models" (in Polish: "i mogę to jakoś zobaczyć
+      w rormpc, żeby zdecydować? pytaj modeli"), about the 2 top 1% downloads waiting in `hits fetch` review
+      (Love Will Keep Us Together, Shadow Dancing; reason "no MusicBrainz match"). Facts: the Hits pane marks such
+      rows `?` in the `✗` column, its menu has Accept / Reject the download, the details say why; the row is only
+      visible in a Hits result that contains it (Billboard US, its year), and there is no preview of the staged
+      file. Consult the models (consult skill) on how to review fetch items in rormpc (e.g. a list of everything in
+      review across results, listening to the staged file before deciding), record the outcome here.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
