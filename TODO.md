@@ -130,6 +130,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       gets `log_file "~/.local/state/mpd/log"` and `log_level "verbose"` (backup mpd.conf.bak-2026-10-07; the log
       is not trimmed: turn it down after the investigation). Takes effect after the user restarts Hammerspoon and
       MPD (`brew services restart mpd`).
+      Reverted 2026-10-08 (the user agreed): the cause was found (Karabiner), so mpd.conf was restored from the
+      backup before MPD ever restarted with verbose logging.
 - [x] Media keys through Karabiner, not Hammerspoon (found 2026-10-07: Hammerspoon's systemDefined tap never sees
       the MacBook's F7/F8/F9: Karabiner maps them to consumer keys from its virtual HID device, which go straight
       to Now Playing, so Previous went mpd-now-playable → MPD `previous` and counted a skip; the Input Monitoring
