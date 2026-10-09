@@ -702,6 +702,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
       a cycle check.
 
+- [ ] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
+      executable, and a log line from it (decided 2026-10-09; a Type=simple unit is "active" with a missing binary).
+- [ ] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
+      fake API URL is used for ListenBrainz (decided 2026-10-09); adjust the smoke test's musicdb step if its
+      expected exit changes.
+- [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+      `status` and dependency hint (decided 2026-10-09).
+
 ## Proposed
 
 ## Needs a decision
@@ -812,15 +820,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, all five phases in order | only phase 1 (± set chips, Rank by, Years of in Hits) first | not now
       Checked: all 12 open choices are decided (2026-10-09); every phase ships on its own.
       Decided by the user 2026-10-09: yes, all five phases in order (queued in Next).
-- [ ] Installer smoke test: make "Units are enabled and active" prove the programs run (a Type=simple unit is
+- [x] Installer smoke test: make "Units are enabled and active" prove the programs run (a Type=simple unit is
       "active" even when its binary is missing; the first VM run passed it without rormpc-tools)?
       Options: yes, check each unit's MainPID/exec and a log line | leave it
       Checked: reported by the smoke-fix worker 2026-10-09; the later steps (listen, status) catch some of it.
-- [ ] rormpc-tools: `musicdb update` ignores the scrobbler config's `api_url` and calls the real ListenBrainz (the
+      Decided by the user 2026-10-09: yes, check each unit's MainPID/exec and a log line (queued in Next).
+- [x] rormpc-tools: `musicdb update` ignores the scrobbler config's `api_url` and calls the real ListenBrainz (the
       smoke test's fake token gets "Token invalid", exit 1); make it use the same API URL?
       Options: yes, read api_url like the scrobbler | leave it, the test expects exit 1
       Checked: reported by the smoke-fix worker 2026-10-09.
-- [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+      Decided by the user 2026-10-09: yes, read api_url like the scrobbler (queued in Next).
+- [x] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
       `status` / dependency hint?
       Options: yes, both | only the installer hint | leave it
       Checked: reported by the smoke-fix worker 2026-10-09 (FileNotFoundError: 'ffmpeg' in a fresh VM).
+      Decided by the user 2026-10-09: yes, both (queued in Next).
