@@ -381,6 +381,18 @@ impl QueuePane {
                     crate::ui::rormpc_genres::open_pin_menu_for_file(ctx, genre_file, genre_what);
                     Ok(())
                 });
+                if let Some(song) = self.queue.selected().cloned() {
+                    use crate::ui::rormpc_exceptions::{Kind, key_hint, open_for_queue_song};
+                    let pin_song = song.clone();
+                    section.add_item(format!("Pin in Hits results…{}", key_hint(ctx, Kind::Pin)), move |ctx| {
+                        open_for_queue_song(ctx, Kind::Pin, &pin_song);
+                        Ok(())
+                    });
+                    section.add_item(format!("Exclude from Hits results…{}", key_hint(ctx, Kind::Exclude)), move |ctx| {
+                        open_for_queue_song(ctx, Kind::Exclude, &song);
+                        Ok(())
+                    });
+                }
                 let lyrics_file = file.clone();
                 section.add_item("Choose lyrics…", move |ctx| {
                     crate::ui::rormpc_lyrics::open_chooser(ctx, lyrics_file);
@@ -1197,6 +1209,19 @@ impl Pane for QueuePane {
                 QueueActions::TogglePlanView => {} // handled before either Queue view claims input
                 QueueActions::Find => self.start_find(ctx),
                 QueueActions::FindVersions => self.find_versions(ctx),
+                // rormpc: an exception to the Hits rules; the queue itself does not change
+                QueueActions::PinSong | QueueActions::ExcludeSong => {
+                    let kind = if matches!(action, QueueActions::PinSong) {
+                        crate::ui::rormpc_exceptions::Kind::Pin
+                    } else {
+                        crate::ui::rormpc_exceptions::Kind::Exclude
+                    };
+                    if let Some(song) = self.queue.selected() {
+                        crate::ui::rormpc_exceptions::open_for_queue_song(ctx, kind, song);
+                    } else {
+                        status_error!("No song selected");
+                    }
+                }
                 QueueActions::JumpToCurrent => {
                     if let Some((idx, _)) = ctx.status.songid.and_then(|id| {
                         self.queue.items.iter().enumerate().find(|(_, song)| song.id == id)
@@ -1926,7 +1951,8 @@ impl QueuePane {
                     self.end_find(ctx, false);
                     return Ok(false); // the usual jump, now on the whole queue
                 }
-                QueueActions::FindVersions => return Ok(false), // by file: the filtered row is fine
+                // by file: the filtered row is fine
+                QueueActions::FindVersions | QueueActions::PinSong | QueueActions::ExcludeSong => return Ok(false),
                 _ => {
                     event.claim_queue();
                     status_warn!("Not while the queue is filtered: {close} clears the filter");

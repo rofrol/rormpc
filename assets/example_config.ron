@@ -138,6 +138,8 @@
             "C":          JumpToCurrent,
             "o":          TogglePlanView,
             "V":          FindVersions,
+            "+":          PinSong,
+            "-":          ExcludeSong,
             "L":          SelectAlbum(),
             "X":          Shuffle,
         },
