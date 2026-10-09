@@ -47,6 +47,7 @@ use crate::{
             menu::{list_section::ListSection, modal::MenuModal},
         },
         rormpc_actions,
+        rormpc_exceptions::{self, Kind, RowException},
         rormpc_hits_rules::{self, RankBy, SETS, YearsOf},
         rormpc_preview::{self, Preview},
     },
@@ -76,6 +77,11 @@ struct HitsCounts {
     selected: u32,
     /// songs the set chips leave before the period, genre, artist, Top % and owned filters
     candidates: u32,
+    /// rows shown because of a pin, and rows an exclusion took out (`hits` with exceptions)
+    #[serde(default)]
+    pinned: u32,
+    #[serde(default)]
+    excluded: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -98,6 +104,9 @@ struct HitsArgs {
     owned: bool,
     #[serde(default)]
     show_hidden: bool,
+    /// excluded songs kept in the result, marked (`--show-excluded`, the old `--show-hidden`)
+    #[serde(default)]
+    show_excluded: bool,
     /// the old shorthand (files before the set chips): mapped onto sets, rank and years of
     #[serde(default)]
     source: Option<String>,
@@ -113,6 +122,7 @@ struct HitsArgs {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // flags of the JSON row
 struct HitsRow {
     rank: u32,
     pct: f64,
@@ -130,9 +140,20 @@ struct HitsRow {
     plays: u32,
     #[serde(default)]
     mbid: Option<String>,
-    /// hidden with `hits hide`; present only when the run used --show-hidden
+    /// hidden with `hits hide` (an exclusion scoped to Billboard); present only with --show-excluded
     #[serde(default)]
     hidden: bool,
+    /// an applicable pin ✚ / exclusion ⊘ (exceptions to the rules, `hits except`)
+    #[serde(default)]
+    pinned: bool,
+    #[serde(default)]
+    excluded: bool,
+    /// every exception on the song, applying or not, for the details
+    #[serde(default)]
+    exceptions: Vec<RowException>,
+    /// the chart song's key (`main artist|title`): what an exclusion of a missing row is keyed by
+    #[serde(default)]
+    chart_key: Option<String>,
     /// why a recommendation is there ("similar to …")
     #[serde(default)]
     reason: Option<String>,
@@ -568,7 +589,7 @@ impl HitsPane {
     /// Menu section for a missing row: fetch it (or more), or decide on what the queue found.
     fn fetch_section<'m>(&self, ctx: &Ctx, menu: MenuModal<'m>, r: &HitsRow) -> MenuModal<'m> {
         let path = self.path.to_string_lossy().into_owned();
-        let missing = self.rows.iter().filter(|x| x.file.is_none() && !x.hidden).count();
+        let missing = self.rows.iter().filter(|x| x.file.is_none() && !x.hidden && !x.excluded).count();
         let item = self.fetch_for(r).cloned();
         let busy = self.fetch.iter().any(FetchItem::busy);
         let pane = self.clone_for_fetch();
@@ -784,6 +805,10 @@ impl HitsPane {
                 self.count_genres(ctx);
                 return true;
             }
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::Exceptions => {
+                rormpc_exceptions::open_list(ctx, &self.command, Some(&self.rerun_done(ctx)));
+                return true;
+            }
             CommonAction::Confirm | CommonAction::Select => filters.toggle(row),
             CommonAction::Left => {
                 filters.adjust(row, -1);
@@ -972,7 +997,11 @@ impl HitsPane {
             .take(apply_idx)
             .skip(self.filter_offset)
             .map(|(i, row)| {
-                let text = if *row == FilterRow::Downloads { self.downloads_label() } else { filters.line(*row) };
+                let text = match row {
+                    FilterRow::Downloads => self.downloads_label(),
+                    FilterRow::ShowExcluded => self.show_excluded_label(filters),
+                    _ => filters.line(*row),
+                };
                 let label_style = if *row == FilterRow::Downloads && self.downloads {
                     ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD) // the view is open
                 } else if matches!(
@@ -1038,16 +1067,37 @@ impl HitsPane {
     }
 
     /// The rule formula of the filters, with the counts of the result on screen when it was made by them:
-    /// "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ rock · 1,204 of 8,312".
+    /// "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ rock · 1,204 of 8,312 · +2 pinned · 1 excluded" (as
+    /// `hits_rules.summary`: rows a pin added are not in the first number).
     fn summary(&self, filters: &Filters) -> String {
-        let mut text = filters.formula();
+        let text = filters.formula();
         let applied = self.applied_args.as_ref() == Some(&filters.args(&self.path.to_string_lossy()));
-        if let (true, Some(c)) = (applied, self.counts) {
-            let (selected, candidates) =
-                (rormpc_hits_rules::thousands(c.selected), rormpc_hits_rules::thousands(c.candidates));
-            text = format!("{text} · {selected} of {candidates}");
+        match (applied, self.counts) {
+            (true, Some(c)) => rormpc_hits_rules::summary(&text, c.selected, c.candidates, c.pinned, c.excluded),
+            _ => text,
         }
-        text
+    }
+
+    /// "  [ ] show excluded (3)": how many rows exceptions took out of the result on screen.
+    fn show_excluded_label(&self, filters: &Filters) -> String {
+        let line = filters.line(FilterRow::ShowExcluded);
+        match self.counts.map(|c| c.excluded) {
+            Some(n) if n > 0 => format!("{line} ({n})"),
+            _ => line,
+        }
+    }
+
+    /// " · ✚ 2 · ⊘ 1" in the status line when exceptions changed the result.
+    fn exceptions_summary(&self) -> String {
+        let Some(c) = self.counts else { return String::new() };
+        let mut out = String::new();
+        if c.pinned > 0 {
+            out = format!(" · {} {} pinned", Kind::Pin.mark(), c.pinned);
+        }
+        if c.excluded > 0 {
+            out = format!("{out} · {} {} excluded", Kind::Exclude.mark(), c.excluded);
+        }
+        out
     }
 
     /// The sticky Apply footer: the button plus whether pressing it would change anything.
@@ -1139,7 +1189,7 @@ impl HitsPane {
                 Some(section)
             });
         }
-        if r.file.is_none() && !r.hidden {
+        if r.file.is_none() && !r.hidden && !r.excluded {
             menu = self.fetch_section(ctx, menu, &r);
             // not in the library: the genres `hits` gave the chart row
             let (genres, what) = (r.genres.clone(), format!("'{}'", r.title));
@@ -1150,6 +1200,27 @@ impl HitsPane {
                 }))
             });
         }
+        let (pin, exclude) = (self.except_menu(ctx, Kind::Pin, &r), self.except_menu(ctx, Kind::Exclude, &r));
+        let (list_command, list_done) = (self.command.clone(), self.rerun_done(ctx));
+        let (pin_hint, exclude_hint) = (rormpc_exceptions::key_hint(ctx, Kind::Pin), rormpc_exceptions::key_hint(ctx, Kind::Exclude));
+        let owned_row = r.file.is_some();
+        menu = menu.list_section(ctx, move |mut section| {
+            if owned_row {
+                section.add_item(format!("Pin in results…{pin_hint}"), move |ctx| {
+                    pin(ctx);
+                    Ok(())
+                });
+            }
+            section.add_item(format!("Exclude from results…{exclude_hint}"), move |ctx| {
+                exclude(ctx);
+                Ok(())
+            });
+            section.add_item("Exceptions… (every pin and exclusion)", move |ctx| {
+                rormpc_exceptions::open_list(ctx, &list_command, Some(&list_done));
+                Ok(())
+            });
+            Some(section)
+        });
         let (verb, label) = if r.hidden { ("unhide", "Unhide song (show it in Hits again)") } else { ("hide", "Hide song across charts") };
         let (artist, title, mbid, command) = (r.artist.clone(), r.title.clone(), r.mbid.clone(), self.command.clone());
         menu = menu.list_section(ctx, move |mut section| {
@@ -1276,10 +1347,56 @@ impl HitsPane {
                 }
             }
         }
-        if r.hidden {
+        if !r.exceptions.is_empty() {
+            lines.push(Line::default());
+            for e in &r.exceptions {
+                let mark = if e.action == "pin" { Kind::Pin.mark() } else { Kind::Exclude.mark() };
+                let style = if e.applies { Style::default() } else { dim };
+                lines.push(Line::from(vec![
+                    Span::styled("Exception: ", key),
+                    Span::styled(format!("{mark} {}", rormpc_exceptions::describe(e)), style),
+                ]));
+            }
+        } else if r.hidden {
             lines.push(Line::from(Span::styled("hidden from Hits (menu: Unhide)", dim)));
         }
+        lines.push(Line::from(Span::styled("+ pin · - exclude (asks the scope) · menu: Exceptions…", dim)));
         lines
+    }
+
+    /// After an exception was recorded or removed: run `hits` again, so the marks and rows follow.
+    fn rerun_done(&self, ctx: &Ctx) -> rormpc_exceptions::Done {
+        let (job, sender) = (Arc::clone(&self.job), ctx.app_event_sender.clone());
+        Arc::new(move || {
+            job.lock().expect("hits job lock").rerun = true;
+            let _ = sender.send(AppEvent::RequestRender);
+        })
+    }
+
+    /// `+` / `-` on a row (or its menu item): the scope menu for that row, offering the `+` sets of the filters.
+    fn except_menu(&self, ctx: &Ctx, kind: Kind, r: &HitsRow) -> impl FnOnce(&Ctx) + 'static {
+        let target = rormpc_exceptions::Target {
+            file: r.file.clone(),
+            chart_key: r.chart_key.clone(),
+            artist: r.artist.clone(),
+            title: r.title.clone(),
+        };
+        let plus = self.filters.as_ref().map_or([0; 4], |f| f.sets.map(|s| s.max(0)));
+        let (command, done) = (self.command.clone(), self.rerun_done(ctx));
+        move |ctx: &Ctx| rormpc_exceptions::open_scope_menu(ctx, command, kind, target, plus, Some(done))
+    }
+
+    /// `+` / `-` in the filter column: include / exclude a set, genre or artist row (pressed again: off).
+    fn sign_filter_row(&mut self, sign: i8) {
+        let rows = self.filter_rows();
+        let (Some(&row), Some(filters)) = (rows.get(self.filter_sel), self.filters.as_mut()) else { return };
+        let flip = |s: &mut i8| *s = if *s == sign { 0 } else { sign };
+        match row {
+            FilterRow::Set(i) => flip(&mut filters.sets[i]),
+            FilterRow::Genre(i) => flip(&mut filters.genres[i].1),
+            FilterRow::Artist(i) => flip(&mut filters.artists[i].1),
+            _ => status_info!("+ / - set a set, genre or artist row here; on a song row they pin / exclude it"),
+        }
     }
 }
 
@@ -1880,7 +1997,7 @@ impl Pane for HitsPane {
             let next = r.file.as_deref().and_then(|f| crate::ui::rormpc_player::next_marker_for_file(ctx, f));
             let playing = r.file.is_some() && r.file.as_deref() == playing_file;
             let (next, row_style) =
-                next_and_style(next, playing, owned, r.hidden, ctx.config.theme.highlighted_item_style);
+                next_and_style(next, playing, owned, r.hidden || r.excluded, ctx.config.theme.highlighted_item_style);
             // a row outside the rank's population (or with Rank by none) has no rank to show
             let (rank, pct) = if r.ranked {
                 (format!("#{}", r.rank), format!("{:.0}%", r.pct.ceil()))
@@ -1890,7 +2007,17 @@ impl Pane for HitsPane {
             Row::new(vec![
                 Cell::from(rank),
                 Cell::from(pct),
-                Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
+                Cell::from(if r.excluded {
+                    Kind::Exclude.mark()
+                } else if r.pinned {
+                    Kind::Pin.mark()
+                } else if r.hidden {
+                    "h"
+                } else if owned {
+                    "✓"
+                } else {
+                    missing_mark
+                }),
                 like_cell,
                 Cell::from(next),
                 Cell::from(r.artist.clone()),
@@ -1931,10 +2058,11 @@ impl Pane for HitsPane {
             (false, Some(err)) => Span::styled(err, Style::default().add_modifier(Modifier::BOLD)),
             (false, None) => Span::styled(
                 format!(
-                    " {} · {} hits · {} in library · updated {}{}",
+                    " {} · {} hits · {} in library{} · updated {}{}",
                     self.label,
                     self.rows.len(),
                     owned,
+                    self.exceptions_summary(),
                     self.generated_at.replace('T', " "),
                     self.fetch_summary()
                 ),
@@ -2113,14 +2241,27 @@ impl Pane for HitsPane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
-        if let Some(action) = event.claim_queue() {
-            if matches!(action, QueueActions::JumpToCurrent) {
-                if !self.downloads && self.jump_to_current(ctx) {
-                    ctx.render()?;
+        if let Some(action) = event.claim_queue().cloned() {
+            match action {
+                QueueActions::JumpToCurrent => {
+                    if !self.downloads && self.jump_to_current(ctx) {
+                        ctx.render()?;
+                    }
+                    return Ok(()); // recognized even without a match: never fall through to playback
                 }
-                return Ok(()); // recognized even without a match: never fall through to playback
+                // + / -: pin / exclude the row (scope menu); in the filter column, include / exclude a row there
+                QueueActions::PinSong | QueueActions::ExcludeSong if !self.downloads => {
+                    let pin = matches!(action, QueueActions::PinSong);
+                    if self.focus_filters {
+                        self.sign_filter_row(if pin { 1 } else { -1 });
+                    } else if let Some(r) = self.selected().cloned() {
+                        self.except_menu(ctx, if pin { Kind::Pin } else { Kind::Exclude }, &r)(ctx);
+                    }
+                    ctx.render()?;
+                    return Ok(());
+                }
+                _ => event.abandon(), // Queue-only actions must not consume common or global bindings
             }
-            event.abandon(); // Queue-only actions must not consume common or global bindings
         }
         let Some(action) = event.claim_common().cloned() else {
             return Ok(());
@@ -2238,7 +2379,10 @@ enum FilterRow {
     /// opens the artist picker
     AddArtist,
     Owned,
-    ShowHidden,
+    /// excluded songs back as dim rows with ⊘ (the pane adds the count of the result on screen)
+    ShowExcluded,
+    /// the Exceptions list: every pin and exclusion, Enter removes one
+    Exceptions,
     Apply,
 }
 
@@ -2260,14 +2404,14 @@ struct Filters {
     /// artists picked in "+ artist…": -1 exclude, 0 off, 1 include
     artists: Vec<(String, i8)>,
     owned: bool,
-    show_hidden: bool,
+    show_excluded: bool,
 }
 
 impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { sets: [1, 0, 0, 0], rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_hidden: false }
+        Self { sets: [1, 0, 0, 0], rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false }
     }
 }
 
@@ -2298,7 +2442,7 @@ impl Filters {
         rows.extend((0..self.artists.len()).map(FilterRow::Artist));
         rows.push(FilterRow::AddArtist);
         rows.push(FilterRow::Heading("Options"));
-        rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
+        rows.extend([FilterRow::Owned, FilterRow::ShowExcluded, FilterRow::Exceptions, FilterRow::Apply]);
         rows
     }
 
@@ -2456,8 +2600,8 @@ impl Filters {
         if self.owned {
             args.push("--owned".to_owned());
         }
-        if self.show_hidden {
-            args.push("--show-hidden".to_owned());
+        if self.show_excluded {
+            args.push("--show-excluded".to_owned());
         }
         args.extend(["--json".to_owned(), json.to_owned()]);
         args
@@ -2508,7 +2652,7 @@ impl Filters {
             }
         }
         f.owned = args.owned;
-        f.show_hidden = args.show_hidden;
+        f.show_excluded = args.show_excluded || args.show_hidden;
         // files before the set chips name an old source, mapped as `hits --source` maps it
         let (sets, rank, years_of) = rormpc_hits_rules::from_source(args.source.as_deref(), args.sort.as_deref());
         f.sets = args.sets.as_deref().map_or(sets, rormpc_hits_rules::parse_sets);
@@ -2568,7 +2712,8 @@ impl Filters {
             FilterRow::AddGenre => "  + other genre…".to_owned(),
             FilterRow::Explore => "  ⋯ explore genres…".to_owned(),
             FilterRow::Owned => format!("  {} owned only", check(self.owned)),
-            FilterRow::ShowHidden => format!("  {} show hidden", check(self.show_hidden)),
+            FilterRow::ShowExcluded => format!("  {} show excluded", check(self.show_excluded)),
+            FilterRow::Exceptions => "  ⋯ exceptions…".to_owned(),
             FilterRow::Apply => "  [ Apply ]".to_owned(),
         }
     }
@@ -2602,7 +2747,8 @@ impl Filters {
                     | FilterRow::Genre(_)
                     | FilterRow::Artist(_)
                     | FilterRow::Owned
-                    | FilterRow::ShowHidden
+                    | FilterRow::ShowExcluded
+                    | FilterRow::Exceptions
             )
     }
 
@@ -2622,8 +2768,8 @@ impl Filters {
             FilterRow::ClearArtists if self.enabled(row) => self.artists.clear(),
             FilterRow::ClearArtists => {}
             FilterRow::Owned => self.owned = !self.owned,
-            FilterRow::ShowHidden => self.show_hidden = !self.show_hidden,
-            FilterRow::Heading(_) | FilterRow::Downloads | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
+            FilterRow::ShowExcluded => self.show_excluded = !self.show_excluded,
+            FilterRow::Heading(_) | FilterRow::Exceptions | FilterRow::Downloads | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
         }
     }
 
@@ -2797,6 +2943,35 @@ mod tests {
         assert!(event.claim_global().is_none(), "an absent match must not trigger playback");
     }
 
+    #[rstest]
+    fn plus_and_minus_set_a_filter_row_and_leave_other_keys_alone(mut ctx: Ctx) {
+        let mut pane = pane();
+        pane.filters = Some(Filters::default());
+        pane.filter_sel = pane.filter_rows().iter().position(|r| *r == FilterRow::Set(1)).unwrap();
+        for (action, want) in [(QueueActions::ExcludeSong, -1), (QueueActions::PinSong, 1), (QueueActions::PinSong, 0)] {
+            let mut event = ActionEvent::from(Arc::new(vec![action.into()]));
+            pane.handle_action(&mut event, &mut ctx).unwrap();
+            assert_eq!(pane.filters.as_ref().unwrap().sets[1], want);
+        }
+        pane.filter_sel = pane.filter_rows().iter().position(|r| matches!(r, FilterRow::Genre(_))).unwrap();
+        let mut event = ActionEvent::from(Arc::new(vec![QueueActions::ExcludeSong.into()]));
+        pane.handle_action(&mut event, &mut ctx).unwrap();
+        assert_eq!(pane.filters.as_ref().unwrap().genres[0].1, -1);
+    }
+
+    #[test]
+    fn show_excluded_round_trips_and_reads_the_old_show_hidden() {
+        let mut f = Filters::default();
+        f.show_excluded = true;
+        let args = f.args("out.json");
+        assert!(args.contains(&"--show-excluded".to_owned()));
+        let old: HitsArgs = serde_json::from_str(r#"{"period": "1980-1989", "show_hidden": true}"#).unwrap();
+        assert!(Filters::from_args(&old).show_excluded);
+        let rows = Filters::default().rows();
+        let at = rows.iter().position(|r| *r == FilterRow::ShowExcluded).unwrap();
+        assert_eq!(&rows[at..], [FilterRow::ShowExcluded, FilterRow::Exceptions, FilterRow::Apply]);
+    }
+
     #[test]
     fn clear_rows_are_disabled_with_nothing_to_clear() {
         let mut f = Filters::default();
@@ -2905,15 +3080,23 @@ mod tests {
                       "owned": false},
             "formula": "Billboard − Likes ∩ 1980-1989 ∩ Top 1-10% ∩ rock",
             "summary": "Billboard − Likes ∩ 1980-1989 ∩ Top 1-10% ∩ rock · 1 of 995",
-            "counts": {"selected": 1, "owned": 1, "candidates": 995, "cohort": 995},
+            "counts": {"selected": 1, "owned": 1, "candidates": 995, "cohort": 995, "pinned": 1, "excluded": 2},
             "rank_note": "best year-end chart position within the chosen years",
             "rows": [{"rank": 3, "pct": 0.3, "cohort": 995, "ranked": true, "artist": "Toto", "title": "Africa",
                       "year": 1983, "years": [1983], "points": 98, "peak": 98, "listens": 5, "sets": ["billboard"],
                       "genres": ["rock"], "mbid": null, "file": "a.mp3", "hidden": false, "plays": 4,
-                      "reason": null}]}"#;
+                      "reason": null, "pinned": true, "excluded": false, "song_id": "id-a",
+                      "chart_key": "toto|africa",
+                      "exceptions": [{"id": "e1", "action": "pin", "scope": "library", "applies": true, "via": null},
+                                     {"id": "hide:toto|africa", "action": "exclude", "scope": "set:likes",
+                                      "applies": false, "via": "hide"}]}]}"#;
         let file: HitsFile = serde_json::from_str(text).unwrap();
         let counts = file.counts.unwrap();
         assert_eq!((counts.selected, counts.candidates, file.rows[0].ranked), (1, 995, true));
+        assert_eq!((counts.pinned, counts.excluded), (1, 2));
+        let r = &file.rows[0];
+        assert_eq!((r.pinned, r.excluded, r.chart_key.as_deref(), r.exceptions.len()), (true, false, Some("toto|africa"), 2));
+        assert!(r.exceptions[0].applies && !r.exceptions[1].applies);
         let f = Filters::from_args(&file.args);
         assert_eq!((f.sets, f.rank, f.years_of), ([1, -1, 0, 0], RankBy::Billboard, None));
         // the pane's own formula for these filters is the text `hits` wrote

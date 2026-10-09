@@ -174,6 +174,24 @@ words. Enter (or the menu) decides; the same items are in a `?` / `!` chart row'
 
 Esc or the Downloads row again goes back to the chart; Apply does too.
 
+Exceptions (pins and exclusions with a scope, `hits except`, rormpc-tools): `+` on a Hits or Queue row pins the
+song ✚, `-` excludes it ⊘ (QueueActions `PinSong` / `ExcludeSong`; the row menus have "Pin in results…" and
+"Exclude from results…"). A small menu asks the scope, the default first: library (every result) or one of the
+`+` sets of the filters (the Queue offers the `+` sets of the Hits result file), which applies only while that set
+is `+`; the default becomes the open smart list once smart lists exist. A pin puts the song in whatever the filters
+say (a `-` set, genre or artist included); it needs an owned file, has no rank ("—") and sits after the ranked rows,
+outside the ranking and the Top % cut. An exclusion takes the song out; any applicable exclusion beats any pin.
+`hits hide` is the same as an exclusion scoped to Billboard (keyed by the chart song, so it covers missing rows) and
+keeps its own log. Exceptions apply after the Top % cut, so no rank moves. The mark column shows ✚ / ⊘ and the
+details list each exception with its scope ("excluded · Billboard US (hits hide)"; a set-scoped one that does not
+apply now is dim). "show excluded (N)" in the filter column (the old "show hidden") puts the excluded rows back,
+dim and marked; "⋯ exceptions…" lists every exception by scope (`hits exceptions --json`; a pinned song whose file
+is gone shows `!`) and Enter removes the one under the cursor (a hide is unhidden). In the filter column the same
+`+` / `-` set the set, genre or artist row under the cursor (pressed again: off). Only these keys record an
+exception: "Remove from queue" and a song added by hand stay one-offs, and the queue itself never changes when an
+exception is recorded; the next "Play these" (or Apply in Play) takes it into account. The log is
+`<data_dir>/exceptions.jsonl`, keyed by music-data's song id (songs.jsonl), so a pin follows a moved or merged file.
+
 ```ron
 (name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [
     (pane: Pane(Hits()), size: "100%", borders: "ALL", border_symbols: Rounded), // path: "~/.cache/rormpc/hits/current.json"
@@ -206,8 +224,9 @@ entries carry a dim `⧉` in the first column);
 library files stay. Hits rows: Play now, Add to queue, like
 items (owned songs), "Hide song across charts" / "Unhide" for every chart song (`hits hide|unhide`, an
 append-only log in the private data repo; hidden songs keep their place in the ranking and are dropped after
-the Top % cut), and "Move library file to Trash…" for owned songs. "show hidden" in the filter column lists
-hidden songs (marked `h`) to review and unhide them. Menu items show the key that does the same thing directly.
+the Top % cut), "Pin in results…" / "Exclude from results…" / "Exceptions…" (see Hits pane), and "Move library
+file to Trash…" for owned songs. "show excluded (N)" in the filter column lists hidden and excluded songs (marked
+`⊘`) to review them. Menu items show the key that does the same thing directly.
 
 Mouse in menus and modals: the menu item under the pointer is selected on hover and one click runs it (upstream
 needs a double click). A click outside a modal closes it like Esc and does not reach the pane underneath, even

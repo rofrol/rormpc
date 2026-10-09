@@ -84,6 +84,7 @@ pub mod rormpc_preview;
 pub mod rormpc_queue_plan;
 pub mod rormpc_process;
 pub mod rormpc_genres;
+pub mod rormpc_exceptions;
 pub mod rormpc_hits_rules;
 pub mod rormpc_playlists;
 pub mod rormpc_tags;

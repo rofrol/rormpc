@@ -545,6 +545,11 @@ impl PlanView {
                     event.abandon();
                     return Ok(false);
                 } // existing explicit confirmation
+                // by file (rormpc exceptions): the ordinary handler on the mapped selection
+                QueueActions::PinSong | QueueActions::ExcludeSong => {
+                    event.abandon();
+                    return Ok(false);
+                }
                 _ => status_info!(
                     "Plan view does not sort or shuffle the MPD queue; o returns to queue order"
                 ),

@@ -213,6 +213,19 @@ pub fn thousands(n: u32) -> String {
     out
 }
 
+/// "… · 1,204 of 8,312", then " · +2 pinned" (rows a pin added, not in the first number) and " · 1 excluded" (rows
+/// an exclusion took out): the text `hits` writes as "summary" (`hits_rules.summary`).
+pub fn summary(text: &str, selected: u32, candidates: u32, pinned: u32, excluded: u32) -> String {
+    let mut out = format!("{text} · {} of {}", thousands(selected.saturating_sub(pinned)), thousands(candidates));
+    if pinned > 0 {
+        out = format!("{out} · +{pinned} pinned");
+    }
+    if excluded > 0 {
+        out = format!("{out} · {excluded} excluded");
+    }
+    out
+}
+
 /// Greedy word wrap for the filter column's summary (a long formula takes a few lines).
 pub fn wrap(text: &str, width: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
@@ -276,6 +289,13 @@ mod tests {
         assert_eq!(YearsOf::next(None, 1), Some(YearsOf::Release));
         assert_eq!(YearsOf::next(Some(YearsOf::Listened), 1), None);
         assert_eq!(RankBy::parse("chart"), Some(RankBy::Billboard));
+    }
+
+    #[test]
+    fn summary_matches_the_python_side() {
+        // rormpc-tools' tests/test_hits_exceptions.py test_hits_json_reports_pins_and_exclusions
+        assert_eq!(summary("Library − Likes ∩ 1980-1989", 2, 2, 1, 1), "Library − Likes ∩ 1980-1989 · 1 of 2 · +1 pinned · 1 excluded");
+        assert_eq!(summary("Library", 1204, 8312, 0, 0), "Library · 1,204 of 8,312");
     }
 
     #[test]
