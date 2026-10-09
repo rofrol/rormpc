@@ -3,11 +3,26 @@
 # and API URL; then the units, the config, `status` and a reinstall are checked. The companions come from their
 # pinned tags unless the tools_ref / lb_ref inputs (RORMPC_TOOLS_REF / RO_LB_REF) name a commit to test.
 #
-# Written without a run on GitHub: only workflow_dispatch and workflow_call until it has passed once; then add
-# push to master, pull_request, a weekly schedule and release tags like the other workflows.
+# First passed on GitHub on 2026-10-09 (run 37994088698).
 name: Installer smoke test
 
 on:
+  # the job reads only the installer and this file from the checkout, so other commits do not start the VM job;
+  # GitHub does not evaluate path filters for tag pushes, so release tags always run
+  push:
+    branches: [master]
+    tags: ["v*.*.*"]
+    paths:
+      - scripts/rormpc_install.sh
+      - .github/workflows/installer_smoke.yml
+  pull_request:
+    paths:
+      - scripts/rormpc_install.sh
+      - .github/workflows/installer_smoke.yml
+  # weekly, to catch drift in the companions' pinned tags, uv, Rust and the runner image; GitHub disables
+  # schedules after 60 days without repository activity
+  schedule:
+    - cron: "47 5 * * 1"
   workflow_dispatch:
     inputs:
       tools_ref:
