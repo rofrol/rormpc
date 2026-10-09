@@ -752,10 +752,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       returned 0 items)? Decided by the user 2026-10-09: leave it until it is used.
       Options: you give a playlist URL and a worker tests it on a scratch MPD | leave it until you use it
       Checked 2026-10-09: the first version is released (v0.2.34) and checked only with hand-made items.
-- [ ] Combined view: What is a saved filter set called in the UI?
+- [x] Combined view: What is a saved filter set called in the UI? Decided by the user 2026-10-09: Smart list.
       Options: Smart list | Live list (your word) | Preset
       Checked: plans/combined-view.md "Open choices" (1); the first option is the plan's recommendation.
-- [ ] Combined view: Does a filter change wait for Apply, or replace the queue at once?
+- [x] Combined view: Does a filter change wait for Apply, or replace the queue at once? Decided by the user 2026-10-09: preview, Apply plays.
       Options: Preview, Apply plays | Replace at once when weighted is on | Replace at once always
       Checked: plans/combined-view.md "Open choices" (2); the first option is the plan's recommendation.
 - [ ] Combined view: When does Apply ask for a confirmation?
@@ -767,10 +767,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Combined view: Where is the filter column in normal mode?
       Options: Collapsed to one source line, h opens it | Always open | Hidden
       Checked: plans/combined-view.md "Open choices" (5); the first option is the plan's recommendation.
-- [ ] Combined view: Does a pin beat a `-` set or `-` genre?
+- [x] Combined view: Does a pin beat a `-` set or `-` genre? Decided by the user 2026-10-09: yes, an exception beats every rule (an exclusion still beats a pin).
       Options: Yes, an exception beats every rule | No, a `-` rule beats pins (Sol) | Only a library-scope pin beats it
       Checked: plans/combined-view.md "Open choices" (6); the first option is the plan's recommendation.
-- [ ] Combined view: What do a hand removal and a hand addition in the queue do by default?
+- [x] Combined view: What do a hand removal and a hand addition in the queue do by default? Decided by the user 2026-10-09: nothing lasting, pin/exclude only on + / -.
       Options: Nothing lasting, pin/exclude only on + / - | Ask each time | Always record an exception in the open smart list
       Checked: plans/combined-view.md "Open choices" (7); the first option is the plan's recommendation.
 - [ ] Combined view: What is the default scope of a new pin or exclusion?
