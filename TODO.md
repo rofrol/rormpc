@@ -758,13 +758,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Combined view: Does a filter change wait for Apply, or replace the queue at once? Decided by the user 2026-10-09: preview, Apply plays.
       Options: Preview, Apply plays | Replace at once when weighted is on | Replace at once always
       Checked: plans/combined-view.md "Open choices" (2); the first option is the plan's recommendation.
-- [ ] Combined view: When does Apply ask for a confirmation?
+- [x] Combined view: When does Apply ask for a confirmation? Decided by the user 2026-10-09: only when the source kind changes or more than 25% of the queue goes.
       Options: Only when the source kind changes or more than 25% of the queue goes | Always | Never
       Checked: plans/combined-view.md "Open choices" (3); the first option is the plan's recommendation.
-- [ ] Combined view: What happens to the old Queue, Hits and Shuffle tabs?
+- [x] Combined view: What happens to the old Queue, Hits and Shuffle tabs? Decided by the user 2026-10-09: Play replaces them in the default config, the panes stay.
       Options: Play replaces them in the default config, the panes stay | Keep all four tabs | Remove the old panes
       Checked: plans/combined-view.md "Open choices" (4); the first option is the plan's recommendation.
-- [ ] Combined view: Where is the filter column in normal mode?
+- [x] Combined view: Where is the filter column in normal mode? Decided by the user 2026-10-09: collapsed to one source line, h opens it.
       Options: Collapsed to one source line, h opens it | Always open | Hidden
       Checked: plans/combined-view.md "Open choices" (5); the first option is the plan's recommendation.
 - [x] Combined view: Does a pin beat a `-` set or `-` genre? Decided by the user 2026-10-09: yes, an exception beats every rule (an exclusion still beats a pin).
@@ -773,18 +773,22 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Combined view: What do a hand removal and a hand addition in the queue do by default? Decided by the user 2026-10-09: nothing lasting, pin/exclude only on + / -.
       Options: Nothing lasting, pin/exclude only on + / - | Ask each time | Always record an exception in the open smart list
       Checked: plans/combined-view.md "Open choices" (7); the first option is the plan's recommendation.
-- [ ] Combined view: What is the default scope of a new pin or exclusion?
+- [x] Combined view: What is the default scope of a new pin or exclusion? Decided by the user 2026-10-09: the open smart list, else library.
       Options: The open smart list, else library | Always library | The first + set
       Checked: plans/combined-view.md "Open choices" (8); the first option is the plan's recommendation.
-- [ ] Combined view: Are smart lists exported as MPD playlists "Smart NAME"?
+- [x] Combined view: Are smart lists exported as MPD playlists "Smart NAME"? Decided by the user 2026-10-09: yes, per list, on by default.
       Options: Yes, per list, on by default | Only when asked | Never
       Checked: plans/combined-view.md "Open choices" (9); the first option is the plan's recommendation.
-- [ ] Combined view: Which sets get a fixed chip row?
+- [x] Combined view: Which sets get a fixed chip row? Decided by the user 2026-10-09: Billboard, my likes, my playlists, recommended; the rest via "+ set…".
       Options: Billboard, my likes, my playlists, recommended; the rest via "+ set…" | Every tag and playlist as a row | Only Billboard
       Checked: plans/combined-view.md "Open choices" (10); the first option is the plan's recommendation.
-- [ ] Combined view: Which years does Period filter by default?
+- [x] Combined view: Which years does Period filter by default? Decided by the user 2026-10-09: follow Rank by.
       Options: Follow Rank by (chart, listened or release year) | Always release year | Always ask
       Checked: plans/combined-view.md "Open choices" (11); the first option is the plan's recommendation.
-- [ ] Combined view: Is there a "freeze as static list" action?
+- [x] Combined view: Is there a "freeze as static list" action? Decided by the user 2026-10-09: no, the MPD export is the static copy.
       Options: No, the MPD export is the static copy | Yes, into a tag list | Yes, into an MPD playlist
       Checked: plans/combined-view.md "Open choices" (12); the first option is the plan's recommendation.
+- [ ] Combined view: build it now, in the plan's five phases (plans/combined-view.md "Build order"), one worker per
+      phase with a release after each?
+      Options: yes, all five phases in order | only phase 1 (± set chips, Rank by, Years of in Hits) first | not now
+      Checked: all 12 open choices are decided (2026-10-09); every phase ships on its own.
