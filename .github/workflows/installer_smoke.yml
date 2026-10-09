@@ -47,33 +47,48 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: System packages (the scrobbler's build dependencies from the installer's hint, MPD)
+      - name: System packages (the scrobbler's build dependencies from the installer's hint, MPD, ffmpeg)
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libsqlite3-dev mpd mpc
+          # musicdb update hashes the audio with ffmpeg, which the runner image lacks
+          sudo apt-get install -y build-essential pkg-config libssl-dev libsqlite3-dev mpd mpc ffmpeg
           # the package's system MPD would take port 6600 from the user's
           sudo systemctl disable --now mpd.service mpd.socket || true
 
       - name: Fresh user with a lingering systemd user session
         run: |
+          # the runner image puts XDG_CONFIG_HOME=/home/runner/.config into /etc/environment; pam_env hands it to
+          # sudo and to ci's user manager, whose generators and units would then read the runner's home
+          sudo sed -i '/^XDG_CONFIG_HOME=/d' /etc/environment
           sudo useradd --create-home --shell /bin/bash ci
           sudo loginctl enable-linger ci
-          uid="$(id -u ci)"
-          # start blocks until the user manager is up (Type=notify), so its bus exists afterwards
-          sudo systemctl start "user@$uid.service"
-          test -S "/run/user/$uid/bus"
-          # as-ci SCRIPT: run SCRIPT as ci in that session, with the refs under test
+          # start blocks until the user manager is up (Type=notify)
+          sudo systemctl start "user@$(id -u ci).service"
+          # as-ci SCRIPT: run SCRIPT as ci in that session, from ci's home (ci cannot read the runner's work
+          # directory), with the refs under test
           sudo tee /usr/local/bin/as-ci > /dev/null <<'SH'
           #!/bin/bash
           uid="$(id -u ci)"
-          exec sudo -u ci env HOME=/home/ci USER=ci \
+          exec sudo -u ci env -C /home/ci HOME=/home/ci USER=ci LOGNAME=ci \
             XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
             PATH="/home/ci/.local/bin:/home/ci/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
             RORMPC_TOOLS_REF="${RORMPC_TOOLS_REF:-}" RO_LB_REF="${RO_LB_REF:-}" \
             bash -euo pipefail -c "$1"
           SH
           sudo chmod 755 /usr/local/bin/as-ci
-          as-ci 'systemctl --user is-system-running --wait || systemctl --user --failed'
+          # /run/user/<uid> is ci's alone (0700), so the bus and the manager are checked as ci
+          as-ci '
+            busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetId
+            state="$(systemctl --user is-system-running --wait)" || true
+            echo "user manager: $state"
+            # degraded is a unit of the image that failed (gpg-agent-ssh.socket on the runner), not the session
+            case "$state" in
+              running) ;;
+              degraded) systemctl --user --failed ;;
+              *) exit 1 ;;
+            esac
+            ! systemctl --user show-environment | grep "^XDG_CONFIG_HOME="
+          '
           sudo install -o ci -m 755 scripts/rormpc_install.sh /home/ci/rormpc_install.sh
 
       - name: uv and Rust for the user
@@ -157,7 +172,8 @@ jobs:
           # failed network steps (no ListenBrainz user configured) are reported and make it exit 1; a traceback
           # is a bug
           as-ci 'systemctl --user start rormpc-musicdb.service' || true
-          sudo journalctl --no-pager _SYSTEMD_USER_UNIT=rormpc-musicdb.service | tee musicdb.log
+          # its output, and the user manager's messages about it (a failed start: 203/EXEC)
+          sudo journalctl --no-pager _SYSTEMD_USER_UNIT=rormpc-musicdb.service + USER_UNIT=rormpc-musicdb.service | tee musicdb.log
           ! grep -q Traceback musicdb.log
 
       - name: status
