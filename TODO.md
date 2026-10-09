@@ -668,7 +668,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       /home/runner/.config. Next: a worker reproduces it in an Ubuntu VM (OrbStack, as on 2026-10-03) and fixes
       the step; then the coordinator dispatches it again.
 
-- [ ] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
+- [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
       choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
       weighted off, the normal view comes back. The things chosen in Hits, like year and genres, can be saved as a
       live list, like collections on Steam or in Calibre. Show visualizations. Ask the models." A worker consults
@@ -679,6 +679,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Added 2026-10-09: "it can be exceptions. Pins and exclusions on the whole library or on a chosen subset such
       as Billboard 100. And those subsets like Billboard should be made the way genres are. They can be - or +.
       Ask the models."
+      Done in 68939c9 (worker): plans/combined-view.md, a "Play" tab with normal and weighted modes, preview + Apply,
+      ± set chips, scoped pins/exclusions, smart lists, 6 mockups; consult rounds 20261009-230419-b57c and
+      20261009-230647-3341. Its 12 open choices are in "Needs a decision" ("Combined view:").
 
 ## Proposed
 
@@ -749,3 +752,39 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       returned 0 items)? Decided by the user 2026-10-09: leave it until it is used.
       Options: you give a playlist URL and a worker tests it on a scratch MPD | leave it until you use it
       Checked 2026-10-09: the first version is released (v0.2.34) and checked only with hand-made items.
+- [ ] Combined view: What is a saved filter set called in the UI?
+      Options: Smart list | Live list (your word) | Preset
+      Checked: plans/combined-view.md "Open choices" (1); the first option is the plan's recommendation.
+- [ ] Combined view: Does a filter change wait for Apply, or replace the queue at once?
+      Options: Preview, Apply plays | Replace at once when weighted is on | Replace at once always
+      Checked: plans/combined-view.md "Open choices" (2); the first option is the plan's recommendation.
+- [ ] Combined view: When does Apply ask for a confirmation?
+      Options: Only when the source kind changes or more than 25% of the queue goes | Always | Never
+      Checked: plans/combined-view.md "Open choices" (3); the first option is the plan's recommendation.
+- [ ] Combined view: What happens to the old Queue, Hits and Shuffle tabs?
+      Options: Play replaces them in the default config, the panes stay | Keep all four tabs | Remove the old panes
+      Checked: plans/combined-view.md "Open choices" (4); the first option is the plan's recommendation.
+- [ ] Combined view: Where is the filter column in normal mode?
+      Options: Collapsed to one source line, h opens it | Always open | Hidden
+      Checked: plans/combined-view.md "Open choices" (5); the first option is the plan's recommendation.
+- [ ] Combined view: Does a pin beat a `-` set or `-` genre?
+      Options: Yes, an exception beats every rule | No, a `-` rule beats pins (Sol) | Only a library-scope pin beats it
+      Checked: plans/combined-view.md "Open choices" (6); the first option is the plan's recommendation.
+- [ ] Combined view: What do a hand removal and a hand addition in the queue do by default?
+      Options: Nothing lasting, pin/exclude only on + / - | Ask each time | Always record an exception in the open smart list
+      Checked: plans/combined-view.md "Open choices" (7); the first option is the plan's recommendation.
+- [ ] Combined view: What is the default scope of a new pin or exclusion?
+      Options: The open smart list, else library | Always library | The first + set
+      Checked: plans/combined-view.md "Open choices" (8); the first option is the plan's recommendation.
+- [ ] Combined view: Are smart lists exported as MPD playlists "Smart NAME"?
+      Options: Yes, per list, on by default | Only when asked | Never
+      Checked: plans/combined-view.md "Open choices" (9); the first option is the plan's recommendation.
+- [ ] Combined view: Which sets get a fixed chip row?
+      Options: Billboard, my likes, my playlists, recommended; the rest via "+ set…" | Every tag and playlist as a row | Only Billboard
+      Checked: plans/combined-view.md "Open choices" (10); the first option is the plan's recommendation.
+- [ ] Combined view: Which years does Period filter by default?
+      Options: Follow Rank by (chart, listened or release year) | Always release year | Always ask
+      Checked: plans/combined-view.md "Open choices" (11); the first option is the plan's recommendation.
+- [ ] Combined view: Is there a "freeze as static list" action?
+      Options: No, the MPD export is the static copy | Yes, into a tag list | Yes, into an MPD playlist
+      Checked: plans/combined-view.md "Open choices" (12); the first option is the plan's recommendation.
