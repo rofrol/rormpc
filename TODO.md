@@ -747,6 +747,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
       it (reported by the phase 1 worker 2026-10-10).
 
+- [ ] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
+      (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
+
 ## Proposed
 
 ## Needs a decision
@@ -889,7 +892,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       more phases?
       Options: now (the installed Hits keeps working only with matching tools) | after phase 2 | after phase 3
       Checked: rormpc af62e2e needs hits ≥ the new tools; the installed 0.2.37 rejects --set/--rank/--years-of.
-- [ ] Hits "my plays" rank: with Years of release it counts every play, with Years of listened it leaves out the
+- [x] Hits "my plays" rank: with Years of release it counts every play, with Years of listened it leaves out the
       weighted shuffle's own picks (as the old sources did); make both the same?
       Options: both leave out the shuffle's own picks | both count every play | keep it as it is
       Checked: reported by the phase 1 worker 2026-10-10 (hits_rules.score).
+      Decided by the user 2026-10-10: both leave out the shuffle's own picks ("probably"; queued in Next).
