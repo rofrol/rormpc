@@ -499,7 +499,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       a reinstall. The installer pins released tags, so a smoke test would pass on a broken branch: first add
       overrides (e.g. `RORMPC_TOOLS_REF`, `RO_LB_REF`, or reuse `--local` with checkouts) so CI tests the commit
       under test. ~5-8 min. This is what was done by hand in an OrbStack Ubuntu VM on 2026-10-03.
-- [ ] macOS: first a throwaway probe that `launchctl bootstrap gui/$UID` works on hosted runners, then the same
+- [x] (left out, decided by the user 2026-10-09) macOS: first a throwaway probe that `launchctl bootstrap gui/$UID` works on hosted runners, then the same
       smoke test with launchd.
 - [x] Triggers: push to master, pull_request, workflow_dispatch, weekly schedule (toolchain, uv and runner-image
       drift; GitHub disables schedules after 60 days without repository activity), and on release tags. Add
@@ -719,11 +719,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: run it once, then add push + weekly triggers | run it once, keep it manual | leave it
       Checked 2026-10-09: `gh run list -R rofrol/rormpc --workflow installer_smoke.yml` shows no run yet; ci.yml
       runs on push; rormpc-tools and ro-listenbrainz-mpd test.yml already have push, tags and a weekly schedule.
-- [ ] CI on macOS: build the throwaway `launchctl bootstrap gui/$UID` probe on a hosted runner, then a launchd
-      smoke test ("Tests and GitHub Actions…")?
+- [x] CI on macOS: build the throwaway `launchctl bootstrap gui/$UID` probe on a hosted runner, then a launchd
+      smoke test ("Tests and GitHub Actions…")? Decided by the user 2026-10-09: leave it.
       Options: leave it (the macOS install is exercised on this Mac at every release) | build the probe first
       Checked 2026-10-09: nothing for macOS exists in installer_smoke.yml; it is the last open CI plan point.
-- [ ] Live playlists: test a real download with a public YouTube playlist you choose (the one live listing so far
-      returned 0 items)?
+- [x] Live playlists: test a real download with a public YouTube playlist you choose (the one live listing so far
+      returned 0 items)? Decided by the user 2026-10-09: leave it until it is used.
       Options: you give a playlist URL and a worker tests it on a scratch MPD | leave it until you use it
       Checked 2026-10-09: the first version is released (v0.2.34) and checked only with hand-made items.
