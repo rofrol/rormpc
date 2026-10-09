@@ -662,6 +662,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
       workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
 
+- [ ] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
+      choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
+      weighted off, the normal view comes back. The things chosen in Hits, like year and genres, can be saved as a
+      live list, like collections on Steam or in Calibre. Show visualizations. Ask the models." A worker consults
+      the models and writes the plan with mockups to plans/combined-view.md; the coordinator shows it and asks
+      the open choices in "Needs a decision".
+
 ## Proposed
 
 ## Needs a decision
