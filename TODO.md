@@ -698,10 +698,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       position; "of N" counts the songs after the set algebra, before period and filters; Billboard with Years of
       other than chart reads every chart year (6,333 songs, ~0.8 s). The installed hits 0.2.37 rejects the new
       arguments: rormpc and rormpc-tools must be released and installed together.
-- [ ] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
+- [x] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
       library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
       marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
       exclusions.
+      Done in rormpc afcb9be, rormpc-tools e4be8cd (worker; pytest 277, cargo test 996; UI checked read-only with a
+      temporary data dir). `hits except pin|exclude|remove`, `hits exceptions`, log exceptions.jsonl; PinSong (+) /
+      ExcludeSong (-) in Hits and Queue with a scope menu; ✚ ⊘ in Hits, "show excluded (N)", "⋯ exceptions…".
+      Settled by the coordinator: `hits hide` on a recommendation row counts as a Recommended-scope exclusion (else
+      hiding recommendations would stop working). Noted for phase 3 (Play knows the rules): Queue takes the scopes
+      from the default ~/.cache/rormpc/hits/current.json, not a pane's configured path, and its rows show no ✚ ⊘
+      marks; `hits except --file` needs the file in songs.jsonl (`musicdb identity sync` first); `list:ID` scopes
+      wait for phase 4 (default_scope()).
 - [ ] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
       from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
 - [ ] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
@@ -745,7 +753,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       impossible; what the manual send does and how it avoids a double listen), then builds it; open choices go
       to "Needs a decision".
 
-- [ ] rormpc-tools README: describe `hits --set`, `--rank`, `--years-of` (phase 1 worker left it out of scope).
+- [ ] rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
+      phase 1 and 2 workers left it out of scope).
 - [ ] AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
       it (reported by the phase 1 worker 2026-10-10).
 
@@ -753,6 +762,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
 
 ## Proposed
+
+- [ ] The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
+      no unselectable header; phase 2 worker, 2026-10-10).
+- [ ] Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
+      (older bug, found by the phase 2 worker 2026-10-10).
 
 ## Needs a decision
 
