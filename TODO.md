@@ -661,6 +661,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
       when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
       workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
+      First run 2026-10-09 (run 37990844352) failed in "Fresh user with a lingering systemd user session" after
+      36 s with no output: the journal shows ci's user manager up ("Startup finished in 98ms", dbus.socket
+      listening) and two `systemctl` calls from `as-ci 'systemctl --user is-system-running --wait || systemctl
+      --user --failed'` failing with "Failed to connect to bus: Permission denied"; the user generators also tried
+      /home/runner/.config. Next: a worker reproduces it in an Ubuntu VM (OrbStack, as on 2026-10-03) and fixes
+      the step; then the coordinator dispatches it again.
 
 - [ ] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
       choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
