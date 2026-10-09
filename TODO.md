@@ -676,6 +676,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       the open choices in "Needs a decision".
       Added 2026-10-09: "of course I can also remove or add songs by hand. Then something has to be done with that.
       I don't know what. A dynamic list but from a limited set? Ask the models."
+      Added 2026-10-09: "it can be exceptions. Pins and exclusions on the whole library or on a chosen subset such
+      as Billboard 100. And those subsets like Billboard should be made the way genres are. They can be - or +.
+      Ask the models."
 
 ## Proposed
 
