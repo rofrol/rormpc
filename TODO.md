@@ -714,7 +714,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
       Done 2026-10-10: v0.2.38 tagged and pushed (gated on pytest 277 + pyflakes), companions installed, rormpc
       fb6cb76 installed and pushed; the config loads. Restart running rormpc instances to use it.
-- [ ] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
+- [x] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
       plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
       Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
       without Apply (Play next / Append), edit a stored playlist's order and contents, review Live playlist
@@ -730,6 +730,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       where: Sol puts Browse in the left column (Build | Browse) and the editor and inbox in overlays; MiMo cycles
       right-pane modes (Sources | Queue | Live). MiMo: keep Artists and Album artists apart (different grouping).
       Nothing needs its own tab, but filters alone do not replace browsing, editing or the download review.
+      Done in 658a76e (worker, second consult round): plans/combined-view.md "Play absorbs the browsing tabs":
+      full-width bodies Queue | Browse | Live reusing the existing browsers, P/t/a actions, the playlist editor in
+      Browse › Lists, the Live inbox with multi-select and a badge, a new phase 3b after phase 3. Found in the code:
+      a song appended to a queue holding a Hits source with weighted on is never drawn today (shuffle.py draws only
+      from source.json's members). Open choices 13-20 are in "Needs a decision".
 - [ ] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
       opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
       source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
@@ -922,3 +927,27 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, the coordinator adds both | other keys (name them) | no, the menu is enough
       Checked: assets/example_config.ron binds them (afcb9be); ~/.config/rormpc/config.ron line ~140 has an explicit
       queue map without them; neither key is bound there.
+- [ ] Combined view: Where do Browse and Live go inside Play?
+      Options: full-width bodies Queue | Browse | Live, B and the digits switch (reuses the browsers unchanged) | Browse in the left column, editor and Live as overlays (Sol) | right-pane modes Sources | Queue | Live (MiMo)
+      Checked: plans/combined-view.md "Open choices" (13); the first option is the plan's recommendation.
+- [ ] Combined view: Does `P` (play an album, folder, artist or playlist, replacing the queue) ask for a confirmation?
+      Options: Apply's rule: only on a source kind change or more than 25% of the queue | never, Previous sources undoes it | always
+      Checked: plans/combined-view.md "Open choices" (14); the first option is the plan's recommendation.
+- [ ] Combined view: A song appended (`a`) to a queue holding a Hits source while weighted is on: what happens to it?
+      Options: it joins the source's files and the round, the source shows "+N added" | it becomes an Up next request | it stays outside the round (today: never drawn)
+      Checked: plans/combined-view.md "Open choices" (15); the first option is the plan's recommendation.
+- [ ] Combined view: Stored playlist editor: immediate edits or a save buffer?
+      Options: immediate MPD edits as today, a confirmation before deleting a whole playlist | edit a copy, explicit Save and Discard
+      Checked: plans/combined-view.md "Open choices" (16); the first option is the plan's recommendation.
+- [ ] Combined view: Keys for Browse?
+      Options: B body, [ ] grouping, P play replacing the queue, t play next, digits 5..9 groupings and 0/gl Live | the same without the digits | other keys
+      Checked: plans/combined-view.md "Open choices" (17); the first option is the plan's recommendation.
+- [ ] Combined view: Change your own ~/.config/rormpc/config.ron (explicit tabs and digits) when phase 3b ships?
+      Options: yes, the coordinator mirrors the new default (Play, Up next, Search plus Versions, Deleted, Lyrics; digits to ShowPlay) | keep your tabs | remove only the six tabs, keep your digits
+      Checked: plans/combined-view.md "Open choices" (18); the first option is the plan's recommendation.
+- [ ] Combined view: An unapplied preview when a Browse action changes the queue?
+      Options: the preview stays, its counts are recomputed, Apply judges the confirmation then (Sol) | the preview is dropped with a note (MiMo)
+      Checked: plans/combined-view.md "Open choices" (19); the first option is the plan's recommendation.
+- [ ] Combined view: Artists and Album artists in Browse?
+      Options: two separate groupings (MiMo; the code has both) | one grouping with a toggle
+      Checked: plans/combined-view.md "Open choices" (20); the first option is the plan's recommendation.
