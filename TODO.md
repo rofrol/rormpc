@@ -702,6 +702,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
       marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
       exclusions.
+- [ ] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
+      from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
 - [ ] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
       plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
       Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
@@ -888,10 +890,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-09: "only Play" (none of the offered options): Artists, Album Artists, Albums,
       Directories, Playlists and Live playlists leave the tab bar; their tasks move into Play (queued in Next as a
       plan addition before phase 3). Search, Up next, Lyrics, Deleted and Versions were not part of the question.
-- [ ] Release rormpc-tools v0.2.38 and install rormpc with phase 1 (± set chips, Rank by, Years of) now, or after
+- [x] Release rormpc-tools v0.2.38 and install rormpc with phase 1 (± set chips, Rank by, Years of) now, or after
       more phases?
       Options: now (the installed Hits keeps working only with matching tools) | after phase 2 | after phase 3
       Checked: rormpc af62e2e needs hits ≥ the new tools; the installed 0.2.37 rejects --set/--rank/--years-of.
+      Decided by the user 2026-10-10: after phase 2 (queued in Next right after phase 2).
 - [x] Hits "my plays" rank: with Years of release it counts every play, with Years of listened it leaves out the
       weighted shuffle's own picks (as the old sources did); make both the same?
       Options: both leave out the shuffle's own picks | both count every play | keep it as it is
