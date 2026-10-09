@@ -674,6 +674,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       live list, like collections on Steam or in Calibre. Show visualizations. Ask the models." A worker consults
       the models and writes the plan with mockups to plans/combined-view.md; the coordinator shows it and asks
       the open choices in "Needs a decision".
+      Added 2026-10-09: "of course I can also remove or add songs by hand. Then something has to be done with that.
+      I don't know what. A dynamic list but from a limited set? Ask the models."
 
 ## Proposed
 
