@@ -710,8 +710,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       from the default ~/.cache/rormpc/hits/current.json, not a pane's configured path, and its rows show no ✚ ⊘
       marks; `hits except --file` needs the file in songs.jsonl (`musicdb identity sync` first); `list:ID` scopes
       wait for phase 4 (default_scope()).
-- [ ] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
+- [x] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
       from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
+      Done 2026-10-10: v0.2.38 tagged and pushed (gated on pytest 277 + pyflakes), companions installed, rormpc
+      fb6cb76 installed and pushed; the config loads. Restart running rormpc instances to use it.
 - [ ] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
       plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
       Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
@@ -914,3 +916,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: both leave out the shuffle's own picks | both count every play | keep it as it is
       Checked: reported by the phase 1 worker 2026-10-10 (hits_rules.score).
       Decided by the user 2026-10-10: both leave out the shuffle's own picks ("probably"; queued in Next).
+- [ ] Add `"+": PinSong` and `"-": ExcludeSong` to the queue keybinds in your dotfiles rormpc config? Your config
+      has its own queue keymap, so the new keys do nothing there until added; the Queue menu's "Pin in Hits
+      results…" / "Exclude from Hits results…" work without them.
+      Options: yes, the coordinator adds both | other keys (name them) | no, the menu is enough
+      Checked: assets/example_config.ron binds them (afcb9be); ~/.config/rormpc/config.ron line ~140 has an explicit
+      queue map without them; neither key is bound there.
