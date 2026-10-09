@@ -696,6 +696,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
       marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
       exclusions.
+- [ ] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
+      plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
+      Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
+      without Apply (Play next / Append), edit a stored playlist's order and contents, review Live playlist
+      downloads with a visible pending count, folder (filename) order; keys and click targets for each; the default
+      config without those tabs (old panes stay for explicit configs). Open choices go to "Needs a decision".
+      Do it before phase 3.
 - [ ] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
       opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
       source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
@@ -846,7 +853,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, both | only the installer hint | leave it
       Checked: reported by the smoke-fix worker 2026-10-09 (FileNotFoundError: 'ffmpeg' in a fresh VM).
       Decided by the user 2026-10-09: yes, both (queued in Next).
-- [ ] Combined view: which browsing tabs stay once Play exists (asked 2026-10-09: "with Play, are Artists, Albums,
+- [x] Combined view: which browsing tabs stay once Play exists (asked 2026-10-09: "with Play, are Artists, Albums,
       Directories, Playlists, Live playlists still needed?")?
       Options: keep Albums, Live playlists, Playlists, Search; merge Artists + Album Artists into one; Directories
       off the tab bar with a key | the same, but Playlists only behind the L picker | keep all tabs as they are
@@ -856,3 +863,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       box sets, filename-order mixes), browsers keep Play next / Append so one song never needs Apply. Diverged:
       Playlists (MiMo keep the tab, an editing workspace; Sol behind L with Open/Edit). Both: hide before
       removing, keep keys and a click target; digit keys follow the tab order, so removing a tab renumbers them.
+      Decided by the user 2026-10-09: "only Play" (none of the offered options): Artists, Album Artists, Albums,
+      Directories, Playlists and Live playlists leave the tab bar; their tasks move into Play (queued in Next as a
+      plan addition before phase 3). Search, Up next, Lyrics, Deleted and Versions were not part of the question.
