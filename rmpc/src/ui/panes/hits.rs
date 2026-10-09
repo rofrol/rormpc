@@ -47,6 +47,7 @@ use crate::{
             menu::{list_section::ListSection, modal::MenuModal},
         },
         rormpc_actions,
+        rormpc_hits_rules::{self, RankBy, SETS, YearsOf},
         rormpc_preview::{self, Preview},
     },
 };
@@ -64,6 +65,17 @@ struct HitsFile {
     /// the artists of the whole cohort (before the Top % cut), for the artist picker
     #[serde(default)]
     artists: Vec<ArtistCount>,
+    /// the selection's counts (`hits` 0.2.38+), shown after the rule formula under the filters
+    #[serde(default)]
+    counts: Option<HitsCounts>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+struct HitsCounts {
+    /// rows in the result
+    selected: u32,
+    /// songs the set chips leave before the period, genre, artist, Top % and owned filters
+    candidates: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,10 +98,18 @@ struct HitsArgs {
     owned: bool,
     #[serde(default)]
     show_hidden: bool,
+    /// the old shorthand (files before the set chips): mapped onto sets, rank and years of
     #[serde(default)]
     source: Option<String>,
     #[serde(default)]
     sort: Option<String>,
+    /// the set chips, e.g. `["+billboard", "-likes"]`; absent in files before them
+    #[serde(default)]
+    sets: Option<Vec<String>>,
+    #[serde(default)]
+    rank: Option<String>,
+    #[serde(default)]
+    years_of: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -116,6 +136,13 @@ struct HitsRow {
     /// why a recommendation is there ("similar to …")
     #[serde(default)]
     reason: Option<String>,
+    /// false: outside the rank's population (or Rank by none); `rank` is then only a unique row number
+    #[serde(default = "ranked_default")]
+    ranked: bool,
+}
+
+fn ranked_default() -> bool {
+    true
 }
 
 /// One genre of `hits genres --json` (the genre explorer).
@@ -380,7 +407,11 @@ pub struct HitsPane {
     filter_offset: usize,
     /// the scrolled filter rows; Apply is drawn below it in `apply_area` and never scrolls away
     filter_area: Rect,
+    /// the rule formula with the result's counts, between the filter rows and Apply
+    summary_area: Rect,
     apply_area: Rect,
+    /// counts of the result on screen (`hits` 0.2.38+)
+    counts: Option<HitsCounts>,
     /// `hits` arguments of the result on screen, to show whether the filters changed since
     applied_args: Option<Vec<String>>,
     /// text typed into the "other genre" input, picked up on the next render
@@ -415,7 +446,9 @@ impl HitsPane {
             filter_sel: 0,
             filter_offset: 0,
             filter_area: Rect::default(),
+            summary_area: Rect::default(),
             apply_area: Rect::default(),
+            counts: None,
             applied_args: None,
             genre_input: Arc::new(Mutex::new(None)),
             cohort_artists: Vec::new(),
@@ -468,6 +501,7 @@ impl HitsPane {
                 let keep = self.selected().map(|r| r.rank);
                 self.all_rows = file.rows;
                 self.cohort_artists = file.artists;
+                self.counts = file.counts;
                 self.label = file.label;
                 self.generated_at = file.generated_at;
                 self.rank_note = file.rank_note.unwrap_or_default();
@@ -855,7 +889,10 @@ impl HitsPane {
                 filters.genres.iter_mut().for_each(|g| g.1 = 0);
                 filters.add_genres(&format!("+{genre}"));
                 if pick == ExplorerPick::FilterLikes {
-                    filters.source = Source::Likes;
+                    // every liked song with it, ranked by plays as before the set chips
+                    filters.sets = [0, 1, 0, 0];
+                    filters.rank = RankBy::Plays;
+                    filters.years_of = Some(YearsOf::Release);
                     filters.by_range = false;
                     filters.decades = [false; 8]; // all years
                     filters.tops = [false; 3]; // every liked song with it, not a percentile of a few
@@ -940,7 +977,7 @@ impl HitsPane {
                     ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD) // the view is open
                 } else if matches!(
                     row,
-                    FilterRow::Heading(_) | FilterRow::Source | FilterRow::Sort | FilterRow::Mode | FilterRow::Apply
+                    FilterRow::Heading(_) | FilterRow::RankBy | FilterRow::YearsOf | FilterRow::Mode | FilterRow::Apply
                 ) {
                     ctx.config.theme.preview_label_style
                 } else if !filters.enabled(*row) {
@@ -991,7 +1028,26 @@ impl HitsPane {
             })
             .collect();
         frame.render_widget(Paragraph::new(lines), area);
+        let width = usize::from(self.summary_area.width.saturating_sub(1)).max(1);
+        let summary: Vec<Line> = rormpc_hits_rules::wrap(&self.summary(filters), width)
+            .into_iter()
+            .map(|l| Line::from(vec![Span::raw(" "), Span::styled(l, Style::default().add_modifier(Modifier::DIM))]))
+            .collect();
+        frame.render_widget(Paragraph::new(summary), self.summary_area);
         frame.render_widget(Paragraph::new(self.apply_line(filters, apply_idx, ctx)), self.apply_area);
+    }
+
+    /// The rule formula of the filters, with the counts of the result on screen when it was made by them:
+    /// "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ rock · 1,204 of 8,312".
+    fn summary(&self, filters: &Filters) -> String {
+        let mut text = filters.formula();
+        let applied = self.applied_args.as_ref() == Some(&filters.args(&self.path.to_string_lossy()));
+        if let (true, Some(c)) = (applied, self.counts) {
+            let (selected, candidates) =
+                (rormpc_hits_rules::thousands(c.selected), rormpc_hits_rules::thousands(c.candidates));
+            text = format!("{text} · {selected} of {candidates}");
+        }
+        text
     }
 
     /// The sticky Apply footer: the button plus whether pressing it would change anything.
@@ -1174,7 +1230,11 @@ impl HitsPane {
             Line::from(Span::styled(r.title.clone(), Style::default().add_modifier(Modifier::BOLD))),
             Line::from(r.artist.clone()),
             Line::default(),
-            field("Rank", format!("#{} of {} ({:.0}%)", r.rank, r.cohort, r.pct.ceil())),
+            if r.ranked {
+                field("Rank", format!("#{} of {} ({:.0}%)", r.rank, r.cohort, r.pct.ceil()))
+            } else {
+                field("Rank", "— (not in the rank's population)".to_owned())
+            },
             Line::from(Span::styled(self.rank_note.clone(), dim)),
             if let Some(reason) = &r.reason {
                 field("Why", reason.clone())
@@ -1729,8 +1789,15 @@ impl Pane for HitsPane {
             Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(30)])
                 .spacing(2)
                 .areas(area);
-        // Apply gets its row first, so even a tiny pane shows it
-        let [list_area, apply_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(filter_area);
+        // Apply gets its row first, so even a tiny pane shows it; the rule summary sits above it, never scrolled
+        let summary_lines = self.filters.as_ref().map_or(0, |f| {
+            let width = usize::from(filter_area.width.saturating_sub(1)).max(1);
+            rormpc_hits_rules::wrap(&self.summary(f), width).len().min(4) as u16
+        });
+        let [list_area, summary_area, apply_area] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(summary_lines), Constraint::Length(1)])
+                .areas(filter_area);
+        self.summary_area = summary_area;
         if list_area != self.filter_area {
             self.hover_filter = None; // resized: the row under the pointer is another one now
         }
@@ -1814,9 +1881,15 @@ impl Pane for HitsPane {
             let playing = r.file.is_some() && r.file.as_deref() == playing_file;
             let (next, row_style) =
                 next_and_style(next, playing, owned, r.hidden, ctx.config.theme.highlighted_item_style);
+            // a row outside the rank's population (or with Rank by none) has no rank to show
+            let (rank, pct) = if r.ranked {
+                (format!("#{}", r.rank), format!("{:.0}%", r.pct.ceil()))
+            } else {
+                ("—".to_owned(), String::new())
+            };
             Row::new(vec![
-                Cell::from(format!("#{}", r.rank)),
-                Cell::from(format!("{:.0}%", r.pct.ceil())),
+                Cell::from(rank),
+                Cell::from(pct),
                 Cell::from(if r.hidden { "h" } else if owned { "✓" } else { missing_mark }),
                 like_cell,
                 Cell::from(next),
@@ -2142,8 +2215,11 @@ enum FilterRow {
     Heading(&'static str),
     /// the Downloads view: every fetch item in review or failed (its label counts them, see `downloads_label`)
     Downloads,
-    Source,
-    Sort,
+    /// a set chip (`rormpc_hits_rules::SETS`): + include / - exclude / off, like a genre
+    Set(usize),
+    RankBy,
+    /// the period's axis; shows the default that follows Rank by
+    YearsOf,
     Mode,
     Decade(usize),
     From,
@@ -2166,48 +2242,14 @@ enum FilterRow {
     Apply,
 }
 
-/// Where the ranked songs come from (`hits --source`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Source {
-    Billboard,
-    Likes,
-    Recs,
-    /// every library song, by my plays
-    Library,
-    /// my own charts: songs by my plays in the chosen listening years
-    Mine,
-    /// the songs of all my stored MPD playlists (not the generated ones), by my plays
-    Playlists,
-}
-
-impl Source {
-    const ALL: [Source; 6] =
-        [Source::Billboard, Source::Mine, Source::Library, Source::Playlists, Source::Likes, Source::Recs];
-
-    fn label(self) -> &'static str {
-        match self {
-            Source::Billboard => "Billboard US",
-            Source::Likes => "my likes",
-            Source::Recs => "recommended",
-            Source::Library => "whole library",
-            Source::Mine => "my charts",
-            Source::Playlists => "my playlists",
-        }
-    }
-
-    /// The next (delta > 0) or previous source, wrapping around.
-    fn next(self, delta: i32) -> Source {
-        let i = Self::ALL.iter().position(|s| *s == self).unwrap_or(0) as i32;
-        Self::ALL[(i + delta).rem_euclid(Self::ALL.len() as i32) as usize]
-    }
-}
-
 /// What the filter column edits; turned into `hits` arguments on Apply.
 #[derive(Debug, Clone)]
 struct Filters {
-    source: Source,
-    /// likes, library and playlists: false = by plays, true = rediscover
-    rediscover: bool,
+    /// the fixed set chips, in `SETS` order: -1 exclude, 0 off, 1 include
+    sets: [i8; 4],
+    rank: RankBy,
+    /// None: follows Rank by (`RankBy::default_years`)
+    years_of: Option<YearsOf>,
     by_range: bool,
     decades: [bool; 8],
     from: i32,
@@ -2225,18 +2267,16 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { source: Source::Billboard, rediscover: false, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_hidden: false }
+        Self { sets: [1, 0, 0, 0], rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_hidden: false }
     }
 }
 
 impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
-        let mut rows = vec![FilterRow::Downloads, FilterRow::Source];
-        if matches!(self.source, Source::Likes | Source::Library | Source::Playlists) {
-            rows.push(FilterRow::Sort);
-        }
-        // recommendations have no year to filter on
-        if self.source != Source::Recs {
+        let mut rows = vec![FilterRow::Downloads, FilterRow::Heading("Sets")];
+        rows.extend((0..SETS.len()).map(FilterRow::Set));
+        rows.extend([FilterRow::RankBy, FilterRow::YearsOf]);
+        if self.has_years() {
             rows.push(FilterRow::Mode);
             if self.by_range {
                 rows.extend([FilterRow::From, FilterRow::To]);
@@ -2260,6 +2300,44 @@ impl Filters {
         rows.push(FilterRow::Heading("Options"));
         rows.extend([FilterRow::Owned, FilterRow::ShowHidden, FilterRow::Apply]);
         rows
+    }
+
+    fn effective_years_of(&self) -> YearsOf {
+        self.years_of.unwrap_or(self.rank.default_years())
+    }
+
+    /// Recommendations alone have no year to filter on: no period rows, no --years.
+    fn has_years(&self) -> bool {
+        self.sets != [0, 0, 0, 1]
+    }
+
+    /// The period as `--years`, or None for every year: the Billboard chart years need a period (a decade by
+    /// default), any other axis without a ticked decade means all years.
+    fn period(&self) -> Option<String> {
+        let chart_years = self.rank == RankBy::Billboard && self.effective_years_of() == YearsOf::Chart;
+        let all_years = !chart_years
+            && !self.by_range
+            && !self.decades.iter().any(|d| *d);
+        (self.has_years() && !all_years).then(|| self.years())
+    }
+
+    /// The Top % ranges as `--top`, or None: no box ticked, or Rank by none (no rank to cut).
+    fn top(&self) -> Option<String> {
+        let tops: Vec<String> =
+            TOPS.iter().zip(self.tops).filter(|(_, on)| *on).map(|((lo, hi), _)| format!("{lo}-{hi}")).collect();
+        (self.rank != RankBy::None && !tops.is_empty()).then(|| tops.join(","))
+    }
+
+    /// The formula of these filters, as `hits` prints it.
+    fn formula(&self) -> String {
+        rormpc_hits_rules::formula(&rormpc_hits_rules::Rules {
+            sets: self.sets,
+            period: self.period(),
+            top: self.top(),
+            genres: &self.genres,
+            artists: &self.artists,
+            owned: self.owned,
+        })
     }
 
     fn years(&self) -> String {
@@ -2349,36 +2427,23 @@ impl Filters {
     }
 
     fn args(&self, json: &str) -> Vec<String> {
-        let tops: Vec<String> =
-            TOPS.iter().zip(self.tops).filter(|(_, on)| *on).map(|((lo, hi), _)| format!("{lo}-{hi}")).collect();
-        let mut args = Vec::new();
-        match self.source {
-            Source::Billboard => {}
-            Source::Likes => {
-                args.extend(["--source".to_owned(), "likes".to_owned(), "--sort".to_owned()]);
-                args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
-            }
-            Source::Recs => args.extend(["--source".to_owned(), "recs".to_owned()]),
-            Source::Library => {
-                args.extend(["--source".to_owned(), "library".to_owned(), "--sort".to_owned()]);
-                args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
-            }
-            Source::Mine => args.extend(["--source".to_owned(), "mine".to_owned()]),
-            Source::Playlists => {
-                args.extend(["--source".to_owned(), "playlists".to_owned(), "--sort".to_owned()]);
-                args.push(if self.rediscover { "rediscover" } else { "plays" }.to_owned());
-            }
+        let mut args: Vec<String> = SETS
+            .iter()
+            .zip(self.sets)
+            .filter(|(_, sign)| *sign != 0)
+            // one token: argparse takes a separate value starting with '-' ("-likes") for an option
+            .map(|((key, _, _), sign)| format!("--set={}{key}", if sign > 0 { '+' } else { '-' }))
+            .collect();
+        args.extend(["--rank".to_owned(), self.rank.arg().to_owned()]);
+        args.extend(["--years-of".to_owned(), self.effective_years_of().arg().to_owned()]);
+        if let Some(period) = self.period() {
+            args.extend(["--years".to_owned(), period]);
         }
-        // likes, library, my playlists and my charts without any decade ticked = all years (a chart needs a
-        // period); recommendations have no year
-        let all_years = matches!(self.source, Source::Likes | Source::Library | Source::Mine | Source::Playlists)
-            && !self.by_range
-            && !self.decades.iter().any(|d| *d);
-        if self.source != Source::Recs && !all_years {
-            args.extend(["--years".to_owned(), self.years()]);
+        // no Top % (or no rank): every row, the unranked ones after the ranked
+        match self.top() {
+            Some(top) => args.extend(["--top".to_owned(), top]),
+            None => args.extend(["-n".to_owned(), "0".to_owned()]),
         }
-        args.push("--top".to_owned());
-        args.push(if tops.is_empty() { "1-100".to_owned() } else { tops.join(",") });
         let genres = self.genre_spec();
         if !genres.is_empty() {
             // one token: argparse takes a separate value starting with '-' ("-country") for an option
@@ -2444,19 +2509,18 @@ impl Filters {
         }
         f.owned = args.owned;
         f.show_hidden = args.show_hidden;
-        f.source = match args.source.as_deref() {
-            Some("likes") => Source::Likes,
-            Some("recs") => Source::Recs,
-            Some("library") => Source::Library,
-            Some("mine") => Source::Mine,
-            Some("playlists") => Source::Playlists,
-            _ => Source::Billboard,
-        };
-        f.rediscover = args.sort.as_deref() == Some("rediscover");
-        if matches!(f.source, Source::Likes | Source::Library | Source::Mine | Source::Playlists)
-            && args.period.is_none()
-        {
+        // files before the set chips name an old source, mapped as `hits --source` maps it
+        let (sets, rank, years_of) = rormpc_hits_rules::from_source(args.source.as_deref(), args.sort.as_deref());
+        f.sets = args.sets.as_deref().map_or(sets, rormpc_hits_rules::parse_sets);
+        f.rank = args.rank.as_deref().and_then(RankBy::parse).filter(|_| args.sets.is_some()).unwrap_or(rank);
+        let years_of = args.years_of.as_deref().and_then(YearsOf::parse).unwrap_or(years_of);
+        // the default that follows Rank by stays "auto", so changing Rank by moves it along
+        f.years_of = (years_of != f.rank.default_years()).then_some(years_of);
+        if args.period.is_none() {
             f.decades = [false; 8]; // all years
+        }
+        if f.rank == RankBy::None || args.top.as_deref() == Some("1-100") {
+            f.tops = [false; 3];
         }
         f
     }
@@ -2465,12 +2529,20 @@ impl Filters {
         let check = |on: bool| if on { "[x]" } else { "[ ]" };
         match row {
             FilterRow::Downloads => "Downloads".to_owned(), // the pane draws it with its counts
-            FilterRow::Source => format!("Source: ‹{}›", self.source.label()),
-            FilterRow::Sort => format!("Sort:   {}", if self.rediscover { "‹rediscover›" } else { "‹by plays›" }),
-            // my charts filter the years I listened, the other sources the songs' release years
+            FilterRow::Set(i) => {
+                let mark = match self.sets[i] { 1 => "+", -1 => "-", _ => " " };
+                format!("  [{mark}] {}", SETS[i].1)
+            }
+            FilterRow::RankBy => format!("Rank by:  ‹{}›", self.rank.label()),
+            // the default follows Rank by: shown as "auto" so it is never guessed
+            FilterRow::YearsOf => match self.years_of {
+                None => format!("Years of: ‹{}› auto", self.rank.default_years().arg()),
+                Some(y) => format!("Years of: ‹{}›", y.arg()),
+            },
+            // listening years read differently from the songs' release or chart years
             FilterRow::Mode => format!(
                 "{} {}",
-                if self.source == Source::Mine { "Listened:" } else { "Period:" },
+                if self.effective_years_of() == YearsOf::Listened { "Listened:" } else { "Period:" },
                 if self.by_range { "‹year range›" } else { "‹decades›" }
             ),
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
@@ -2506,6 +2578,8 @@ impl Filters {
         match row {
             FilterRow::ClearGenres => self.genres.iter().any(|(_, s)| *s != 0),
             FilterRow::ClearArtists => self.artists.iter().any(|(_, s)| *s != 0),
+            // Top % needs a rank
+            FilterRow::Top(_) => self.rank != RankBy::None,
             _ => true,
         }
     }
@@ -2523,6 +2597,7 @@ impl Filters {
                     | FilterRow::Explore
                     | FilterRow::AddArtist
                     | FilterRow::Decade(_)
+                    | FilterRow::Set(_)
                     | FilterRow::Top(_)
                     | FilterRow::Genre(_)
                     | FilterRow::Artist(_)
@@ -2534,11 +2609,13 @@ impl Filters {
     /// Space / Enter on a row.
     fn toggle(&mut self, row: FilterRow) {
         match row {
-            FilterRow::Source => self.source = self.source.next(1),
-            FilterRow::Sort => self.rediscover = !self.rediscover,
+            FilterRow::Set(i) => self.sets[i] = rormpc_hits_rules::next_sign(self.sets[i]),
+            FilterRow::RankBy => self.rank = self.rank.next(1),
+            FilterRow::YearsOf => self.years_of = YearsOf::next(self.years_of, 1),
             FilterRow::Mode => self.by_range = !self.by_range,
             FilterRow::Decade(i) => self.decades[i] = !self.decades[i],
-            FilterRow::Top(i) => self.tops[i] = !self.tops[i],
+            FilterRow::Top(i) if self.enabled(row) => self.tops[i] = !self.tops[i],
+            FilterRow::Top(_) => {}
             FilterRow::Genre(i) => self.genres[i].1 = match self.genres[i].1 { 0 => 1, 1 => -1, _ => 0 },
             FilterRow::ClearGenres => self.genres.iter_mut().for_each(|(_, s)| *s = 0),
             FilterRow::Artist(i) => self.artists[i].1 = match self.artists[i].1 { 0 => 1, 1 => -1, _ => 0 },
@@ -2559,8 +2636,8 @@ impl Filters {
             FilterRow::From => self.from = clamp(self.from + delta),
             FilterRow::To => self.to = clamp(self.to + delta),
             FilterRow::Mode => self.by_range = !self.by_range,
-            FilterRow::Source => self.source = self.source.next(delta),
-            FilterRow::Sort => self.rediscover = !self.rediscover,
+            FilterRow::RankBy => self.rank = self.rank.next(delta),
+            FilterRow::YearsOf => self.years_of = YearsOf::next(self.years_of, delta),
             _ => return false,
         }
         true
@@ -2748,23 +2825,101 @@ mod tests {
         assert_eq!(back.genres.len(), GENRES.len() + 1);
     }
 
+    /// The `args` object `hits` writes into its JSON for these command-line arguments.
+    fn written_args(args: &[String]) -> HitsArgs {
+        let value = |flag: &str| args.iter().position(|a| a == flag).map(|i| args[i + 1].clone());
+        HitsArgs {
+            period: value("--years"),
+            top: value("--top"),
+            rank: value("--rank"),
+            years_of: value("--years-of"),
+            sets: Some(args.iter().filter_map(|a| a.strip_prefix("--set=").map(str::to_owned)).collect()),
+            ..HitsArgs::default()
+        }
+    }
+
     #[test]
-    fn playlists_source_round_trips_with_all_years_and_sort() {
+    fn set_chips_rank_and_years_round_trip() {
         let mut f = Filters::default();
-        f.source = Source::Library.next(1);
-        assert_eq!(f.source, Source::Playlists);
-        assert!(f.rows().contains(&FilterRow::Sort));
+        assert_eq!(f.args("x.json")[..4], ["--set=+billboard", "--rank", "billboard", "--years-of"]);
+        f.toggle(FilterRow::Set(1)); // likes: off -> +
+        f.toggle(FilterRow::Set(3));
+        f.toggle(FilterRow::Set(3)); // recommended: off -> + -> -
+        f.adjust(FilterRow::RankBy, 1); // Billboard -> my plays
+        assert_eq!(f.line(FilterRow::YearsOf), "Years of: ‹listened› auto");
         f.decades = [false; 8];
-        f.rediscover = true;
         let args = f.args("x.json");
-        assert!(args.windows(4).any(|w| w == ["--source", "playlists", "--sort", "rediscover"]));
-        assert!(!args.contains(&"--years".to_owned()));
+        assert_eq!(args[..7], ["--set=+billboard", "--set=+likes", "--set=-recommended", "--rank", "plays", "--years-of", "listened"]);
+        assert!(!args.contains(&"--years".to_owned())); // no decade: every listening year
+        let back = Filters::from_args(&written_args(&args));
+        assert_eq!((back.sets, back.rank, back.years_of, back.decades), (f.sets, RankBy::Plays, None, [false; 8]));
+        assert_eq!(f.formula(), "(Billboard ∪ Likes) − Recommended ∩ Top 1-10%");
+        // an explicit axis stays explicit, the default one stays "auto"
+        f.toggle(FilterRow::YearsOf);
+        assert_eq!(f.line(FilterRow::YearsOf), "Years of: ‹release›");
+        let back = Filters::from_args(&written_args(&f.args("x.json")));
+        assert_eq!(back.years_of, Some(YearsOf::Release));
+    }
+
+    #[test]
+    fn rank_none_disables_top_and_takes_every_row() {
+        let mut f = Filters { sets: [0, 0, 0, 1], rank: RankBy::None, ..Filters::default() };
+        assert!(!f.enabled(FilterRow::Top(0)));
+        f.toggle(FilterRow::Top(1));
+        assert_eq!(f.tops, [true, false, false]); // the disabled row does not change
+        let args = f.args("x.json");
+        assert!(!args.contains(&"--top".to_owned()) && args.windows(2).any(|w| w == ["-n", "0"]));
+        // recommendations alone have no year: no period rows, no --years
+        assert!(!f.rows().contains(&FilterRow::Mode) && !args.contains(&"--years".to_owned()));
+        assert_eq!(f.formula(), "Recommended");
+    }
+
+    #[test]
+    fn files_before_the_set_chips_load_from_their_source() {
         let back = Filters::from_args(&HitsArgs {
             source: Some("playlists".to_owned()),
             sort: Some("rediscover".to_owned()),
+            rank: Some("chart".to_owned()), // the old default value, not a choice
+            top: Some("1-100".to_owned()),
             ..HitsArgs::default()
         });
-        assert_eq!((back.source, back.rediscover, back.decades), (Source::Playlists, true, [false; 8]));
+        assert_eq!((back.sets, back.rank, back.years_of, back.decades), ([0, 0, 1, 0], RankBy::Rediscover, None, [false; 8]));
+        assert_eq!(back.tops, [false; 3]); // "1-100" was "no box ticked"
+        let mine = Filters::from_args(&HitsArgs { source: Some("mine".to_owned()), ..HitsArgs::default() });
+        assert_eq!((mine.sets, mine.rank, mine.years_of), ([0; 4], RankBy::Plays, None));
+        assert_eq!(mine.line(FilterRow::Mode), "Listened: ‹decades›");
+        let charts = Filters::from_args(&HitsArgs { period: Some("1980-1989".to_owned()), ..HitsArgs::default() });
+        assert_eq!((charts.sets, charts.rank, charts.years_of), ([1, 0, 0, 0], RankBy::Billboard, None));
+    }
+
+    /// The JSON `hits --json` writes, as rormpc-tools' `tests/test_rormpc_contract.py` checks it on its side.
+    #[test]
+    fn hits_file_contract() {
+        let text = r#"{"version": 1, "generated_at": "2026-10-09T23:00:00", "label": "Hits 1980-1989 · x",
+            "artists": [{"name": "Toto", "songs": 2}],
+            "args": {"period": "1980-1989", "top": "1-10", "genre": "+rock", "artist": "", "owned": false,
+                     "rank": "billboard", "years_of": "chart", "sets": ["+billboard", "-likes"],
+                     "show_hidden": false, "source": null, "sort": "plays"},
+            "rules": {"schema": 1, "sets": {"billboard": 1, "likes": -1}, "rank": "billboard",
+                      "years_of": "chart", "period": "1980-1989", "top": "1-10", "genre": "+rock", "artist": "",
+                      "owned": false},
+            "formula": "Billboard − Likes ∩ 1980-1989 ∩ Top 1-10% ∩ rock",
+            "summary": "Billboard − Likes ∩ 1980-1989 ∩ Top 1-10% ∩ rock · 1 of 995",
+            "counts": {"selected": 1, "owned": 1, "candidates": 995, "cohort": 995},
+            "rank_note": "best year-end chart position within the chosen years",
+            "rows": [{"rank": 3, "pct": 0.3, "cohort": 995, "ranked": true, "artist": "Toto", "title": "Africa",
+                      "year": 1983, "years": [1983], "points": 98, "peak": 98, "listens": 5, "sets": ["billboard"],
+                      "genres": ["rock"], "mbid": null, "file": "a.mp3", "hidden": false, "plays": 4,
+                      "reason": null}]}"#;
+        let file: HitsFile = serde_json::from_str(text).unwrap();
+        let counts = file.counts.unwrap();
+        assert_eq!((counts.selected, counts.candidates, file.rows[0].ranked), (1, 995, true));
+        let f = Filters::from_args(&file.args);
+        assert_eq!((f.sets, f.rank, f.years_of), ([1, -1, 0, 0], RankBy::Billboard, None));
+        // the pane's own formula for these filters is the text `hits` wrote
+        assert_eq!(f.formula(), "Billboard − Likes ∩ 1980-1989 ∩ Top 1-10% ∩ rock");
+        // a row of an older file is ranked
+        assert!(row(Some("a.mp3"), 1).ranked);
     }
 
     #[test]

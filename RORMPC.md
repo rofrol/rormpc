@@ -103,16 +103,26 @@ The default and example configurations put Hits first, Queue second and one top-
 configurations are not rewritten; move their Hits tab and update their named bindings separately. The last
 active tab is still restored on startup, rather than forcing Hits on every launch.
 
-The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. Source cycles
-Billboard US (year-end charts) / my charts (songs by my plays in the chosen LISTENING years, "Listened:"
-instead of "Period:", the year in progress included; the weighted shuffle's own picks don't count; "thin data"
-under 30 plays) / whole library (every song by my plays, or "rediscover") / my playlists (the songs of all my
-stored MPD playlists together, each once, ranked like the whole library; "Why" names the playlists a song is on;
+The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "Sets" are
+chips like the genre rows (click or Space cycles off → + → − → off): Billboard US (year-end charts), my likes, my
+playlists (the songs of all my stored MPD playlists together, each once; "Why" names the playlists a song is on;
 the playlists the tools write themselves — `hits --playlist`'s, "LB …", "Folder …", "Skipped", "Not finished" —
-are left out, and the details line names the ones skipped; "Tag …" and Live playlists count) / my likes /
-recommended (songs of
-artists similar to the ones I play most, from ListenBrainz Radio; no years, the details say which artists led to
-each song). Apply takes ~0.3 s once the chart songs were looked up: `hits` keeps its MusicBrainz lookups and
+are left out, and the details line names the ones skipped; "Tag …" and Live playlists count) and recommended (songs
+of artists similar to the ones I play most, from ListenBrainz Radio; no years, the details say which artists led to
+each song). The selection is (union of the + sets, or the whole library when none is +) − (union of the − sets) ∩
+period ∩ genres ∩ artists ∩ Top % ∩ owned (`hits --set ±KIND`). "Rank by" cycles Billboard (best year-end
+position) / my plays / rediscover (often played, not lately) / none; Top % is cut in the rank's own population (the
+chart songs of the period, or the library songs of the period), before the sets, genres and artists, so a song's
+rank never depends on which chips are on, and a song outside that population shows "—" and stays only with no Top %
+box ticked. With Rank by none the Top % rows are dim and do nothing. "Years of" says what the period means: chart
+year, release year or listened year (the period row then reads "Listened:", the year in progress included; the
+weighted shuffle's own picks don't count; "thin data" under 30 plays); "auto" follows Rank by (Billboard → chart,
+my plays → listened, else release), cycling it picks one. A period with no decade ticked means every year, except
+for Billboard chart years. Under the rows, above Apply, the rule formula is printed, with the result's counts once
+Apply ran with these filters: "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ Top 1-10% ∩ rock · 87 of 1,056"
+(rows shown of the songs the sets leave). The old Source choices are these combinations: my charts = no set, my
+plays, listened; whole library = no set, my plays or rediscover; `hits --source` still maps them, and result files
+written before the chips load into the matching rows. Apply takes ~0.3 s once the chart songs were looked up: `hits` keeps its MusicBrainz lookups and
 matches and the ListenBrainz popularity (30 days; ListenBrainz down = not asked for 20 min) in one SQLite file,
 `~/.cache/hits/cache.sqlite3` (raw search results compressed; `hits compact` reclaims space). A new install
 starts from the seed in rormpc-tools (the matches of every chart year, ~0.8 MB), and the hourly `musicdb update`
