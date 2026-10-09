@@ -153,14 +153,16 @@ companions() {
   command -v uv >/dev/null || { echo "needs uv: https://docs.astral.sh/uv/" >&2; exit 1; }
   if [ -n "$local_build" ]; then
     uv tool install --force --editable "$RORMPC_TOOLS_DIR"
-    cargo install --locked --path "$RO_LB_DIR"
   else
     uv tool install --force "rormpc-tools @ git+$RORMPC_TOOLS_REPO@${RORMPC_TOOLS_REF:-$RORMPC_TOOLS_TAG}"
-    if [ -n "${RO_LB_REF:-}" ]; then
-      cargo install --locked --git "$RO_LB_REPO" --rev "$RO_LB_REF"
-    else
-      cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
-    fi
+  fi
+  # apart from uv: set -e is off inside an if that || tests, so a failed uv install went unnoticed there
+  if [ -n "$local_build" ]; then
+    cargo install --locked --path "$RO_LB_DIR"
+  elif [ -n "${RO_LB_REF:-}" ]; then
+    cargo install --locked --git "$RO_LB_REPO" --rev "$RO_LB_REF"
+  else
+    cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
   fi || { echo "building ro-listenbrainz-mpd failed; on Debian/Ubuntu it needs: sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev" >&2; exit 1; }
   local tools; tools="$(uv tool dir --bin)"
   service musicdb 3600 "$tools/musicdb" update
