@@ -658,6 +658,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     merges the selected audio match after a confirmation ("Keep another file…" picks another); not clicked through
     in the TUI because Merge would move a real file to the quarantine.
 
+- [ ] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
+      when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
+      workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
+
 ## Proposed
 
 ## Needs a decision
@@ -714,8 +718,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       queue also starts at 0); it recommends keeping them waiting, which is what the code does now. Recorded
       earlier as the user's choice by mistake: that text was a Claude Code input suggestion in the worker's pane.
 
-- [ ] CI: dispatch `installer_smoke.yml` on rofrol/rormpc once now and, when it passes, run it on push to master
-      and weekly like the other workflows?
+- [x] CI: dispatch `installer_smoke.yml` on rofrol/rormpc once now and, when it passes, run it on push to master
+      and weekly like the other workflows? Decided by the user 2026-10-09: yes (queued in Next).
       Options: run it once, then add push + weekly triggers | run it once, keep it manual | leave it
       Checked 2026-10-09: `gh run list -R rofrol/rormpc --workflow installer_smoke.yml` shows no run yet; ci.yml
       runs on push; rormpc-tools and ro-listenbrainz-mpd test.yml already have push, tags and a weekly schedule.
