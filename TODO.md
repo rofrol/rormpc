@@ -703,6 +703,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       downloads with a visible pending count, folder (filename) order; keys and click targets for each; the default
       config without those tabs (old panes stay for explicit configs). Open choices go to "Needs a decision".
       Do it before phase 3.
+      Consulted 2026-10-09 by the coordinator (Sol a91fcbfc, MiMo 0fd6ccf8), input for the worker: both put a
+      Browse/Sources mode into Play (grouping Artists / Album artists / Albums / Folders / Lists, drill down, `/`
+      search; p play, n play next, a append on any row, no Apply) and an explicit Order (Source = disc/track,
+      filename or list order · Ranked · Weighted; playing an album picks Source order by itself); a stored-playlist
+      editor (reorder, remove, rename, delete, explicit save) and a Live playlists inbox (refresh, download status,
+      accept/reject with multi-select, a pending-count badge in Play) that never replace the queue. Diverged on
+      where: Sol puts Browse in the left column (Build | Browse) and the editor and inbox in overlays; MiMo cycles
+      right-pane modes (Sources | Queue | Live). MiMo: keep Artists and Album artists apart (different grouping).
+      Nothing needs its own tab, but filters alone do not replace browsing, editing or the download review.
 - [ ] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
       opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
       source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
