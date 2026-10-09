@@ -710,6 +710,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
       `status` and dependency hint (decided 2026-10-09).
 
+- [ ] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
+      scrobbler, and what percent of the required percent is done, and whether it is still possible since the song
+      was scrolled, e.g. to 20%, and a manual button to send it to the scrobbler. It has to take the information
+      how many percent is needed to send to the scrobbler from the ro mpd listenbrainz daemon. Ask the models.")
+      A worker consults the models first (how rormpc gets the rule and the current listen's progress from
+      ro-listenbrainz-mpd: its config's listen rule, a state file or a command; the seek rule makes a listen
+      impossible; what the manual send does and how it avoids a double listen), then builds it; open choices go
+      to "Needs a decision".
+
 ## Proposed
 
 ## Needs a decision
