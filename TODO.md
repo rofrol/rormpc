@@ -689,9 +689,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       ± set chips, scoped pins/exclusions, smart lists, 6 mockups; consult rounds 20261009-230419-b57c and
       20261009-230647-3341. Its 12 open choices are in "Needs a decision" ("Combined view:").
 
-- [ ] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows
+- [x] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows
       Billboard, my likes, my playlists, recommended), Rank by, Years of (default follows Rank by), CLI and Hits pane;
       `--source` kept as a shorthand; contract tests.
+      Done in rormpc af62e2e, rormpc-tools 06ecfee (worker; pytest 261, cargo test 989; clippy shows only older
+      warnings; not released). Behaviour changes by design: Top % is cut before genres and sets (Billboard rock
+      Top 10% 50 → 45 rows), `-n` cuts after the artist filter; rows without a rank get population size +
+      position; "of N" counts the songs after the set algebra, before period and filters; Billboard with Years of
+      other than chart reads every chart year (6,333 songs, ~0.8 s). The installed hits 0.2.37 rejects the new
+      arguments: rormpc and rormpc-tools must be released and installed together.
 - [ ] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
       library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
       marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
@@ -736,6 +742,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       ro-listenbrainz-mpd: its config's listen rule, a state file or a command; the seek rule makes a listen
       impossible; what the manual send does and how it avoids a double listen), then builds it; open choices go
       to "Needs a decision".
+
+- [ ] rormpc-tools README: describe `hits --set`, `--rank`, `--years-of` (phase 1 worker left it out of scope).
+- [ ] AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
+      it (reported by the phase 1 worker 2026-10-10).
 
 ## Proposed
 
@@ -875,3 +885,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-09: "only Play" (none of the offered options): Artists, Album Artists, Albums,
       Directories, Playlists and Live playlists leave the tab bar; their tasks move into Play (queued in Next as a
       plan addition before phase 3). Search, Up next, Lyrics, Deleted and Versions were not part of the question.
+- [ ] Release rormpc-tools v0.2.38 and install rormpc with phase 1 (± set chips, Rank by, Years of) now, or after
+      more phases?
+      Options: now (the installed Hits keeps working only with matching tools) | after phase 2 | after phase 3
+      Checked: rormpc af62e2e needs hits ≥ the new tools; the installed 0.2.37 rejects --set/--rank/--years-of.
+- [ ] Hits "my plays" rank: with Years of release it counts every play, with Years of listened it leaves out the
+      weighted shuffle's own picks (as the old sources did); make both the same?
+      Options: both leave out the shuffle's own picks | both count every play | keep it as it is
+      Checked: reported by the phase 1 worker 2026-10-10 (hits_rules.score).
