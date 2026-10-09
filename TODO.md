@@ -667,6 +667,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       --user --failed'` failing with "Failed to connect to bus: Permission denied"; the user generators also tried
       /home/runner/.config. Next: a worker reproduces it in an Ubuntu VM (OrbStack, as on 2026-10-03) and fixes
       the step; then the coordinator dispatches it again.
+      Fixed in 9ff4029 (worker, reproduced in an OrbStack Ubuntu 24.04 VM): the runner image's /etc/environment sets
+      XDG_CONFIG_HOME=/home/runner/.config, which pam_env passed to ci; `as-ci` ran from the runner's work dir ci
+      cannot read; the bus check now runs as ci; ffmpeg added (musicdb update needs it); and an installer bug: a
+      failed `uv tool install` passed silently inside `if …; fi || {…}`. Second run dispatched: 37994088698.
 
 - [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
       choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
@@ -808,3 +812,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, all five phases in order | only phase 1 (± set chips, Rank by, Years of in Hits) first | not now
       Checked: all 12 open choices are decided (2026-10-09); every phase ships on its own.
       Decided by the user 2026-10-09: yes, all five phases in order (queued in Next).
+- [ ] Installer smoke test: make "Units are enabled and active" prove the programs run (a Type=simple unit is
+      "active" even when its binary is missing; the first VM run passed it without rormpc-tools)?
+      Options: yes, check each unit's MainPID/exec and a log line | leave it
+      Checked: reported by the smoke-fix worker 2026-10-09; the later steps (listen, status) catch some of it.
+- [ ] rormpc-tools: `musicdb update` ignores the scrobbler config's `api_url` and calls the real ListenBrainz (the
+      smoke test's fake token gets "Token invalid", exit 1); make it use the same API URL?
+      Options: yes, read api_url like the scrobbler | leave it, the test expects exit 1
+      Checked: reported by the smoke-fix worker 2026-10-09.
+- [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+      `status` / dependency hint?
+      Options: yes, both | only the installer hint | leave it
+      Checked: reported by the smoke-fix worker 2026-10-09 (FileNotFoundError: 'ffmpeg' in a fresh VM).
