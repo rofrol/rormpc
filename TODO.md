@@ -683,6 +683,21 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       ± set chips, scoped pins/exclusions, smart lists, 6 mockups; consult rounds 20261009-230419-b57c and
       20261009-230647-3341. Its 12 open choices are in "Needs a decision" ("Combined view:").
 
+- [ ] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows
+      Billboard, my likes, my playlists, recommended), Rank by, Years of (default follows Rank by), CLI and Hits pane;
+      `--source` kept as a shorthand; contract tests.
+- [ ] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
+      library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
+      marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
+      exclusions.
+- [ ] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
+      opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
+      source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
+- [ ] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
+      MPD export "Smart NAME" on by default; no freeze action.
+- [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
+      a cycle check.
+
 ## Proposed
 
 ## Needs a decision
@@ -788,7 +803,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Combined view: Is there a "freeze as static list" action? Decided by the user 2026-10-09: no, the MPD export is the static copy.
       Options: No, the MPD export is the static copy | Yes, into a tag list | Yes, into an MPD playlist
       Checked: plans/combined-view.md "Open choices" (12); the first option is the plan's recommendation.
-- [ ] Combined view: build it now, in the plan's five phases (plans/combined-view.md "Build order"), one worker per
+- [x] Combined view: build it now, in the plan's five phases (plans/combined-view.md "Build order"), one worker per
       phase with a release after each?
       Options: yes, all five phases in order | only phase 1 (± set chips, Rank by, Years of in Hits) first | not now
       Checked: all 12 open choices are decided (2026-10-09); every phase ships on its own.
+      Decided by the user 2026-10-09: yes, all five phases in order (queued in Next).
