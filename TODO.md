@@ -658,7 +658,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     merges the selected audio match after a confirmation ("Keep another file…" picks another); not clicked through
     in the TUI because Merge would move a real file to the quarantine.
 
-- [ ] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
+- [x] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
       when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
       workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
       First run 2026-10-09 (run 37990844352) failed in "Fresh user with a lingering systemd user session" after
@@ -671,6 +671,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       XDG_CONFIG_HOME=/home/runner/.config, which pam_env passed to ci; `as-ci` ran from the runner's work dir ci
       cannot read; the bus check now runs as ci; ffmpeg added (musicdb update needs it); and an installer bug: a
       failed `uv tool install` passed silently inside `if …; fi || {…}`. Second run dispatched: 37994088698.
+      Second run green (degraded user manager handled). Triggers added in 75cada9 (worker): push to master and pull_request
+      with a paths filter on the installer and the workflow, release tags, weekly "47 5 * * 1"; pushed.
 
 - [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
       choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
