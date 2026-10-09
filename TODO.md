@@ -267,8 +267,9 @@ during the mute, stop, a restart past the deadline.
       They leave each other alone: an expiry inside the silence restores the volume and stays paused until the gap
       presses play; a gap while muted pauses and resumes at volume 0 and the mute's deadline restores it later; a
       mute started during the silence works (a pause is not a stop).
-- [ ] A queue replaced by Sources… may pass through a stop, which unmutes. Watch whether that happens in use.
-- [ ] Maybe later: "Pause for…" (now that one daemon owns the gap, it no longer fights mpd-gap).
+- [x] A queue replaced by Sources… may pass through a stop, which unmutes. Watch whether that happens in use.
+- [x] Maybe later: "Pause for…" (now that one daemon owns the gap, it no longer fights mpd-gap).
+- Closed 2026-10-09: "Mute for…" was removed and "Pause for…" built instead (see "Next, in order").
 
 ## Test report of 2026-10-06 (scratch MPD, music-mpd-8e)
 
@@ -311,15 +312,18 @@ or a change of its Python can leave launchd restarting a dead path: rerun `insta
 
 Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first"):
 
+Closed 2026-10-07 by the user: media keys stay as they are (mpd-now-playable, no helper, no Linux bridge,
+no Rust port); the unchecked points below were closed with it on 2026-10-09.
+
 - [x] Document it in RORMPC.md ("Media keys" section): what it is, the commands above, how to check it
       (`launchctl print gui/$UID/me.00dani.mpd-now-playable`), the upgrade caveat, and that it is independent
       of rormpc.
-- [ ] Do not fold it into `rormpc_install.sh install`: that script installs and rolls back the binary, and a
+- [x] Do not fold it into `rormpc_install.sh install`: that script installs and rolls back the binary, and a
       binary rollback must not touch the service. If a helper is still wanted, make it a separate opt-in
       subcommand (e.g. `rormpc_install.sh media-keys install|status|uninstall`) that only calls the tool's own
       `install-launchagent` / `uninstall-launchagent`, never writes its own plist, and refuses to run a second
       Now Playing source.
-- [ ] Linux: MPD has no MPRIS of its own; a bridge exposes it on the session D-Bus. Options: this
+- [x] Linux: MPD has no MPRIS of its own; a bridge exposes it on the session D-Bus. Options: this
       repository's `rmpcd` (Rust, MPRIS server via zbus, off by default: `config.mpris = true` in
       `~/.config/rmpcd/init.lua`; upstream calls rmpcd early stage), `mpd-mpris` (Go; Arch: `pacman -S
       mpd-mpris`, ships a systemd user unit: `systemctl --user enable --now mpd-mpris`) or `mpDris2`. Run
@@ -344,7 +348,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
       prev` (mpd-now-playable's handler, or the port's), so every Previous walks the same history.
       Decided 2026-10-07 (the user): leave it as it is; no Bluetooth headphones or Now Playing widget are used to
       switch songs, so mpd-now-playable stays unchanged and rmpcd is not extended.
-- [ ] Rust instead of the Python tool on macOS. Asked GPT-6.1 Sol and MiMo twice on 2026-10-03; both say keep
+- [x] Rust instead of the Python tool on macOS. Asked GPT-6.1 Sol and MiMo twice on 2026-10-03; both say keep
       mpd-now-playable (it works, 50 MB RSS is not a real cost), and if it is replaced, by a standalone port,
       not inside rmpcd (rmpcd is the Linux zbus/MPRIS daemon; a macOS stack in it doubles its platforms).
       - What there is to port: mpd-now-playable 1.6.2 (MIT) is ~1900 lines of Python, but the macOS part is
@@ -380,9 +384,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
         through a second connection (a command worker), never the idle one.
       - Estimates from the models: a proof of concept in a day or two, as reliable as the Python tool in
         one to two weeks. Spike first: a launchd-started binary that receives play/pause and shows a title.
-- [ ] Windows: no plan unless MPD on Windows is actually used (SMTC, e.g. via souvlaki; needs a hidden HWND with a
+- [x] Windows: no plan unless MPD on Windows is actually used (SMTC, e.g. via souvlaki; needs a hidden HWND with a
       message pump).
-- [ ] Whatever is documented, check: works with rormpc closed, survives MPD restart and sleep/wake, clears
+- [x] Whatever is documented, check: works with rormpc closed, survives MPD restart and sleep/wake, clears
       stale metadata when playback stops, uninstall leaves MPD alone.
 
 ## Modals and the context menu: mouse
@@ -444,24 +448,24 @@ ask whether to add them. radio.omarchy.com did not resolve (DNS) on 2026-10-03, 
 
 Plan after asking GPT-6.1 Sol and MiMo (both agreed on the shape and the first version):
 
-- [ ] Prerequisite: a non-interactive mode for dotfiles `yt-mp3-mb` (e.g. `--batch --json`): no prompts, prints
+- [x] Prerequisite: a non-interactive mode for dotfiles `yt-mp3-mb` (e.g. `--batch --json`): no prompts, prints
       the produced paths and the unresolved matches as JSON, resumable without duplicate downloads. Uncertain
       matches stay "needs review" instead of being asked about inside a child process the TUI cannot answer.
-- [ ] A new CLI in dotfiles (like `musicdb` / `hits`), e.g. `liveplaylist add|check|accept|reject|list --json`.
+- [x] A new CLI in dotfiles (like `musicdb` / `hits`), e.g. `liveplaylist add|check|accept|reject|list --json`.
       It owns state, source adapters, matching, downloads and writing the MPD playlist; rormpc owns presentation
       and decisions only (a URL input modal and a "Live playlists" pane with accept / reject / accept all), runs
       it with argv (no shell), never blocks the UI thread, can cancel it. Progress as JSONL or a status file
       written atomically (temp + rename), as the Hits pane does.
-- [ ] State per subscription in music-data (secrets outside it, logs/progress in ~/.cache): url, kind, MPD
+- [x] State per subscription in music-data (secrets outside it, logs/progress in ~/.cache): url, kind, MPD
       playlist name, a stable target dir (not the playlist title, which can change), schema version, lock file.
       Per source item: the decision (pending/accepted/rejected, rejects are durable) separate from the job state
       (queued/downloading/needs_match/ready/failed), source position and last-seen time, the local path.
-- [ ] Order lives in the .m3u (playlist_directory), not in `NNN` file names. Publish only ready files. Songs
+- [x] Order lives in the .m3u (playlist_directory), not in `NNN` file names. Publish only ready files. Songs
       already in the library are referenced, not downloaded again, but only on a confirmed recording match
       (MBID), never on a loose title match.
-- [ ] Removals and reorders upstream: never delete local files and never infer a removal from a failed or partial
+- [x] Removals and reorders upstream: never delete local files and never infer a removal from a failed or partial
       check (yt-dlp YouTube extraction breaks, bot checks, 403s); an id that reappears is reactivated.
-- [ ] First version: public YouTube playlists only (`yt-dlp --flat-playlist -J` to list ids cheaply), manual
+- [x] First version: public YouTube playlists only (`yt-dlp --flat-playlist -J` to list ids cheaply), manual
       check, first import reviewed, batch accept. No timer: nobody answers "add these?" at 4 am; later a launchd
       check may only add pending items and notify.
 - [ ] Later, maybe, Spotify. Verified 2026-10-03 in Spotify's February 2026 migration guide: playlist items are
@@ -483,11 +487,11 @@ the launchd bootout/bootstrap race (error 5), missing libsqlite3-dev on Linux.
 
 Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI second):
 
-- [ ] (tests done locally 2026-10-07, e354b97; the workflow waits for the CI decision) rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a
+- [x] (tests done locally 2026-10-07, e354b97; the workflow waits for the CI decision) rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a
       ListenBrainz outage still let `update` sync and export; play counts, and a local listen counted once with its
       ListenBrainz copy (same timestamp); skips import and the Skipped playlist; delete/undo with the journal;
       mpd-gap state transitions on a fake clock and fake MPD status. Workflow on Ubuntu, ~1-2 min.
-- [ ] (tests done locally 2026-10-07, 862c08a; the workflow waits for the CI decision) ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule
+- [x] (tests done locally 2026-10-07, 862c08a; the workflow waits for the CI decision) ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule
       (fraction, max seconds, uninterrupted: seek restarts, pause neutral) and the local log lines. ~2-4 min.
 - [ ] rormpc: installer smoke test on Ubuntu: fresh user, `loginctl enable-linger`, `XDG_RUNTIME_DIR` and the user
       D-Bus, MPD with a generated tone, fake token and API URL, `rormpc_install.sh companions`, then assert units and
@@ -497,7 +501,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       under test. ~5-8 min. This is what was done by hand in an OrbStack Ubuntu VM on 2026-10-03.
 - [ ] macOS: first a throwaway probe that `launchctl bootstrap gui/$UID` works on hosted runners, then the same
       smoke test with launchd.
-- [ ] Triggers: push to master, pull_request, workflow_dispatch, weekly schedule (toolchain, uv and runner-image
+- [x] Triggers: push to master, pull_request, workflow_dispatch, weekly schedule (toolchain, uv and runner-image
       drift; GitHub disables schedules after 60 days without repository activity), and on release tags. Add
       `push` to the upstream ci.yml here too.
 - Not automated: live ListenBrainz, MusicBrainz, Billboard and YouTube (OAuth) calls, and exact gap timing on
@@ -505,7 +509,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Versions: delete a bad version, find versions from the Queue
 
-- [ ] Versions: delete a bad version, and find versions from the Queue (asked 2026-10-06: "in Versions I can't
+- [x] Versions: delete a bad version, and find versions from the Queue (asked 2026-10-06: "in Versions I can't
   delete a version of a song if I decide it is bad. Or in the Queue right-click find versions, or some marker on the
   song that versions exist"). Facts: Versions file rows offer Preview, Label and "Same recording: keep this file,
   merge the others…" (quarantine + aliases); deleting exists only in Queue/Hits ("Delete library file…", Ctrl-x:
@@ -541,7 +545,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Lyrics: Polish translation next to the original
 
-- [ ] Asked 2026-10-07: show a Polish translation in the Lyrics tab, the original on the left and Polish on the
+- [x] Asked 2026-10-07: show a Polish translation in the Lyrics tab, the original on the left and Polish on the
       right, both left-aligned; what if there is no translation, the song is Polish, or in another language (e.g.
       Czech)? Facts: lyrics come only from LRCLIB (`musicdb lyrics`, `.lrc`/`.txt` + `index.json` in `lyrics_dir`),
       which has no translations; the pane shows one column, plain `.txt` scrolled by progress.
@@ -580,7 +584,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Previous in the weighted shuffle
 
-- [ ] Asked 2026-10-07: with the weighted shuffle on, the Previous media key bounced between unrelated songs and
+- [x] Asked 2026-10-07: with the weighted shuffle on, the Previous media key bounced between unrelated songs and
       each change was recorded as an early skip. Facts: Hammerspoon runs `mpc prev`; with random on, MPD's
       `previous` goes to the previous song in its own random order, not the one that played before; mpd-player
       records every change of song as finished / early (48 h rest) / late, and ro-listenbrainz-mpd logs the same
@@ -623,7 +627,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Versions: audio fingerprint finds copies
 
-- [ ] Asked 2026-10-07 (screenshot): "Love Story (Disco Lines remix)" (official upload, 139 s) and "Love Story (Disco
+- [x] Asked 2026-10-07 (screenshot): "Love Story (Disco Lines remix)" (official upload, 139 s) and "Love Story (Disco
       Lines full remix)" (a re-upload by a "Central Bass Boost" channel, 137 s) are not detected as a copy. Facts:
       they share a Versions group with no decision; dedupe only merges the same md5 or YouTube id; no MBIDs; the
       Queue's "Remove duplicate entries (N)" only finds the same file queued twice. fpcalc is already used by
@@ -709,3 +713,17 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: the worker's analysis (MPD's state file restores priorities after a clean restart, but a replaced
       queue also starts at 0); it recommends keeping them waiting, which is what the code does now. Recorded
       earlier as the user's choice by mistake: that text was a Claude Code input suggestion in the worker's pane.
+
+- [ ] CI: dispatch `installer_smoke.yml` on rofrol/rormpc once now and, when it passes, run it on push to master
+      and weekly like the other workflows?
+      Options: run it once, then add push + weekly triggers | run it once, keep it manual | leave it
+      Checked 2026-10-09: `gh run list -R rofrol/rormpc --workflow installer_smoke.yml` shows no run yet; ci.yml
+      runs on push; rormpc-tools and ro-listenbrainz-mpd test.yml already have push, tags and a weekly schedule.
+- [ ] CI on macOS: build the throwaway `launchctl bootstrap gui/$UID` probe on a hosted runner, then a launchd
+      smoke test ("Tests and GitHub Actions…")?
+      Options: leave it (the macOS install is exercised on this Mac at every release) | build the probe first
+      Checked 2026-10-09: nothing for macOS exists in installer_smoke.yml; it is the last open CI plan point.
+- [ ] Live playlists: test a real download with a public YouTube playlist you choose (the one live listing so far
+      returned 0 items)?
+      Options: you give a playlist URL and a worker tests it on a scratch MPD | leave it until you use it
+      Checked 2026-10-09: the first version is released (v0.2.34) and checked only with hand-made items.
