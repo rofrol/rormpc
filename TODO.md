@@ -846,3 +846,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, both | only the installer hint | leave it
       Checked: reported by the smoke-fix worker 2026-10-09 (FileNotFoundError: 'ffmpeg' in a fresh VM).
       Decided by the user 2026-10-09: yes, both (queued in Next).
+- [ ] Combined view: which browsing tabs stay once Play exists (asked 2026-10-09: "with Play, are Artists, Albums,
+      Directories, Playlists, Live playlists still needed?")?
+      Options: keep Albums, Live playlists, Playlists, Search; merge Artists + Album Artists into one; Directories
+      off the tab bar with a key | the same, but Playlists only behind the L picker | keep all tabs as they are
+      Checked: consult round (Sol 3c079666, MiMo 1fb3e8db). Both: Albums keep (play one album in track order, which
+      Play's rank/Apply does not do), Live playlists keep (an inbox of downloads to review, with a pending count),
+      Artists and Album Artists merge (same songs, a grouping toggle), Directories off the default bar (imports,
+      box sets, filename-order mixes), browsers keep Play next / Append so one song never needs Apply. Diverged:
+      Playlists (MiMo keep the tab, an editing workspace; Sol behind L with Open/Edit). Both: hide before
+      removing, keep keys and a click target; digit keys follow the tab order, so removing a tab renumbers them.
