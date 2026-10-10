@@ -420,6 +420,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       and ListenBrainz, it has to be recorded among the deleted, so that it is not downloaded again. ask the
       models"): a worker consults the models, checks what `musicdb delete` and the Deleted tab already record, and
       makes every downloader (hits fetch, yt-mp3-mb, liveplaylist, Versions) skip a deleted song.
+- [ ] Weighted mode without the "unplanned" rows (asked 2026-10-10 with a screenshot: "what is the point of showing
+      unplanned? ask the models"). Consulted (Sol 75b2c1f0, MiMo 8d2faf34): the rows give access to the pool, but
+      "queue order" misleads (the shuffle never plays it) and a big source buries the forecast; both proposed a
+      collapsed line. Decided by the user 2026-10-10: remove them entirely; the pool stays reachable through `/`
+      search and Browse. In Play's weighted mode and the Queue plan view: past plays, 0 ▶, Up next, the forecast,
+      nothing after it; check what `/` and the row actions need when the matching song is outside the forecast.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
