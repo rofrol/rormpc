@@ -740,6 +740,9 @@ impl PlayPane {
     /// Esc with nothing left to close inside the table: drop the preview, else close the column (normal mode).
     /// False when Play has nothing to do with it.
     fn escape(&mut self) -> bool {
+        if self.hits.stop_run() {
+            return true; // a running preview stops first; the next Esc drops it
+        }
         if self.preview_active() {
             self.hits.reset_filters(self.baseline.as_ref());
             self.wait = ApplyWait::No;
