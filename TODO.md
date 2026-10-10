@@ -656,6 +656,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
       timestamps into .lrc, language detection, cost per song), and plans or builds "Transcribe lyrics" for a song
       with no lyrics (radio tracks first), labelled as machine-transcribed like the machine translations.
+- [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:"
+      decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
+      the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
+      tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
+      download a video match without an audio alternative is swapped to the same-length audio recording through
+      the work. MusicBrainz at 1 req/s (~66 min for the library, cached), run as a herdr-job.
+- [ ] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
+      rename or --name, the playlist file moved, the subscription updated).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1435,7 +1443,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Radio: Should Omarchy Radio be checked on a schedule? Decided by the user 2026-10-10: a daily conditional GET that only adds pending items and notifies (queued in Next).
       Options: manual check only, as today (Sol) | a daily conditional GET that only adds pending items and notifies (MiMo)
       Checked: the radio worker 2026-10-10: the site changes rarely (last push 2026-10-07); an unchanged check costs one 304.
-- [ ] Radio: Which MPD playlist name for the station? Answered 2026-10-10: "omarchy.radio.org" (the site is radio.omarchy.org: asked which one is meant).
+- [x] Radio: Which MPD playlist name for the station? Answered 2026-10-10: "omarchy.radio.org" (the site is radio.omarchy.org: asked which one is meant). Decided by the user 2026-10-10: "radio.omarchy.org" (queued in Next).
       Options: "Omarchy Radio" (from playlist.json, the default) | "Live Radio Omarchy"
       Checked: the radio worker 2026-10-10: YouTube subscriptions are named after the playlist title; --name overrides it.
 - [x] Radio: Fetch a radio track's lyrics (/tracks/lyrics/<file>.lrc) into lyrics_dir? Answered 2026-10-10: "extract them with whisper or something? see ~/scripts/yt-wh" (queued in Next).
@@ -1456,6 +1464,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Release years: Should a video match with no audio alternative be swapped to the audio recording through the work on download? Decided by the user 2026-10-10: yes, look the work up and swap to the same-length audio recording.
       Options: yes, look the work up and swap to the same-length audio recording | send it to review instead | keep the video recording and fix only the year
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): at least 24 of 60 earlier video matches had an audio alternative; the rest need a work lookup.
-- [ ] Release years: What happens to files without any MusicBrainz work link?
+- [x] Release years: What happens to files without any MusicBrainz work link? Decided by the user 2026-10-10: ask for an MBID through the picker.
       Options: keep the current year, list only suspect classes | clear the year when it is a video recording's | ask for an MBID through the picker
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 46 of 189 sampled recordings have no work relationship.
