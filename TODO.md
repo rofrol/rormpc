@@ -405,10 +405,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] (approved 2026-10-10 from Proposed) AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
       it (reported by the phase 1 worker 2026-10-10).
       Done in 16d20f7 (worker).
-- [ ] (approved 2026-10-10 from Proposed) The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
+- [x] (approved 2026-10-10 from Proposed) The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
       no unselectable header; phase 2 worker, 2026-10-10).
-- [ ] (approved 2026-10-10 from Proposed) Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
+      Done in 00e6dfd (worker): MenuModal::start_at; tested.
+- [x] (approved 2026-10-10 from Proposed) Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
       (older bug, found by the phase 2 worker 2026-10-10).
+      Already fixed by phase 4; a test added in e01f0cd (worker).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
