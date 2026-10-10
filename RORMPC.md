@@ -71,15 +71,21 @@ they work with rormpc closed. It is independent of rormpc: `rormpc_install.sh` n
 The plist runs the uv tool venv's Python, so after `uv tool upgrade mpd-now-playable` or a reinstall rerun
 `mpd-now-playable install-launchagent --force`, or launchd keeps restarting a dead path.
 
-On this setup Karabiner-Elements (`~/.config/karabiner/karabiner.json`, profile ISO) overrides the MacBook's
-F7/F8/F9, because a browser playing media takes Now Playing and with it the keys: a complex modification runs
-`~/scripts/mpd-media-key prev|toggle|next`, which sends `mpc prev`/`toggle`/`next`. It has to be Karabiner:
-its `fn_function_keys` turns F7/F8/F9 into consumer keys from its virtual keyboard, which go straight to the Now
-Playing app, so an event tap (Hammerspoon's, until 2026-10-07) never sees them. Shift+F7/F8/F9 still send the
-media key to the Now Playing app; fn+F7/F8/F9 stay plain F-keys. Previous sends `shuffle prev` to mpd-player
-(channel `rormpc`) when mpd-player is subscribed and its `shuffle.json` has `trail`, else plain `mpc prev`. Each
-press appends a line (key, command, exit status) to `~/.local/state/media-keys/media-keys.log`. Volume and mute
-are left alone; AirPods/Bluetooth buttons and external keyboards' media keys still go to the Now Playing app.
+mpd-now-playable sends MPD's own `next`/`previous`, so a key that reaches it skips the weighted shuffle's history and
+counts a skip. The bare keys can reach mpd-player directly instead, through its command socket (rormpc-tools README,
+"mpd-player's command socket"): one datagram per press, no process start, mpc or DNS lookup. `rormpc_install.sh
+companions` prints the socket's path and a Karabiner-Elements rule for F7/F8/F9 (`send_user_command`, Karabiner 16.0
+or newer) to add to `~/.config/karabiner/karabiner.json`; it never edits that file. `rormpc_install.sh status` shows
+whether the socket is bound. With the rule, F7 is Previous through mpd-player (back through the songs that really
+played, no skip counted), F8 play/pause, F9 Next; Next and Previous from a pause play, also inside the gap's silence
+or "Pause for…". It has to be Karabiner: its `fn_function_keys` turns F7/F8/F9 into consumer keys from its virtual
+keyboard, which go straight to the Now Playing app (a browser playing media takes it, and with it the keys), so an
+event tap (Hammerspoon's, until 2026-10-07) never sees them. Shift+F7/F8/F9 still send the media key to the Now
+Playing app; fn+F7/F8/F9 stay plain F-keys. When mpd-player is not running the keys do nothing (Karabiner logs
+`send_user_command: send_to failed` in its console user server log); launchd restarts it within 10 s. Each command
+is logged in `~/Library/Logs/mpd-player.log` with the time from receipt to MPD's answer. Volume and mute are left
+alone; AirPods/Bluetooth buttons and external keyboards' media keys still go to the Now Playing app
+(mpd-now-playable until mpd-player provides Now Playing itself, see TODO.md "Media keys through mpd-player").
 
 On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-mpris or mpDris2; see TODO.md).
 
