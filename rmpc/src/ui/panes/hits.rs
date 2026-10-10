@@ -925,11 +925,6 @@ impl HitsPane {
         self.filters.as_ref().map(|f| crate::ui::rormpc_play::rules_hash(&f.rules_key()))
     }
 
-    /// The rule formula of the filters, for Play's collapsed source line.
-    pub(crate) fn formula(&self) -> Option<String> {
-        self.filters.as_ref().map(Filters::formula)
-    }
-
     /// The smart list open in the filters (id, name).
     pub(crate) fn open_list(&self) -> Option<(String, String)> {
         self.filters.as_ref().and_then(|f| f.open_list.clone())
