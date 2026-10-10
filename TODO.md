@@ -650,6 +650,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       checked live by the worker).
 - [ ] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
       rename or --name, the playlist file moved, the subscription updated).
+- [ ] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant,
+      without apply. Work out with the models how to do it."): a worker studies how a filter change in the Music view
+      reaches the table, the preview and the MPD queue today (Apply, preview.json, the weighted plan, the 3b
+      decisions in plans/combined-view.md), consults the models on making every filter change take effect at once
+      (never interrupting the playing song, coalescing fast key repeats by the latest generation, not by a delay),
+      writes the plan with its open choices to "Needs a decision", then builds it once they are decided.
 - [ ] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
