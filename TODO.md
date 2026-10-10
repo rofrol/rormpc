@@ -485,6 +485,22 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       how tags are corrected, dry run, review, undo) into "Needs a decision" before any file is changed.
       Second example (2026-10-10): "Physical (Olivia Newton-John) released 1981. We show 2004. Ask the models where
       these errors come from."
+      Checked by the coordinator 2026-10-10: both files are YouTube "official video" downloads tagged by
+      rormpc-tools mbtag.write_year: TDRC = TDOR = the matched recording's first-release-date. Physical matched
+      recording 0ef6e09f (disambiguation "music video"), first release 2004 ("The Best Of", then video DVDs, a 2021
+      reissue); its release group "Physical" is 1981. Sweet Dreams matched bf8373da (date=2000; MusicBrainz was busy,
+      not fetched). Consulted (Sol 50e36a78, MiMo f8ac5fa1): both say the cause is treating "first release of this
+      recording" as "original release of the song"; MusicBrainz keeps music videos, edits, live and re-recordings
+      as separate recordings (a plain remaster usually is not); works have no date. Both: keep TDRC (this
+      recording) and TDOR (the song's original release) apart; penalize "music video" matches or send them to
+      review; never use YouTube upload dates. Differ: MiMo computes TDOR as the earliest first release over
+      recordings of the same work and artist credit, excluding video/live/remix/edit and requiring an Album or
+      Single release group (re-recordings like "Taylor's Version": TDOR original, TDRC new); Sol warns this collapses
+      demos, re-recordings and different performances and prefers the earliest release containing the verified
+      audio recording, with review for uncertain ones. Repair plan (both): a no-network suspect scan first
+      (video disambiguations, compilation/video-only releases, a year far from the album's other tracks), a dry-run
+      report (current vs proposed, evidence, confidence), review, tags written atomically with the previous values
+      kept for undo, MusicBrainz at 1 req/s with a cache (~3 h for the whole library).
 - [ ] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view:
       "on hover the hearts don't light up like they used to, to show they can be clicked. ask the models"): a worker
       finds which change lost the hover highlight (the old Queue pane had it; Music / the plan projection may not
