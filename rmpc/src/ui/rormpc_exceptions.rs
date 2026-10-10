@@ -140,10 +140,6 @@ pub fn default_scope() -> String {
 
 /// The scopes `+` / `-` offer: the default first, then library and each `+` set of the selection (its keys,
 /// `rormpc_hits_rules::plus_keys`: the fixed ones, then the named ones).
-pub fn scopes(plus_sets: &[String]) -> Vec<String> {
-    scopes_from(default_scope(), plus_sets)
-}
-
 fn scopes_from(default: String, plus_sets: &[String]) -> Vec<String> {
     let mut out = vec![default];
     let rest = std::iter::once("library".to_owned()).chain(plus_sets.iter().map(|key| format!("set:{key}")));
@@ -213,13 +209,27 @@ pub fn open_scope_menu(ctx: &Ctx, command: Vec<String>, kind: Kind, target: Targ
     if target.file.is_none() && target.chart_key.is_none() {
         return status_error!("No song to {} here", kind.verb());
     }
+    let menu = scope_menu(ctx, command, kind, target, default_scope(), plus_sets, done);
+    modal!(ctx, menu);
+}
+
+/// The scope menu: its title row, then a row per scope with the cursor on the first (`default`), then Cancel.
+fn scope_menu<'a>(
+    ctx: &Ctx,
+    command: Vec<String>,
+    kind: Kind,
+    target: Target,
+    default: String,
+    plus_sets: Vec<String>,
+    done: Option<Done>,
+) -> MenuModal<'a> {
     let what = if kind == Kind::Pin { "Pin" } else { "Exclude" };
     let title = format!("{what} '{}' ({})", target.title, target.artist);
-    let menu = MenuModal::new(ctx)
+    MenuModal::new(ctx)
         .width(60)
         .list_section(ctx, move |mut section| {
             section.add_item(title, |_| Ok(()));
-            for scope in scopes(&plus_sets) {
+            for scope in scopes_from(default, &plus_sets) {
                 let (command, done) = (command.clone(), done.clone());
                 let mut args = vec!["except".to_owned(), kind.verb().to_owned(), "--scope".to_owned(), scope.clone()];
                 args.extend(target_args(&target));
@@ -233,8 +243,8 @@ pub fn open_scope_menu(ctx: &Ctx, command: Vec<String>, kind: Kind, target: Targ
             Some(section)
         })
         .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
-        .build();
-    modal!(ctx, menu);
+        .build()
+        .start_at(0, 1, ctx)
 }
 
 /// The exceptions grouped by scope (library first, then the sets in chip order, then smart lists and anything
@@ -484,11 +494,19 @@ mod tests {
         assert_eq!(describe(&e), "pinned · smart list abcdef12 — not now: only while that smart list is open");
     }
 
+    #[rstest::rstest]
+    fn the_scope_menu_starts_on_the_default_scope(#[from(crate::tests::fixtures::ctx)] ctx: Ctx) {
+        let target = Target { file: Some("f".to_owned()), chart_key: None, artist: "a".to_owned(), title: "t".to_owned() };
+        let menu = scope_menu(&ctx, vec![HITS.to_owned()], Kind::Exclude, target, "list:L1".to_owned(), vec!["billboard".to_owned()], None);
+        // row 0 is the title, row 1 the default scope
+        assert_eq!(menu.cursor(), (0, Some(1)));
+    }
+
     #[test]
     fn scopes_put_the_default_first_then_the_plus_sets() {
         let plus = crate::ui::rormpc_hits_rules::plus_keys([1, 0, -1, 1], &[]);
-        assert_eq!(scopes(&plus), ["library", "set:billboard", "set:recommended"]);
-        assert_eq!(scopes(&[]), ["library"]);
+        assert_eq!(scopes_from(default_scope(), &plus), ["library", "set:billboard", "set:recommended"]);
+        assert_eq!(scopes_from(default_scope(), &[]), ["library"]);
         assert_eq!(scope_label("set:likes"), "my likes");
         assert_eq!(scope_label("library"), "Library");
     }
@@ -499,7 +517,7 @@ mod tests {
             "set_names": {"live:yt-PL9": "Discover copy live"}});
         let plus = plus_sets_of_args(&args);
         assert_eq!(plus, ["billboard", "tag:God", "live:yt-PL9"]);
-        assert_eq!(scopes(&plus), ["library", "set:billboard", "set:tag:God", "set:live:yt-PL9"]);
+        assert_eq!(scopes_from(default_scope(), &plus), ["library", "set:billboard", "set:tag:God", "set:live:yt-PL9"]);
         assert_eq!(scope_label("set:tag:God"), "Tag God");
         assert_eq!(scope_label("set:live:yt-PL9"), "Discover copy live");
         assert_eq!(scope_label("set:list:abcdef1234"), "Smart abcdef12");
