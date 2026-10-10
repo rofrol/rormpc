@@ -173,6 +173,122 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       retry race fixed (the worker starts only after the decision is written). Not released yet.
 - [x] Release rormpc-tools v0.2.37 (Downloads review) and install rormpc (decided 2026-10-08: now).
       Done: v0.2.37 pushed and installed, rormpc 059a876 installed.
+- [x] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
+      when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
+      workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
+      First run 2026-10-09 (run 37990844352) failed in "Fresh user with a lingering systemd user session" after
+      36 s with no output: the journal shows ci's user manager up ("Startup finished in 98ms", dbus.socket
+      listening) and two `systemctl` calls from `as-ci 'systemctl --user is-system-running --wait || systemctl
+      --user --failed'` failing with "Failed to connect to bus: Permission denied"; the user generators also tried
+      /home/runner/.config. Next: a worker reproduces it in an Ubuntu VM (OrbStack, as on 2026-10-03) and fixes
+      the step; then the coordinator dispatches it again.
+      Fixed in 9ff4029 (worker, reproduced in an OrbStack Ubuntu 24.04 VM): the runner image's /etc/environment sets
+      XDG_CONFIG_HOME=/home/runner/.config, which pam_env passed to ci; `as-ci` ran from the runner's work dir ci
+      cannot read; the bus check now runs as ci; ffmpeg added (musicdb update needs it); and an installer bug: a
+      failed `uv tool install` passed silently inside `if …; fi || {…}`. Second run dispatched: 37994088698.
+      Second run green (degraded user manager handled). Triggers added in 75cada9 (worker): push to master and pull_request
+      with a paths filter on the installer and the workflow, release tags, weekly "47 5 * * 1"; pushed.
+
+- [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
+      choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
+      weighted off, the normal view comes back. The things chosen in Hits, like year and genres, can be saved as a
+      live list, like collections on Steam or in Calibre. Show visualizations. Ask the models." A worker consults
+      the models and writes the plan with mockups to plans/combined-view.md; the coordinator shows it and asks
+      the open choices in "Needs a decision".
+      Added 2026-10-09: "of course I can also remove or add songs by hand. Then something has to be done with that.
+      I don't know what. A dynamic list but from a limited set? Ask the models."
+      Added 2026-10-09: "it can be exceptions. Pins and exclusions on the whole library or on a chosen subset such
+      as Billboard 100. And those subsets like Billboard should be made the way genres are. They can be - or +.
+      Ask the models."
+      Done in 68939c9 (worker): plans/combined-view.md, a "Play" tab with normal and weighted modes, preview + Apply,
+      ± set chips, scoped pins/exclusions, smart lists, 6 mockups; consult rounds 20261009-230419-b57c and
+      20261009-230647-3341. Its 12 open choices are in "Needs a decision" ("Combined view:").
+
+- [x] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows
+      Billboard, my likes, my playlists, recommended), Rank by, Years of (default follows Rank by), CLI and Hits pane;
+      `--source` kept as a shorthand; contract tests.
+      Done in rormpc af62e2e, rormpc-tools 06ecfee (worker; pytest 261, cargo test 989; clippy shows only older
+      warnings; not released). Behaviour changes by design: Top % is cut before genres and sets (Billboard rock
+      Top 10% 50 → 45 rows), `-n` cuts after the artist filter; rows without a rank get population size +
+      position; "of N" counts the songs after the set algebra, before period and filters; Billboard with Years of
+      other than chart reads every chart year (6,333 songs, ~0.8 s). The installed hits 0.2.37 rejects the new
+      arguments: rormpc and rormpc-tools must be released and installed together.
+- [x] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
+      library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
+      marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
+      exclusions.
+      Done in rormpc afcb9be, rormpc-tools e4be8cd (worker; pytest 277, cargo test 996; UI checked read-only with a
+      temporary data dir). `hits except pin|exclude|remove`, `hits exceptions`, log exceptions.jsonl; PinSong (+) /
+      ExcludeSong (-) in Hits and Queue with a scope menu; ✚ ⊘ in Hits, "show excluded (N)", "⋯ exceptions…".
+      Settled by the coordinator: `hits hide` on a recommendation row counts as a Recommended-scope exclusion (else
+      hiding recommendations would stop working). Noted for phase 3 (Play knows the rules): Queue takes the scopes
+      from the default ~/.cache/rormpc/hits/current.json, not a pane's configured path, and its rows show no ✚ ⊘
+      marks; `hits except --file` needs the file in songs.jsonl (`musicdb identity sync` first); `list:ID` scopes
+      wait for phase 4 (default_scope()).
+- [x] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
+      from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
+      Done 2026-10-10: v0.2.38 tagged and pushed (gated on pytest 277 + pyflakes), companions installed, rormpc
+      fb6cb76 installed and pushed; the config loads. Restart running rormpc instances to use it.
+- [x] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
+      plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
+      Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
+      without Apply (Play next / Append), edit a stored playlist's order and contents, review Live playlist
+      downloads with a visible pending count, folder (filename) order; keys and click targets for each; the default
+      config without those tabs (old panes stay for explicit configs). Open choices go to "Needs a decision".
+      Do it before phase 3.
+      Consulted 2026-10-09 by the coordinator (Sol a91fcbfc, MiMo 0fd6ccf8), input for the worker: both put a
+      Browse/Sources mode into Play (grouping Artists / Album artists / Albums / Folders / Lists, drill down, `/`
+      search; p play, n play next, a append on any row, no Apply) and an explicit Order (Source = disc/track,
+      filename or list order · Ranked · Weighted; playing an album picks Source order by itself); a stored-playlist
+      editor (reorder, remove, rename, delete, explicit save) and a Live playlists inbox (refresh, download status,
+      accept/reject with multi-select, a pending-count badge in Play) that never replace the queue. Diverged on
+      where: Sol puts Browse in the left column (Build | Browse) and the editor and inbox in overlays; MiMo cycles
+      right-pane modes (Sources | Queue | Live). MiMo: keep Artists and Album artists apart (different grouping).
+      Nothing needs its own tab, but filters alone do not replace browsing, editing or the download review.
+      Done in 658a76e (worker, second consult round): plans/combined-view.md "Play absorbs the browsing tabs":
+      full-width bodies Queue | Browse | Live reusing the existing browsers, P/t/a actions, the playlist editor in
+      Browse › Lists, the Live inbox with multi-select and a badge, a new phase 3b after phase 3. Found in the code:
+      a song appended to a queue holding a Hits source with weighted on is never drawn today (shuffle.py draws only
+      from source.json's members). Open choices 13-20 are in "Needs a decision".
+- [x] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
+      opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
+      source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
+      Done in rormpc e535666, rormpc-tools 49d85ae (worker; pytest 278, cargo test 1003; tested on a scratch MPD: preview,
+      Apply with the 25% confirmation, the queue-changed refusal, Esc, w on/off keeps the queue, rules hash keeps or
+      starts a round, 0 owned refused, + / - marks; the mouse was not tested). Not released. Settled by the
+      coordinator: the queue version is taken when `a` is pressed, not when the preview was made (mpd-player's
+      priority writes bump MPD's version on every song change, so a preview-time version would refuse almost every
+      Apply; a song change while the confirmation is open refuses it); `w` (ToggleWeightedShuffle) added to the
+      default keys; key 2 (old Queue tab) is unbound until phase 3b renumbers. Noted: the default Play tab is full
+      width (no album art or lyrics as the old Queue tab had); ✚ ⊘ show for every exception on a file, applicable
+      or not; Pane(Play()) has the hits command and ~/.cache/rormpc/hits/preview.json fixed; Enter in a preview row
+      plays/appends it as in Hits; re-applying the same rules works only with that result on screen ("The queue
+      already plays these filters"). Your config needs a Pane(Play()) tab to show it (choice 18).
+- [ ] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
+      MPD export "Smart NAME" on by default; no freeze action.
+- [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
+      a cycle check.
+
+- [ ] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
+      executable, and a log line from it (decided 2026-10-09; a Type=simple unit is "active" with a missing binary).
+- [ ] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
+      fake API URL is used for ListenBrainz (decided 2026-10-09); adjust the smoke test's musicdb step if its
+      expected exit changes.
+- [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+      `status` and dependency hint (decided 2026-10-09).
+
+- [ ] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
+      scrobbler, and what percent of the required percent is done, and whether it is still possible since the song
+      was scrolled, e.g. to 20%, and a manual button to send it to the scrobbler. It has to take the information
+      how many percent is needed to send to the scrobbler from the ro mpd listenbrainz daemon. Ask the models.")
+      A worker consults the models first (how rormpc gets the rule and the current listen's progress from
+      ro-listenbrainz-mpd: its config's listen rule, a state file or a command; the seek rule makes a listen
+      impossible; what the manual send does and how it avoids a double listen), then builds it; open choices go
+      to "Needs a decision".
+
+
+- [ ] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
+      (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -658,129 +774,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     merges the selected audio match after a confirmation ("Keep another file…" picks another); not clicked through
     in the TUI because Merge would move a real file to the quarantine.
 
-- [x] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
-      when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
-      workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
-      First run 2026-10-09 (run 37990844352) failed in "Fresh user with a lingering systemd user session" after
-      36 s with no output: the journal shows ci's user manager up ("Startup finished in 98ms", dbus.socket
-      listening) and two `systemctl` calls from `as-ci 'systemctl --user is-system-running --wait || systemctl
-      --user --failed'` failing with "Failed to connect to bus: Permission denied"; the user generators also tried
-      /home/runner/.config. Next: a worker reproduces it in an Ubuntu VM (OrbStack, as on 2026-10-03) and fixes
-      the step; then the coordinator dispatches it again.
-      Fixed in 9ff4029 (worker, reproduced in an OrbStack Ubuntu 24.04 VM): the runner image's /etc/environment sets
-      XDG_CONFIG_HOME=/home/runner/.config, which pam_env passed to ci; `as-ci` ran from the runner's work dir ci
-      cannot read; the bus check now runs as ci; ffmpeg added (musicdb update needs it); and an installer bug: a
-      failed `uv tool install` passed silently inside `if …; fi || {…}`. Second run dispatched: 37994088698.
-      Second run green (degraded user manager handled). Triggers added in 75cada9 (worker): push to master and pull_request
-      with a paths filter on the installer and the workflow, release tags, weekly "47 5 * * 1"; pushed.
-
-- [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
-      choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
-      weighted off, the normal view comes back. The things chosen in Hits, like year and genres, can be saved as a
-      live list, like collections on Steam or in Calibre. Show visualizations. Ask the models." A worker consults
-      the models and writes the plan with mockups to plans/combined-view.md; the coordinator shows it and asks
-      the open choices in "Needs a decision".
-      Added 2026-10-09: "of course I can also remove or add songs by hand. Then something has to be done with that.
-      I don't know what. A dynamic list but from a limited set? Ask the models."
-      Added 2026-10-09: "it can be exceptions. Pins and exclusions on the whole library or on a chosen subset such
-      as Billboard 100. And those subsets like Billboard should be made the way genres are. They can be - or +.
-      Ask the models."
-      Done in 68939c9 (worker): plans/combined-view.md, a "Play" tab with normal and weighted modes, preview + Apply,
-      ± set chips, scoped pins/exclusions, smart lists, 6 mockups; consult rounds 20261009-230419-b57c and
-      20261009-230647-3341. Its 12 open choices are in "Needs a decision" ("Combined view:").
-
-- [x] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows
-      Billboard, my likes, my playlists, recommended), Rank by, Years of (default follows Rank by), CLI and Hits pane;
-      `--source` kept as a shorthand; contract tests.
-      Done in rormpc af62e2e, rormpc-tools 06ecfee (worker; pytest 261, cargo test 989; clippy shows only older
-      warnings; not released). Behaviour changes by design: Top % is cut before genres and sets (Billboard rock
-      Top 10% 50 → 45 rows), `-n` cuts after the artist filter; rows without a rank get population size +
-      position; "of N" counts the songs after the set algebra, before period and filters; Billboard with Years of
-      other than chart reads every chart year (6,333 songs, ~0.8 s). The installed hits 0.2.37 rejects the new
-      arguments: rormpc and rormpc-tools must be released and installed together.
-- [x] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
-      library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
-      marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
-      exclusions.
-      Done in rormpc afcb9be, rormpc-tools e4be8cd (worker; pytest 277, cargo test 996; UI checked read-only with a
-      temporary data dir). `hits except pin|exclude|remove`, `hits exceptions`, log exceptions.jsonl; PinSong (+) /
-      ExcludeSong (-) in Hits and Queue with a scope menu; ✚ ⊘ in Hits, "show excluded (N)", "⋯ exceptions…".
-      Settled by the coordinator: `hits hide` on a recommendation row counts as a Recommended-scope exclusion (else
-      hiding recommendations would stop working). Noted for phase 3 (Play knows the rules): Queue takes the scopes
-      from the default ~/.cache/rormpc/hits/current.json, not a pane's configured path, and its rows show no ✚ ⊘
-      marks; `hits except --file` needs the file in songs.jsonl (`musicdb identity sync` first); `list:ID` scopes
-      wait for phase 4 (default_scope()).
-- [x] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
-      from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
-      Done 2026-10-10: v0.2.38 tagged and pushed (gated on pytest 277 + pyflakes), companions installed, rormpc
-      fb6cb76 installed and pushed; the config loads. Restart running rormpc instances to use it.
-- [x] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
-      plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
-      Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
-      without Apply (Play next / Append), edit a stored playlist's order and contents, review Live playlist
-      downloads with a visible pending count, folder (filename) order; keys and click targets for each; the default
-      config without those tabs (old panes stay for explicit configs). Open choices go to "Needs a decision".
-      Do it before phase 3.
-      Consulted 2026-10-09 by the coordinator (Sol a91fcbfc, MiMo 0fd6ccf8), input for the worker: both put a
-      Browse/Sources mode into Play (grouping Artists / Album artists / Albums / Folders / Lists, drill down, `/`
-      search; p play, n play next, a append on any row, no Apply) and an explicit Order (Source = disc/track,
-      filename or list order · Ranked · Weighted; playing an album picks Source order by itself); a stored-playlist
-      editor (reorder, remove, rename, delete, explicit save) and a Live playlists inbox (refresh, download status,
-      accept/reject with multi-select, a pending-count badge in Play) that never replace the queue. Diverged on
-      where: Sol puts Browse in the left column (Build | Browse) and the editor and inbox in overlays; MiMo cycles
-      right-pane modes (Sources | Queue | Live). MiMo: keep Artists and Album artists apart (different grouping).
-      Nothing needs its own tab, but filters alone do not replace browsing, editing or the download review.
-      Done in 658a76e (worker, second consult round): plans/combined-view.md "Play absorbs the browsing tabs":
-      full-width bodies Queue | Browse | Live reusing the existing browsers, P/t/a actions, the playlist editor in
-      Browse › Lists, the Live inbox with multi-select and a badge, a new phase 3b after phase 3. Found in the code:
-      a song appended to a queue holding a Hits source with weighted on is never drawn today (shuffle.py draws only
-      from source.json's members). Open choices 13-20 are in "Needs a decision".
-- [x] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
-      opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
-      source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
-      Done in rormpc e535666, rormpc-tools 49d85ae (worker; pytest 278, cargo test 1003; tested on a scratch MPD: preview,
-      Apply with the 25% confirmation, the queue-changed refusal, Esc, w on/off keeps the queue, rules hash keeps or
-      starts a round, 0 owned refused, + / - marks; the mouse was not tested). Not released. Settled by the
-      coordinator: the queue version is taken when `a` is pressed, not when the preview was made (mpd-player's
-      priority writes bump MPD's version on every song change, so a preview-time version would refuse almost every
-      Apply; a song change while the confirmation is open refuses it); `w` (ToggleWeightedShuffle) added to the
-      default keys; key 2 (old Queue tab) is unbound until phase 3b renumbers. Noted: the default Play tab is full
-      width (no album art or lyrics as the old Queue tab had); ✚ ⊘ show for every exception on a file, applicable
-      or not; Pane(Play()) has the hits command and ~/.cache/rormpc/hits/preview.json fixed; Enter in a preview row
-      plays/appends it as in Hits; re-applying the same rules works only with that result on screen ("The queue
-      already plays these filters"). Your config needs a Pane(Play()) tab to show it (choice 18).
-- [ ] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
-      MPD export "Smart NAME" on by default; no freeze action.
-- [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
-      a cycle check.
-
-- [ ] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
-      executable, and a log line from it (decided 2026-10-09; a Type=simple unit is "active" with a missing binary).
-- [ ] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
-      fake API URL is used for ListenBrainz (decided 2026-10-09); adjust the smoke test's musicdb step if its
-      expected exit changes.
-- [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
-      `status` and dependency hint (decided 2026-10-09).
-
-- [ ] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
-      scrobbler, and what percent of the required percent is done, and whether it is still possible since the song
-      was scrolled, e.g. to 20%, and a manual button to send it to the scrobbler. It has to take the information
-      how many percent is needed to send to the scrobbler from the ro mpd listenbrainz daemon. Ask the models.")
-      A worker consults the models first (how rormpc gets the rule and the current listen's progress from
-      ro-listenbrainz-mpd: its config's listen rule, a state file or a command; the seek rule makes a listen
-      impossible; what the manual send does and how it avoids a double listen), then builds it; open choices go
-      to "Needs a decision".
+## Proposed
 
 - [ ] rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
       phase 1 and 2 workers left it out of scope).
 - [ ] AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
       it (reported by the phase 1 worker 2026-10-10).
-
-- [ ] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
-      (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
-
-## Proposed
-
 - [ ] The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
       no unselectable header; phase 2 worker, 2026-10-10).
 - [ ] Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
