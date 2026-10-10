@@ -419,13 +419,15 @@ default tabs no longer have a Deleted tab, but an explicit config can still put 
 
 ## Live playlists pane
 
-Public YouTube playlists followed by `liveplaylist` (rormpc-tools newer than 0.2.33): left the subscriptions (`!`
+Public YouTube playlists and Omarchy Radio (https://radio.omarchy.org/, a community playlist of MP3s; rormpc-tools
+newer than 0.2.42) followed by `liveplaylist` (rormpc-tools newer than 0.2.33): left the subscriptions (`!`
 when the last check failed, the number of new items), right the selected one's items in playlist order with their
 decision (`?` to review, `✓` accepted, `✗` rejected) and state (to review, queued, downloading, needs match, ready,
 in library, failed, blocked: deleted from the library before, accept it again after allowing it in the Deleted
 panel (`gd`), gone upstream). Left/Right moves between the two lists. The footer shows the download's progress
 (from the CLI's stderr and its `status.json`), the last download's errors, and for the selected item its error,
-the uncertain MusicBrainz proposal, its file or its video link.
+the uncertain MusicBrainz proposal, its file or its source link (the video, the radio's MP3). A radio item shows
+its artist where a video shows its channel; radio tracks are tagged with the station's own names, never matched.
 
 The URL modal lives here: Enter (or the context menu) → "Add a playlist URL…"; with no subscription yet, Enter
 opens it directly. Adding lists the playlist (no download) and every item waits for review, the first import too.
