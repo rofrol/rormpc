@@ -634,6 +634,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       remembered and re-clamped when turned back on; labels "From: Any" / "From: ‹ 2000 ›", the period line "Any
       year", "Up to 1991", "From 2000", "1991–2000"; a footer hint "←/→ change year · Space toggle bound"; hits gets
       an open-ended period.
+- [ ] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
+      user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
+      notifies; nothing is accepted or downloaded by itself.
+- [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
+      something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
+      the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
+      timestamps into .lrc, language detection, cost per song), and plans or builds "Transcribe lyrics" for a song
+      with no lyrics (radio tracks first), labelled as machine-transcribed like the machine translations.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1410,15 +1418,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, from the journal (as built; the same video was recognised before) | keep it in staging for a decision
       Checked: the restore worker 2026-10-10.
       Decided by the user 2026-10-10: yes, from the journal (as built).
-- [ ] Radio: Should Omarchy Radio be checked on a schedule?
+- [x] Radio: Should Omarchy Radio be checked on a schedule? Decided by the user 2026-10-10: a daily conditional GET that only adds pending items and notifies (queued in Next).
       Options: manual check only, as today (Sol) | a daily conditional GET that only adds pending items and notifies (MiMo)
       Checked: the radio worker 2026-10-10: the site changes rarely (last push 2026-10-07); an unchanged check costs one 304.
-- [ ] Radio: Which MPD playlist name for the station?
+- [ ] Radio: Which MPD playlist name for the station? Answered 2026-10-10: "omarchy.radio.org" (the site is radio.omarchy.org: asked which one is meant).
       Options: "Omarchy Radio" (from playlist.json, the default) | "Live Radio Omarchy"
       Checked: the radio worker 2026-10-10: YouTube subscriptions are named after the playlist title; --name overrides it.
-- [ ] Radio: Fetch a radio track's lyrics (/tracks/lyrics/<file>.lrc) into lyrics_dir?
+- [x] Radio: Fetch a radio track's lyrics (/tracks/lyrics/<file>.lrc) into lyrics_dir? Answered 2026-10-10: "extract them with whisper or something? see ~/scripts/yt-wh" (queued in Next).
       Options: later, once a track has lyrics | now, one extra request per track
       Checked: the radio worker 2026-10-10: no track in today's playlist.json has a lyrics field.
-- [ ] Radio: Detect an MP3 replaced under the same file name on the station?
+- [x] Radio: Detect an MP3 replaced under the same file name on the station? Decided by the user 2026-10-10: no, accept the limitation.
       Options: no, accept the limitation (rare) | a HEAD per accepted track on check, comparing its ETag
       Checked: the radio worker 2026-10-10: the playlist.json ETag does not change when only an MP3 is replaced.
