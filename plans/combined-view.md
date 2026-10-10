@@ -3,6 +3,9 @@
 Design only, nothing here is built yet. Written 2026-10-09 from two consult rounds (GPT-6.1 Sol and Xiaomi MiMo,
 see "Consult rounds"). The choices still open are at the end, each with options.
 
+The tab this plan calls "Play" is labelled "Music" since 2026-10-10 (the user: "Play" looked like a button); the
+pane type `Pane(Play())`, `ShowPlay(...)` and the action names keep "Play". The text below keeps its original wording.
+
 ## Goal (the user's words, translated)
 
 > There should be one combined view now: Queue, Hits, Shuffle. So I can choose to prepare weighted. If I change the
@@ -43,7 +46,7 @@ reads the queue and `source.json`, draws the plan, writes `shuffle.json` → Que
 
 ### One tab, two modes
 
-A new pane `Pane(Play())` in a tab "Play" replaces Hits, Queue and Shuffle as the default tabs (`1`). It is the
+A new pane `Pane(Play())` in a tab "Music" (first called "Play") replaces Hits, Queue and Shuffle as the default tabs (`1`). It is the
 filter column of Hits on the left and one table on the right. The old panes stay in the code and in explicit
 configs; Up next and Live playlists stay separate tabs (both models: the request list must never be buried in a
 filter-driven table).
@@ -329,7 +332,7 @@ rormpc:
 - preview file + Apply through `confirm_replace_with` extended with the queue version check and the rules hash in
   `source.json`;
 - exception actions, marks, "show excluded", exceptions list; smart list save modal and picker;
-- default config: tab "Play" first, Queue/Hits/Shuffle tabs removed from the default (explicit configs untouched).
+- default config: tab "Music" (first called "Play") first, Queue/Hits/Shuffle tabs removed from the default (explicit configs untouched).
 
 rormpc-tools:
 - `hits`: `--set ±KIND[:NAME]`, `--rank`, `--years-of`, exceptions applied after the Top % cut, `--rules FILE`
@@ -574,9 +577,9 @@ The `Live 3` in the header shows in every body (also Queue and Browse) and opens
 ### Default config
 
 - `assets/example_config.ron` and the built-in default (`config/tabs.rs`, which also has a debug-only Logs tab):
-  tabs **Play, Up next, Search**. The Directories, Artists, Album Artists, Albums and Playlists tabs leave (Live
+  tabs **Music (first called Play), Up next, Search**. The Directories, Artists, Album Artists, Albums and Playlists tabs leave (Live
   playlists is no default tab today); their digits become `ShowPlay(...)` and the remaining tabs renumber (`1`
-  Play, `2` Up next, `3` Search), as the coordinator's round warned. The example config has the browsing tabs on
+  Music, `2` Up next, `3` Search), as the coordinator's round warned. The example config has the browsing tabs on
   `3`..`7`; the new map uses the user's `5`..`0` scheme from "Keys" above, so both configs agree.
 - The panes stay: `Pane(Artists)`, `Pane(Directories)`, `Pane(LivePlaylists())` and the others still load from an
   explicit config, and `SwitchToTab("Artists")` keeps working where such a tab exists. A config naming a tab that

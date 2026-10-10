@@ -105,9 +105,9 @@ impl Default for KeyConfigFile {
             (s().char('g').char('t'),             G::NextTab),
             (s().tab().shift(),                   G::PreviousTab),
             (s().char('g').char('T'),             G::PreviousTab),
-            // rormpc: the browsing tabs live in Play (plans/combined-view.md, phase 3b): their digits open Play's
+            // rormpc: the browsing tabs live in Music (plans/combined-view.md, phase 3b): their digits open Music's
             // Browse on that grouping, 0 and gl the Live inbox
-            (s().char('1'),                       G::SwitchToTab("Play".to_string())),
+            (s().char('1'),                       G::SwitchToTab("Music".to_string())),
             (s().char('2'),                       G::SwitchToTab("Up next".to_string())),
             (s().char('3'),                       G::SwitchToTab("Search".to_string())),
             (s().char('g').char('u'),             G::SwitchToTab("Up next".to_string())),

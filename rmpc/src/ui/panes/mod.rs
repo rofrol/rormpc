@@ -387,7 +387,7 @@ impl<'panes> PaneContainer<'panes> {
             )),
             // rormpc: a Browse grouping's replies go to the Play pane that owns it
             PaneType::PlayBrowse(_) => Ok(Panes::Others(
-                self.others.get_mut(&PaneType::Play).context("Play's Browse needs a Pane(Play()) in the config")?,
+                self.others.get_mut(&PaneType::Play).context("Music's Browse needs a Pane(Play()) in the config")?,
             )),
             p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext | PaneType::Shuffle | PaneType::LivePlaylists | PaneType::Play) => Ok(Panes::Others(
                 self.others
