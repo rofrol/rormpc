@@ -43,7 +43,9 @@ before installing anything without a systemd user session (Guix System's Shepher
 normally, or on a machine nobody logs into run `sudo loginctl enable-linger $USER` once.
 
 They run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
-`rormpc-*.service` (musicdb with a `.timer`) on Linux; the installer writes them, so edits there are overwritten.
+`rormpc-*.service` (musicdb and omarchy-radio with a `.timer`) on Linux; the installer writes them, so edits there
+are overwritten. The Omarchy Radio check runs daily (macOS at 10:00, a missed run follows on wake or at login; Linux
+`OnCalendar=daily`, `Persistent=true`).
 The hourly `musicdb update` runs at background priority (launchd `ProcessType Background` + `LowPriorityIO`;
 systemd `Nice=10`, `IOSchedulingClass=idle`): about a second of CPU per run. The always-on services stay at
 standard priority, since background priority lets macOS stretch timers (mpd-player's silence).
@@ -440,7 +442,10 @@ one runs (it downloads everything queued, also what is accepted while it runs). 
 background thread; "Cancel the download" sends SIGTERM, which stops yt-dlp and queues the item again. Songs already
 in the library are referenced, uncertain downloads wait as "needs match" outside the library until accepted as
 they are, and the MPD playlist (named after the YouTube playlist) holds only accepted, ready, still listed items.
-Nothing runs on a timer: checking is "Check for new tracks". The pane reloads when shown.
+Checking is "Check for new tracks"; the one timer is the daily Omarchy Radio check that `companions` installs
+(rormpc-tools newer than 0.2.45): `liveplaylist check --kind omarchy --notify` adds new tracks as pending and sends a
+desktop notification when there are any, never accepts or downloads; a failed check is retried by the next day's
+run. The pane reloads when shown.
 
 ```ron
 (name: "Live", pane: Split(size: "100%", direction: Vertical, panes: [

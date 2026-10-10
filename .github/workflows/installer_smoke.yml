@@ -158,8 +158,8 @@ jobs:
       - name: Units are enabled and active, and their programs run
         run: |
           as-ci '
-            systemctl --user is-enabled rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
-            systemctl --user is-active rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
+            systemctl --user is-enabled rormpc-musicdb.timer rormpc-omarchy-radio.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
+            systemctl --user is-active rormpc-musicdb.timer rormpc-omarchy-radio.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
             # is-active exits 0 when any one of the units is active (a unit restarting without its program prints
             # "activating" and passed), and a Type=simple unit is "active" right after the fork, even when its
             # executable is missing. Neither
@@ -196,6 +196,15 @@ jobs:
             echo "musicdb ExecStart: $exec_path"
             [ "$exec_path" = "$tools/musicdb" ]
             "$exec_path" --version
+            # the daily Omarchy Radio check: a oneshot of liveplaylist on a calendar timer that catches up a missed day
+            exec_path="$(systemctl --user show -p ExecStart --value rormpc-omarchy-radio.service | sed -n "s/^{ path=\([^ ;]*\) ;.*/\1/p")"
+            echo "omarchy-radio ExecStart: $exec_path"
+            [ "$exec_path" = "$tools/liveplaylist" ]
+            "$exec_path" --version
+            calendar="$(systemctl --user show -p TimersCalendar --value rormpc-omarchy-radio.timer)"
+            echo "omarchy-radio timer: $calendar"
+            case "$calendar" in *"OnCalendar=*-*-* 00:00:00"*) ;; *) echo "not a daily timer" >&2; exit 1 ;; esac
+            systemctl --user show -p Persistent --value rormpc-omarchy-radio.timer | grep -qx yes
           '
 
       - name: The scrobbler counts a listen without crashing
@@ -235,6 +244,7 @@ jobs:
           grep -q '^timer active' status.txt
           grep -qx 'scrobbler service: active' status.txt
           grep -qx 'mpd-player service: active' status.txt
+          grep -q '^Omarchy Radio daily check: ' status.txt
           grep -qx 'ListenBrainz token: set' status.txt
           grep -q '^listen rule: listen_fraction = 0.9 listen_max_seconds = 0 listen_uninterrupted = true' status.txt
 
@@ -243,7 +253,7 @@ jobs:
           as-ci '~/rormpc_install.sh companions'
           test "$(sudo grep -c '^listen_' "$LB_CONFIG")" = 3
           sudo grep -E '^(token|api_url) ' "$LB_CONFIG" | sudo diff /home/ci/lb-before -
-          as-ci 'systemctl --user is-active rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service'
+          as-ci 'systemctl --user is-active rormpc-musicdb.timer rormpc-omarchy-radio.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service'
 
       - name: Logs
         if: always()

@@ -11,7 +11,7 @@ usage="usage: rormpc_install.sh install|rollback|list|companions [--local] [--ga
               (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install at a pinned tag), musicdb
               update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
               playback daemon (silence between songs: --gap is the default until rormpc chooses one, 0 = none;
-              Up next). --local: both from checkouts in
+              Up next), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: both from checkouts in
               \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). \$RORMPC_TOOLS_REF and \$RO_LB_REF
               (a tag or commit) replace the pinned tags, for CI to test a companion's commit. Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
@@ -57,7 +57,8 @@ listen_max_seconds = 0
 listen_uninterrupted = true"
 
 # service NAME INTERVAL COMMAND...: write and (re)start a background service that runs COMMAND, every INTERVAL
-# seconds, or (INTERVAL "") all the time, restarted if it exits
+# seconds, once a day (INTERVAL daily: at 10:00 on macOS, a run missed while asleep or off follows on wake or at
+# login; OnCalendar=daily with Persistent=true on Linux), or (INTERVAL "") all the time, restarted if it exits
 service() {
   local name="$1" interval="$2"; shift 2
   local log="$HOME/Library/Logs/$name.log" args="" a
@@ -66,6 +67,7 @@ service() {
     for a in "$@"; do args="$args<string>$a</string>"; done
     local run="<key>KeepAlive</key><true/>" priority="<key>ProcessType</key><string>Standard</string>"
     [ -n "$interval" ] && run="<key>StartInterval</key><integer>$interval</integer>"
+    [ "$interval" = daily ] && run="<key>StartCalendarInterval</key><dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>"
     # always-on services: ProcessType Standard, since Background lets macOS coalesce timers (mpd-player's silence
     # would stretch); periodic jobs (musicdb update) run at background priority with low-priority disk I/O
     [ -n "$interval" ] && priority="<key>ProcessType</key><string>Background</string>
@@ -100,8 +102,10 @@ PLIST
     if [ -n "$interval" ]; then
       # periodic jobs at background priority, like ProcessType Background on macOS
       printf '[Unit]\nDescription=rormpc companion %s\n\n[Service]\nType=oneshot\nExecStart=%s\nNice=10\nIOSchedulingClass=idle\n' "$name" "$*" > "$dir/$unit.service.tmp"
-      printf '[Unit]\nDescription=rormpc companion %s, every %s s\n\n[Timer]\nOnBootSec=60\nOnUnitActiveSec=%s\n\n[Install]\nWantedBy=timers.target\n' \
-        "$name" "$interval" "$interval" > "$dir/$unit.timer.tmp" && mv "$dir/$unit.timer.tmp" "$dir/$unit.timer"
+      local when="every $interval s" schedule="OnBootSec=60\nOnUnitActiveSec=$interval"
+      [ "$interval" = daily ] && when="daily" schedule="OnCalendar=daily\nPersistent=true"
+      printf '[Unit]\nDescription=rormpc companion %s, %s\n\n[Timer]\n%b\n\n[Install]\nWantedBy=timers.target\n' \
+        "$name" "$when" "$schedule" > "$dir/$unit.timer.tmp" && mv "$dir/$unit.timer.tmp" "$dir/$unit.timer"
     else
       printf '[Unit]\nDescription=rormpc companion %s\nAfter=network-online.target\n\n[Service]\nExecStart=%s\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n' \
         "$name" "$*" > "$dir/$unit.service.tmp"
@@ -181,6 +185,9 @@ companions() {
   }
   local tools; tools="$(uv tool dir --bin)"
   service musicdb 3600 "$tools/musicdb" update
+  # new Omarchy Radio songs only wait for review (pending) and notify; nothing is accepted or downloaded. A failed
+  # check is retried by the next day's run. Without an Omarchy Radio subscription it does nothing.
+  service omarchy-radio daily "$tools/liveplaylist" check --kind omarchy --notify
   [ -f "$lb_config" ] || "$HOME/.cargo/bin/ro-listenbrainz-mpd" --create-default-config
   if ! grep -qE '^listen_(fraction|max_seconds|uninterrupted)' "$lb_config"; then
     # into [submission], i.e. before the [mpd] table; the token and the rest stay as they are. The rule goes in
@@ -215,6 +222,7 @@ status() {
   uv tool list 2>/dev/null | grep '^rormpc-tools' || echo "rormpc-tools: not installed"
   cargo install --list 2>/dev/null | grep -E '^(ro-listenbrainz-mpd|listenbrainz-mpd) ' || echo "ro-listenbrainz-mpd: not installed"
   echo "musicdb update service: $(service_state musicdb)"
+  echo "Omarchy Radio daily check: $(service_state omarchy-radio)"
   echo "scrobbler service: $(service_state ro-listenbrainz-mpd)"
   echo "mpd-player service: $(service_state mpd-player)"
   grep -qE '^[[:space:]]*token(_file)?[[:space:]]*=' "$lb_config" 2>/dev/null && echo "ListenBrainz token: set" || echo "ListenBrainz token: missing in $lb_config"
