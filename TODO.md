@@ -337,6 +337,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       odd, this hardcoding. And what about Arch, Guix, Windows? I don't know myself. Ask the models."): decide after
       a consult round how rormpc-tools and the installer name a missing program (ffmpeg, yt-dlp, fpcalc, mpc) on
       macOS, Debian/Ubuntu, Arch, Guix and Windows, then change it.
+      Consulted 2026-10-10 by the coordinator (Sol 15375124, MiMo 6c88853c). Agreed: one small map program →
+      package per manager (only fpcalc differs: libchromaprint-tools on Debian, chromaprint elsewhere) as the one
+      source, the docs table made from it; Guix: `guix install` now, the package in home.scm / a manifest for
+      good; Windows: say unsupported, guess no winget ids; the installer supports launchd and systemd user units,
+      not Guix's Shepherd: say so before installing services. For optional programs say what stops working.
+      Diverged: Sol = generic line + docs link, no detection; MiMo = detect the OS (/etc/os-release ID / ID_LIKE,
+      sys.platform), print one matching command, generic fallback (open choice below). Checked: the catch is
+      already narrow enough (it answers only when the error's filename is a known program, else re-raises).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1039,3 +1047,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       installer 12c4876 pins both, companions installed, rormpc 12c4876 installed and pushed; dotfiles b6720d3 adds
       the Play tab first (1 Play, 2 Hits, 3 Queue, 4 Up next, 5 Shuffle, 6-9 browsers, 0 Playlists; Live playlists
       by gl); the config loads. Restart running rormpc instances.
+- [ ] Install hints: how does a missing program's message name the install?
+      Options: detect the OS and print the one matching command (brew, apt, pacman, guix), generic line + docs link
+      otherwise (MiMo) | always a generic line + a docs link to the per-manager table (Sol) | keep brew + apt
+      Checked: consult round 2026-10-10 (see the "Install hints" item in Next); you run macOS, Omarchy (Arch) and
+      Guix.
