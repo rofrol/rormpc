@@ -711,10 +711,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Center tile (the user's test), MPRIS on a real Linux desktop (only a private bus on macOS). Rollback:
       `launchctl bootout gui/$UID/io.github.rofrol.rormpc.mpd-player-nowplaying`, delete its plist,
       `mpd-now-playable install-launchagent`.
-- [ ] Installer: right after starting mpd-player-nowplaying, companions warned "mpd-player's Now Playing is
+- [x] Installer: right after starting mpd-player-nowplaying, companions warned "mpd-player's Now Playing is
       xpcproxy" (2026-10-11) although it was running a moment later: the check reads launchd's state while the job
       is still spawning. Wait for the observable running state (a pid and `state = running`) or report a real
       failure (the job exited), never a sleep (found while installing stage 2; installer only, one revert).
+      Done in rormpc b8baf9b (worker): `launchd_started` waits for `state = running` with a pid, or a real
+      failure (exited since the bootstrap, not loaded), at most 100 polls of launchctl 0.1 s apart (launchd has no
+      event or blocking form for a spawn; the delay accepted by the coordinator). Linux has no such check.
 - [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:"
       decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
       the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
