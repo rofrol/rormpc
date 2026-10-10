@@ -328,8 +328,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       released: needs a ro-listenbrainz-mpd tag, RO_LB_TAG bump and `companions`. To see it, your theme needs
       `(kind: Property(Status(Scrobble)))` (RORMPC.md "Scrobble status"); oL works with your config already.
       Open choices are in "Needs a decision" ("Scrobble status:").
-- [ ] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
+- [x] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
       (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
+      Done in rormpc-tools 682387b, rormpc 376ec64 (worker; a new test fails on the old score for release, chart and
+      rediscover): my plays and rediscover count plays without the shuffle's own picks; the Plays column still
+      counts every play; "not lately" (days since the last play) is unchanged. Not released.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
