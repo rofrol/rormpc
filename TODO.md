@@ -303,9 +303,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       it; anonymous calls in hits.py stay on the public ListenBrainz; tests no longer read the real macOS config
       (~/Library/Application Support/listenbrainz-mpd). The smoke test's musicdb step now fails on "connection
       refused" from its fake api_url instead of "Token invalid" (its comment is outdated). Not released.
-- [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+- [x] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
       `status` and dependency hint (decided 2026-10-09).
 
+      Done in rormpc c0caebc, rormpc-tools f90bf91 (worker; pytest 338): the four entry points print one line naming the
+      missing program (ffmpeg, yt-dlp, fpcalc, mpc) with its brew/apt install and exit 1; `companions` stops without
+      ffmpeg, `status` lists it, the apt hint includes it; the smoke test's musicdb comment updated. Not released.
 - [ ] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
       scrobbler, and what percent of the required percent is done, and whether it is still possible since the song
       was scrolled, e.g. to 20%, and a manual button to send it to the scrobbler. It has to take the information
