@@ -1484,21 +1484,21 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: as built (one MPD priority per queue entry; a played song rests ≥ 12 h) | a display-only preview of
       later rounds without MPD priorities | duplicate entries in the queue (changes your queue)
       Checked: the forecast worker 2026-10-10.
-- [ ] Media keys: Now Playing on macOS: a second process, an in-daemon provider, or a Swift helper?
+- [x] Media keys: Now Playing on macOS: a second process, an in-daemon provider, or a Swift helper? Decided by the user 2026-10-10: a second process with its own launchd agent.
       Options: a second process from the same package with its own launchd agent (both models) | inside the mpd-player daemon on a CoreFoundation loop | a small Swift helper
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [ ] Media keys: When should the provider claim Now Playing?
+- [x] Media keys: When should the provider claim Now Playing? Decided by the user 2026-10-10: on the first MPD play after it starts, then the true state.
       Options: on the first MPD play after it starts, then the true state (paused stays paused) | at startup as Playing like mpd-now-playable (takes the slot from a browser) | only while MPD plays
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
 - [ ] Media keys: May a worker stop your mpd-now-playable for about 15 minutes for a Control Center test on a scratch MPD?
       Options: no, you run that test after the install | yes, the worker stops it and starts it again
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [ ] Media keys: Next (key, Now Playing, MPRIS) while you have paused MPD: play the next song, or stay paused on it?
+- [x] Media keys: Next (key, Now Playing, MPRIS) while you have paused MPD: play the next song, or stay paused on it? Decided by the user 2026-10-10: play it.
       Options: play it, as Previous already does | stay paused, as MPD's own next does
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
 - [ ] Media keys: Keep the old Karabiner shell script after the rule moves to send_user_command?
       Options: keep it as a manual fallback for a week, then delete | delete it with the switch
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [ ] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in?
+- [x] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in? Decided by the user 2026-10-10: on by default, warn when another MPD MPRIS bridge runs.
       Options: on by default, warn when another MPD MPRIS bridge runs | opt-in with `mpd-player --mpris`
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
