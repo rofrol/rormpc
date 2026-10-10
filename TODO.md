@@ -619,7 +619,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in 1c78f61 (worker, consulted Sol + MiMo; cargo test 1051), installed: under the mouse ♥ and ✗ are bold and
       underlined, an unrated song shows a dim underlined ♥; Queue, Hits and the weighted view (hover pinned to the
       song from the last paint, cleared on scroll; Browse draws no hearts).
-- [ ] The forecast should always show 10 ahead (asked 2026-10-10 with a screenshot: -2, -1, 0 ▶ Eye of the Tiger,
+- [x] The forecast should always show 10 ahead (asked 2026-10-10 with a screenshot: -2, -1, 0 ▶ Eye of the Tiger,
       then nothing: "shouldn't there always be 10 ahead? ask the models"). Cause (checked): mpd-player's fill_plan
       draws only songs not heard in the current round; at the round's end it reports "round done: all N heard
       (shuffle newround starts another)" and plans nothing until a new round is started by hand (MPD's random keeps
@@ -633,6 +633,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       forecast always aims at 10 playable songs, those of the next round marked "next round" and nothing marked
       heard by planning; the reason shown when fewer ("4 ahead; 12 resting"); rest relaxed on a small source to the
       least recently played eligible song, shown as relaxed.
+      Done in rormpc-tools 963a373, rormpc 5d0f741 (worker; pytest 397, cargo test 1055; on a scratch MPD round 2
+      started by itself and the plan never went empty: "1 ahead · 3 resting · rest relaxed"), released as v0.2.44:
+      automatic rounds (manual behind `shuffle rounds manual`), next-round entries marked ↻, relaxed rest ≈, the
+      reason in the header; J/K do not swap across the round boundary. Limit: a source smaller than 10 cannot show
+      several rounds (one MPD priority per queue entry, 12 h rest): the plan shows this round and at most the next
+      one with the reason (in "Needs a decision"). ↻/≈ are not in the old Queue's ShuffleNext column.
 - [ ] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
       in mpd-player as the one control interface (next through the plan, previous through its history, toggle);
       the user's Karabiner F7/F8/F9 call it with send_user_command (no shell, mpc or DNS lookup per press; the
@@ -1467,3 +1473,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Release years: What happens to files without any MusicBrainz work link? Decided by the user 2026-10-10: ask for an MBID through the picker.
       Options: keep the current year, list only suspect classes | clear the year when it is a video recording's | ask for an MBID through the picker
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 46 of 189 sampled recordings have no work relationship.
+- [ ] Forecast on a source smaller than 10 songs: show the rest of this round and the next one with the reason (as
+      built), or add a display-only preview of later rounds?
+      Options: as built (one MPD priority per queue entry; a played song rests ≥ 12 h) | a display-only preview of
+      later rounds without MPD priorities | duplicate entries in the queue (changes your queue)
+      Checked: the forecast worker 2026-10-10.
