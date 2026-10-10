@@ -736,6 +736,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       own dates (one rated high, so the row-by-row review is needed), 6 "needs MBID". Not released. The full dry
       run: herdr-job 20261011-001830-7e3a. Stage B (rormpc view, MBID picker, views read originaldate) next;
       stage C (video to audio through the work on download) after it.
+      Stage B1 done 2026-10-11: rormpc 6492b39 (worker): "Years to review" panel over Music (`gY`, ShowPlay(Years);
+      gy is Lyrics): counts, rows with evidence, a/D accept/reject (again: undecided), Space marks, h/l and menu
+      filters, "Apply accepted…" and "Roll back…" with result dialogs; "needs MBID" rows read-only (the picker,
+      stage B2, waits for its two decisions); the Year column and the album browser read OriginalDate, else Date
+      (album_date_tags default [OriginalDate, Date]). Released with rormpc-tools v0.2.49 (stage A) and installed;
+      dotfiles 22957db (gY, album_date_tags, the theme's Year column). Skipped-row messages go only to the status
+      bar. Not seen on the full report yet (the dry run is still running).
 - [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
       something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
