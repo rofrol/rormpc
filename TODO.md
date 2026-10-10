@@ -532,7 +532,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Apply ("Preview outdated, recomputing…", Esc cancels). Released with rormpc-tools v0.2.42 (also `musicdb
       restore` for the hourly retry), installer 47e3363, rormpc 47e3363 installed. Noted: the status bar cut a long
       message after "in their order" (Proposed).
-- [ ] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table
+- [x] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table
       still only 1980-1989: "I don't understand why there is a year limit here when it is not selected in the UI.
       ask the models"). Checked: the rows were the previous result (Period 1980-1989, chart years) while a newer
       hits run (`--rank plays --years-of listened -n 0`, started for an intermediate click) ran for minutes; only a
@@ -544,6 +544,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rows (MiMo against; the coordinator takes Sol's dim plus the banner, so it shows without color too). Also:
       why "Rank by: my plays" takes minutes (the play-history split per run): cache it across runs.
       Moved up 2026-10-10: "do it next".
+      Done in rormpc 08d0201, rormpc-tools 9b56fbd (worker; cargo test 1048, pytest 366; the UI checked read-only),
+      rormpc 79ccb73 installed (tools not released yet): a two-line banner above the headers ("Showing Rank by:
+      Billboard, Years of: chart · updating for Rank by: my plays, Years of: listened · 0:00 · Esc stops"), stale rows
+      dimmed; a newer run kills the running one (its exit awaited as an event), each run writes a temp file renamed
+      only if still newest; Esc stops a run. The real cause of the screenshot: with Billboard chart years an empty
+      decade list silently sent 1980-1989; now it means all chart years (1959-now) and reads "Period: ‹All years›".
+      "My plays" runs take 0.6-2.9 s here; the minutes came from queued old runs finishing one by one; the split is
+      cached anyway (second run 0.001 s instead of 0.25 s).
 - [ ] The filter column stays open in normal mode too (asked 2026-10-10 with a screenshot after `w` off: "the whole
       selection on the left disappeared. ask the models"; it was collapsed to one "Source: …" line by the plan's choice
       5). Consulted (Sol 8d6fdb94, MiMo 5e81fe67): both would keep it collapsed with a notice; MiMo's "filters only
