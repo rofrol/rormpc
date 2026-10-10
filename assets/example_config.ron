@@ -70,7 +70,6 @@
             "3":          SwitchToTab("Search"),
             "gu":         SwitchToTab("Up next"),
             "gv":         SwitchToTab("Versions"),
-            "gd":         SwitchToTab("Deleted"),
             "gy":         SwitchToTab("Lyrics"),
             // rormpc: the browsing tabs live in Music's Browse (B in Music); their digits open it on a grouping
             "5":          ShowPlay(Browse(Folders)),
@@ -80,6 +79,7 @@
             "9":          ShowPlay(Browse(Lists)),
             "0":          ShowPlay(Live), // the Live playlists inbox, a panel over Play
             "gl":         ShowPlay(Live),
+            "gd":         ShowPlay(Deleted), // the deletion journal, a panel over Music
             "u":          Update,
             "U":          Rescan,
             "R":          AddRandom,
@@ -209,13 +209,6 @@
             pane: Split(
                 direction: Vertical,
                 panes: [(pane: Pane(Versions()), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            ),
-        ),
-        (
-            name: "Deleted",
-            pane: Split(
-                direction: Vertical,
-                panes: [(pane: Pane(Deleted()), size: "100%", borders: "ALL", border_symbols: Rounded)],
             ),
         ),
         (

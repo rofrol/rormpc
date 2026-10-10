@@ -20,6 +20,8 @@
 //!   songs into its round). A stored playlist opened in Lists is edited in a panel over Play (moves, removals and
 //!   renames are saved at once; generated playlists are read-only), and the Live playlists inbox is a panel too
 //!   (`0`, `gl`, or the `Live N` badge in the header). An unapplied preview stays open through all of it.
+//! - The Deleted pane is a panel over Music too (decided by the user 2026-10-10): `gd`, or the `Deleted ! N` badge,
+//!   shown only while deletions have failed or unresolved steps.
 //!
 //! It is composed, not copied: the filter column and the preview table are a `HitsPane` in Play mode, the table
 //! is a `QueuePane` whose view follows the weighted shuffle, Browse's groupings are the browser panes.
@@ -42,6 +44,7 @@ use super::{
     PaneContainer,
     directories::DirectoriesPane,
     hits::{HitsBody, HitsPane},
+    deleted::DeletedPane,
     live_playlists::LivePlaylistsPane,
     playlists::PlaylistsPane,
     queue::QueuePane,
@@ -111,11 +114,12 @@ macro_rules! with_child {
     };
 }
 
-/// The Live playlists inbox: the pane and whether its panel is open over Play.
-#[derive(Debug)]
-struct LiveInbox {
-    pane: LivePlaylistsPane,
-    open: bool,
+/// Which panel is open over Play's body (the playlist editor follows Lists instead).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Overlay {
+    None,
+    Live,
+    Deleted,
 }
 
 /// Areas of Browse's last render, for the mouse.
@@ -128,6 +132,8 @@ struct BrowseAreas {
     /// the panel over Play (the Live inbox or the playlist editor)
     overlay: Rect,
     badge: Rect,
+    /// the Deleted badge (empty while nothing needs attention)
+    deleted_badge: Rect,
 }
 
 #[derive(Debug)]
@@ -140,7 +146,10 @@ pub struct PlayPane {
     grouping: PlayGrouping,
     /// the groupings opened so far: each keeps its path, cursor and marks
     children: HashMap<PlayGrouping, Child>,
-    live: LiveInbox,
+    /// the Live playlists inbox and the Deleted journal: their panes keep their place while closed
+    live: LivePlaylistsPane,
+    deleted: DeletedPane,
+    overlay: Overlay,
     /// the rules the source being played was applied with (source.json), None for any other source; Esc brings
     /// the filters back to them (or to the defaults)
     baseline: Option<serde_json::Value>,
@@ -169,7 +178,9 @@ impl PlayPane {
             browse_focus: false,
             grouping: PlayGrouping::Albums,
             children: HashMap::new(),
-            live: LiveInbox { pane: LivePlaylistsPane::new(), open: false },
+            live: LivePlaylistsPane::new(),
+            deleted: DeletedPane::new(),
+            overlay: Overlay::None,
             baseline: None,
             baseline_hash: String::new(),
             source_hash: None,
@@ -347,22 +358,38 @@ impl PlayPane {
     fn take_view_request(&mut self, ctx: &Ctx) {
         match rormpc_play::take_view() {
             Some(PlayView::Queue) => {
-                self.live.open = false;
+                self.overlay = Overlay::None;
                 self.show_filters(false);
             }
             Some(PlayView::Browse(g)) => {
-                self.live.open = false;
+                self.overlay = Overlay::None;
                 self.show_browse(g, ctx);
             }
-            Some(PlayView::Live) => self.open_live(ctx),
+            Some(PlayView::Live) => self.open_overlay(Overlay::Live, ctx),
+            Some(PlayView::Deleted) => self.open_overlay(Overlay::Deleted, ctx),
             None => {}
         }
     }
 
-    fn open_live(&mut self, ctx: &Ctx) {
-        self.live.open = true;
-        if let Err(err) = self.live.pane.before_show(ctx) {
-            log::error!(error:? = err; "Live playlists could not load");
+    /// Open a panel over Play (it reloads), closing the other one.
+    fn open_overlay(&mut self, overlay: Overlay, ctx: &Ctx) {
+        self.overlay = overlay;
+        let loaded = match overlay {
+            Overlay::Live => self.live.before_show(ctx),
+            Overlay::Deleted => self.deleted.before_show(ctx),
+            Overlay::None => Ok(()),
+        };
+        if let Err(err) = loaded {
+            log::error!(error:? = err; "{overlay:?} could not load");
+        }
+    }
+
+    /// A badge click: open its panel, or close it when it is the open one.
+    fn toggle_overlay(&mut self, overlay: Overlay, ctx: &Ctx) {
+        if self.overlay == overlay {
+            self.overlay = Overlay::None;
+        } else {
+            self.open_overlay(overlay, ctx);
         }
     }
 
@@ -388,7 +415,7 @@ impl PlayPane {
     /// Why the playlists `P`, `D`, J/K or Ctrl-r would touch are read-only: (name, owner), else None.
     fn read_only_lists(&self) -> Option<(String, &'static str)> {
         let Some(Child::Lists(b)) = self.children.get(&PlayGrouping::Lists) else { return None };
-        let live = self.live.pane.playlist_names();
+        let live = self.live.playlist_names();
         let names: Vec<String> = match b.stack().path().as_slice() {
             [name] => vec![name.clone()],
             _ => b
@@ -599,14 +626,23 @@ impl PlayPane {
 
     fn render_overlays(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
         self.areas.overlay = Rect::default();
-        if self.live.open {
-            let title = " Live playlists · Space marks · a accept · D reject · Enter menu · Esc closes ".to_owned();
-            let (rect, inner) = Self::panel(frame, area, title, ctx);
-            self.areas.overlay = rect;
-            return self.live.pane.render(frame, inner, ctx);
+        match self.overlay {
+            Overlay::Live => {
+                let title = " Live playlists · Space marks · a accept · D reject · Enter menu · Esc closes ".to_owned();
+                let (rect, inner) = Self::panel(frame, area, title, ctx);
+                self.areas.overlay = rect;
+                return self.live.render(frame, inner, ctx);
+            }
+            Overlay::Deleted => {
+                let title = " Deleted · Enter restore, retry, allow or block downloading · Esc closes ".to_owned();
+                let (rect, inner) = Self::panel(frame, area, title, ctx);
+                self.areas.overlay = rect;
+                return self.deleted.render(frame, inner, ctx);
+            }
+            Overlay::None => {}
         }
         if let Some(name) = self.editing() {
-            let title = match rormpc_browse::generated(&name, &self.live.pane.playlist_names()) {
+            let title = match rormpc_browse::generated(&name, &self.live.playlist_names()) {
                 Some(why) => format!(" \"{name}\" is read-only: {why} · P play · t next · a append · Esc closes "),
                 None => format!(
                     " Editing \"{name}\" · changes are saved at once · J/K move · D remove · P play · t next · a append · Esc closes "
@@ -624,7 +660,7 @@ impl PlayPane {
     /// The Live badge: items waiting for a decision and running downloads ("Live 3 · ↓ 2"); always a click
     /// target that opens the inbox.
     fn badge(&self) -> String {
-        let (pending, downloads) = self.live.pane.badge();
+        let (pending, downloads) = self.live.badge();
         let mut text = " Live".to_owned();
         if pending > 0 {
             let _ = write!(text, " {pending}");
@@ -634,6 +670,12 @@ impl PlayPane {
         }
         text.push(' ');
         text
+    }
+
+    /// The Deleted badge ("Deleted ! 2"): only while deletions have failed or unresolved steps.
+    fn deleted_badge(&self) -> Option<String> {
+        let n = self.deleted.attention();
+        (n > 0).then(|| format!(" Deleted ! {n} "))
     }
 
     // ---------------------------------------------------------------- Queue body
@@ -803,30 +845,39 @@ impl Pane for PlayPane {
         }
         self.apply_if_ready(ctx);
         self.sync(ctx);
-        if !self.live.open {
-            self.live.pane.refresh(ctx); // the badge follows the inbox while it is closed
+        // the badges follow the inbox and the journal while their panels are closed
+        if self.overlay != Overlay::Live {
+            self.live.refresh(ctx);
+        }
+        if self.overlay != Overlay::Deleted {
+            self.deleted.refresh(ctx);
         }
         let [header, body] = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
         let badge = self.badge();
-        let [head, badge_area] =
-            Layout::horizontal([Constraint::Min(1), Constraint::Length(badge.chars().count() as u16)]).areas(header);
+        let deleted_badge = self.deleted_badge().unwrap_or_default();
+        let [head, deleted_area, badge_area] = Layout::horizontal([
+            Constraint::Min(1),
+            Constraint::Length(deleted_badge.chars().count() as u16),
+            Constraint::Length(badge.chars().count() as u16),
+        ])
+        .areas(header);
         let line = Line::from(Span::styled(self.header_line(ctx), ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD)));
         frame.render_widget(Paragraph::new(line), head);
-        let pending = self.live.pane.badge() != (0, 0);
-        let style = if pending {
-            ctx.config.theme.preview_label_style.add_modifier(Modifier::REVERSED | Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::DIM)
-        };
+        let lit = ctx.config.theme.preview_label_style.add_modifier(Modifier::REVERSED | Modifier::BOLD);
+        let pending = self.live.badge() != (0, 0);
+        let style = if pending { lit } else { Style::default().add_modifier(Modifier::DIM) };
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(deleted_badge, lit))), deleted_area);
         frame.render_widget(Paragraph::new(Line::from(Span::styled(badge, style))), badge_area);
         self.areas.badge = badge_area;
+        self.areas.deleted_badge = deleted_area;
         self.render_queue_body(frame, body, ctx)?;
         self.render_overlays(frame, body, ctx)
     }
 
     fn before_show(&mut self, ctx: &Ctx) -> Result<()> {
         self.sync(ctx);
-        self.live.pane.before_show(ctx)?; // the badge's counts
+        self.live.before_show(ctx)?; // the badges' counts
+        self.deleted.before_show(ctx)?;
         self.hits.before_show(ctx)?;
         self.queue.before_show(ctx)
     }
@@ -842,7 +893,9 @@ impl Pane for PlayPane {
             let shown = is_visible && self.left == Left::Browse && self.grouping == *grouping;
             with_child!(child, b => b.on_event(event, shown, ctx))?;
         }
-        self.live.pane.on_event(event, is_visible && self.live.open, ctx)?;
+        self.live.on_event(event, is_visible && self.overlay == Overlay::Live, ctx)?;
+        // the journal reloads on a Ctrl-x or Ctrl-y while Music is shown: the badge follows it
+        self.deleted.on_event(event, is_visible, ctx)?;
         self.queue.on_event(event, is_visible, ctx)
     }
 
@@ -894,14 +947,19 @@ impl Pane for PlayPane {
         self.take_view_request(ctx);
         let common = event.actions.iter().find_map(|a| a.as_common()).cloned();
         let queue_action = event.actions.iter().find_map(|a| a.as_queue()).cloned();
-        // the Live inbox panel has every key; Esc (with nothing marked) closes it
-        if self.live.open {
-            if matches!(common, Some(CommonAction::Close)) && !self.live.pane.has_marks() {
+        // a panel over Play has every key; Esc (with nothing marked in the Live inbox) closes it
+        match self.overlay {
+            Overlay::Live | Overlay::Deleted
+                if matches!(common, Some(CommonAction::Close))
+                    && !(self.overlay == Overlay::Live && self.live.has_marks()) =>
+            {
                 let _ = event.claim_common();
-                self.live.open = false;
+                self.overlay = Overlay::None;
                 return Ok(ctx.render()?);
             }
-            return self.live.pane.handle_action(event, ctx);
+            Overlay::Live => return self.live.handle_action(event, ctx),
+            Overlay::Deleted => return self.deleted.handle_action(event, ctx),
+            Overlay::None => {}
         }
         // B, [ and ]: the left column and Browse's groupings, from anywhere in Play
         let typing = self.hits.typing();
@@ -989,23 +1047,23 @@ impl Pane for PlayPane {
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
         let click = matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick);
         let at = event.into();
-        // the Live badge opens (or closes) the inbox
-        if self.areas.badge.contains(at) {
-            if click {
-                if self.live.open {
-                    self.live.open = false;
-                } else {
-                    self.open_live(ctx);
+        // the badges open (or close) their panels
+        for (area, overlay) in [(self.areas.badge, Overlay::Live), (self.areas.deleted_badge, Overlay::Deleted)] {
+            if area.contains(at) {
+                if click {
+                    self.toggle_overlay(overlay, ctx);
+                    ctx.render()?;
                 }
-                ctx.render()?;
+                return Ok(());
             }
-            return Ok(());
         }
         // a panel takes the mouse inside it; a click outside closes it
-        if self.live.open || self.editing().is_some() {
+        if self.overlay != Overlay::None || self.editing().is_some() {
             if self.areas.overlay.contains(at) {
-                if self.live.open {
-                    return self.live.pane.handle_mouse_event(event, ctx);
+                match self.overlay {
+                    Overlay::Live => return self.live.handle_mouse_event(event, ctx),
+                    Overlay::Deleted => return self.deleted.handle_mouse_event(event, ctx),
+                    Overlay::None => {}
                 }
                 if let Some(Child::Lists(b)) = self.children.get_mut(&PlayGrouping::Lists) {
                     return b.handle_mouse_event(event, ctx);
@@ -1013,8 +1071,8 @@ impl Pane for PlayPane {
                 return Ok(());
             }
             if click {
-                if self.live.open {
-                    self.live.open = false;
+                if self.overlay != Overlay::None {
+                    self.overlay = Overlay::None;
                 } else if let Some(Child::Lists(b)) = self.children.get_mut(&PlayGrouping::Lists) {
                     b.stack_mut().leave();
                 }

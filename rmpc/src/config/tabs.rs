@@ -272,6 +272,8 @@ pub enum PlayView {
     Browse(PlayGrouping),
     /// the Live playlists inbox (an overlay)
     Live,
+    /// the deletion journal (the Deleted pane as an overlay)
+    Deleted,
 }
 
 impl PlayView {
@@ -280,6 +282,7 @@ impl PlayView {
             PlayView::Queue => "the queue".to_owned(),
             PlayView::Browse(g) => format!("Browse › {}", g.label()),
             PlayView::Live => "the Live playlists inbox".to_owned(),
+            PlayView::Deleted => "the Deleted journal".to_owned(),
         }
     }
 }
@@ -290,6 +293,7 @@ impl std::fmt::Display for PlayView {
             PlayView::Queue => write!(f, "Queue"),
             PlayView::Browse(g) => write!(f, "Browse({g})"),
             PlayView::Live => write!(f, "Live"),
+            PlayView::Deleted => write!(f, "Deleted"),
         }
     }
 }
@@ -1178,21 +1182,6 @@ impl Default for TabsFile {
                 },
             },
             TabFile {
-                name: "Deleted".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    direction: DirectionFile::Vertical,
-                    borders: BordersFile::NONE,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        borders: BordersFile::ALL,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Deleted()),
-                        ..Default::default()
-                    }],
-                },
-            },
-            TabFile {
                 name: "Lyrics".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
@@ -1272,10 +1261,11 @@ mod rormpc_tests {
         assert_eq!(tabs.0[0].name, "Music");
         assert_eq!(tabs.0[1].name, "Up next");
         let converted = tabs.convert(&HashMap::new(), &BorderSetLib::default()).unwrap();
-        // Play replaces Hits, Queue and Shuffle in the default; their panes stay for explicit configs
+        // Play replaces Hits, Queue and Shuffle in the default, Deleted is an overlay in it; their panes stay for
+        // explicit configs
         let panes: Vec<_> = converted.tabs.values().flat_map(|t| t.panes.panes_iter().map(|p| p.pane.clone())).collect();
         assert!(panes.contains(&PaneType::Play));
-        assert!(!panes.iter().any(|p| matches!(p, PaneType::Queue | PaneType::Hits { .. } | PaneType::Shuffle)));
+        assert!(!panes.iter().any(|p| matches!(p, PaneType::Queue | PaneType::Hits { .. } | PaneType::Shuffle | PaneType::Deleted)));
         let up_next_tabs = converted.tabs.values().filter(|tab| {
             tab.panes.panes_iter().any(|pane| matches!(pane.pane, PaneType::UpNext))
         }).collect_vec();

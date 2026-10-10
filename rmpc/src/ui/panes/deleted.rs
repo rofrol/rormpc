@@ -4,6 +4,8 @@
 //! retries failed steps. Nothing here deletes: the irreversible actions stay in the Ctrl-x menu.
 //! A deleted song is never downloaded again (rormpc-tools `deleted.py`): the Download column says "blocked", and the
 //! menu allows a re-download (`musicdb deletions allow ID`) or blocks it again.
+//! Music shows the pane as an overlay (`gd`, or its `Deleted ! N` badge while steps failed or are unresolved);
+//! `Pane(Deleted())` stays loadable as a tab in explicit configs.
 
 use std::{
     process::Command,
@@ -85,6 +87,11 @@ impl Deleted {
     fn blocked(&self) -> Option<bool> {
         self.download.as_ref().map(|d| d.state == "blocked")
     }
+
+    /// A step failed or is unresolved: an error, or a step whose outcome says "failed".
+    fn needs_attention(&self) -> bool {
+        self.error.is_some() || self.ops.values().any(|o| o.starts_with("failed"))
+    }
 }
 
 /// State shared with the background `musicdb` runs.
@@ -133,7 +140,7 @@ impl DeletedPane {
                 .and_then(|out| serde_json::from_str::<Vec<Pending>>(&out).ok())
                 .map_or(0, |rows| rows.iter().filter(|r| r.error.is_some()).count());
             if failed > 0 {
-                status_warn!("cleanup: {failed} deletions have failed steps (Deleted tab; retried hourly)");
+                status_warn!("cleanup: {failed} deletions have failed steps (gd in Music; retried hourly)");
             }
         });
         Self {
@@ -169,6 +176,31 @@ impl DeletedPane {
             drop(j);
             let _ = sender.send(AppEvent::RequestRender);
         });
+    }
+
+    /// Take a finished load (keeping the selected row) and start the reload a restore or retry asked for.
+    /// Returns whether a load runs and its error.
+    pub fn refresh(&mut self, ctx: &Ctx) -> (bool, Option<String>) {
+        let (fresh, reload, loading, error) = {
+            let mut j = self.job.lock().expect("deleted job lock");
+            (j.rows.take(), std::mem::take(&mut j.reload), j.loading, j.error.clone())
+        };
+        if reload {
+            self.load(ctx);
+        }
+        if let Some(rows) = fresh {
+            let keep = self.selected().map(|r| r.id.clone());
+            self.rows = rows;
+            self.state.set_content_and_viewport_len(self.rows.len(), self.table_area.height.saturating_sub(1).into());
+            let idx = keep.and_then(|id| self.rows.iter().position(|r| r.id == id)).unwrap_or(0);
+            self.state.select((!self.rows.is_empty()).then_some(idx), 0);
+        }
+        (loading, error)
+    }
+
+    /// Deletions with failed or unresolved steps (Music's `Deleted ! N` badge), as of the last load.
+    pub fn attention(&self) -> usize {
+        self.rows.iter().filter(|r| r.needs_attention()).count()
     }
 
     fn selected(&self) -> Option<&Deleted> {
@@ -309,20 +341,7 @@ fn file_state(r: &Deleted) -> &'static str {
 
 impl Pane for DeletedPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        let (fresh, reload, loading, error) = {
-            let mut j = self.job.lock().expect("deleted job lock");
-            (j.rows.take(), std::mem::take(&mut j.reload), j.loading, j.error.clone())
-        };
-        if reload {
-            self.load(ctx);
-        }
-        if let Some(rows) = fresh {
-            let keep = self.selected().map(|r| r.id.clone());
-            self.rows = rows;
-            self.state.set_content_and_viewport_len(self.rows.len(), self.table_area.height.saturating_sub(1).into());
-            let idx = keep.and_then(|id| self.rows.iter().position(|r| r.id == id)).unwrap_or(0);
-            self.state.select((!self.rows.is_empty()).then_some(idx), 0);
-        }
+        let (loading, error) = self.refresh(ctx);
         let [main, details] =
             Layout::horizontal([Constraint::Min(40), Constraint::Percentage(35)]).spacing(2).areas(area);
         let [table_area, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(main);
@@ -346,10 +365,10 @@ impl Pane for DeletedPane {
                     Some(false) => "allowed",
                     None => "",
                 }),
-                Cell::from(if r.error.is_some() { "!" } else { "" }),
+                Cell::from(if r.needs_attention() { "!" } else { "" }),
                 Cell::from(if r.artist.is_empty() { r.title.clone() } else { format!("{} - {}", r.artist, r.title) }),
             ])
-            .style(if r.restorable || r.error.is_some() { Style::default() } else { dim })
+            .style(if r.restorable || r.needs_attention() { Style::default() } else { dim })
         });
         let header =
             Row::new(["Deleted", "File", "History", "Download", "", "Song"]).style(ctx.config.theme.preview_label_style);
@@ -368,7 +387,7 @@ impl Pane for DeletedPane {
         frame.render_stateful_widget(table, table_area, self.state.as_render_state_ref());
 
         let in_trash = self.rows.iter().filter(|r| r.restorable).count();
-        let failed = self.rows.iter().filter(|r| r.error.is_some()).count();
+        let failed = self.attention();
         let status = match (loading, error) {
             (_, Some(err)) => Span::styled(format!(" musicdb: {err}"), Style::default().add_modifier(Modifier::BOLD)),
             (true, None) if self.rows.is_empty() => Span::styled(" reading the deletion journal…", dim),
@@ -458,5 +477,22 @@ mod tests {
         let old: Deleted = serde_json::from_str(r#"{"id": "i", "file": "a.mp3", "mode": "trash", "history": "keep",
             "deleted_at": "2026-10-03T12:00:00"}"#).expect("an older journal row");
         assert_eq!(old.blocked(), None);
+        assert!(!old.needs_attention());
+    }
+
+    #[test]
+    fn failed_steps_need_attention() {
+        let failed: Deleted = serde_json::from_str(r#"{"id": "i", "file": "a.mp3", "mode": "trash",
+            "history": "delete", "deleted_at": "2026-10-10T12:00:00",
+            "ops": {"listenbrainz": "failed: 401", "local": "done"}}"#).expect("a journal row");
+        assert!(failed.needs_attention());
+        let errored: Deleted = serde_json::from_str(r#"{"id": "i", "file": "a.mp3", "mode": "trash",
+            "history": "delete", "deleted_at": "2026-10-10T12:00:00", "error": "youtube: login expired"}"#)
+            .expect("a journal row");
+        assert!(errored.needs_attention());
+        let done: Deleted = serde_json::from_str(r#"{"id": "i", "file": "a.mp3", "mode": "trash",
+            "history": "delete", "deleted_at": "2026-10-10T12:00:00", "ops": {"listenbrainz": "done"}}"#)
+            .expect("a journal row");
+        assert!(!done.needs_attention());
     }
 }
