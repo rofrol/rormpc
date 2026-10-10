@@ -157,7 +157,7 @@ pub fn banner(info: &PreviewInfo, playing_file: Option<&str>, recomputing: bool)
         return ("Preview outdated, recomputing… (Apply plays it when the counts are in)".to_owned(), false);
     }
     if info.running {
-        return ("Preview · running hits… (Apply waits for it)".to_owned(), false);
+        return ("Preview · running hits… (Apply waits for it · Esc stops it)".to_owned(), false);
     }
     if let Some(err) = &info.error {
         return (format!("Preview · {err}"), false);

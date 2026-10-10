@@ -11,13 +11,14 @@
 
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    io::Read,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
-    time::SystemTime,
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::{Context, Result};
@@ -39,6 +40,7 @@ use crate::{
         keys::ActionEvent,
         mouse_event::{MouseEvent, MouseEventKind},
         events::AppEvent,
+        id::{self, Id},
     },
     shared::macros::{modal, status_error, status_info},
     ui::{
@@ -495,6 +497,10 @@ pub struct HitsPane {
     counts: Option<HitsCounts>,
     /// `hits` arguments of the result on screen, to show whether the filters changed since
     applied_args: Option<Vec<String>>,
+    /// the filters the result on screen was computed for: the banner over the table names where they differ
+    shown: Option<Filters>,
+    /// ticks the banner's clock while `hits` runs
+    tick_id: Id,
     /// text typed into the "other genre" input, picked up on the next render
     genre_input: Arc<Mutex<Option<String>>>,
     /// artists of the last result's cohort, and the one picked in "+ artist…", taken on the next render
@@ -568,6 +574,8 @@ impl HitsPane {
             apply_area: Rect::default(),
             counts: None,
             applied_args: None,
+            shown: None,
+            tick_id: id::new(),
             genre_input: Arc::new(Mutex::new(None)),
             cohort_artists: Vec::new(),
             artist_input: Arc::new(Mutex::new(None)),
@@ -616,6 +624,7 @@ impl HitsPane {
                 if self.filters.is_none() {
                     let filters = Filters::from_args(&file.args);
                     self.applied_args = Some(filters.args(&self.path.to_string_lossy()));
+                    self.shown = Some(filters.clone());
                     self.filters = Some(filters);
                 }
                 let keep = self.selected().map(|r| r.rank);
@@ -834,48 +843,28 @@ impl HitsPane {
         rormpc_actions::queue_file(ctx, path, play, false);
     }
 
-    /// Run `hits` with the current filters in a background thread; one run at a time, a newer Apply during a
-    /// run is queued and replaces any older queued one. Results arrive through the JSON file.
+    /// Run `hits` with the current filters in a background thread. The newest run wins: one asked for while
+    /// another runs stops that one (its output is thrown away) and starts as soon as it exited. Results arrive
+    /// through the JSON file.
     fn apply(&mut self, ctx: &Ctx) {
         let Some(filters) = &self.filters else { return };
-        let args = filters.args(&self.path.to_string_lossy());
+        let run = Run { args: filters.args(&self.path.to_string_lossy()), filters: filters.clone(), asked: Instant::now() };
+        start_run(&self.job, run, &self.command, &self.path, ctx.app_event_sender.clone());
+    }
+
+    /// Esc: stop the `hits` run in progress (and any queued after it); the table keeps the rows it shows.
+    /// False when nothing runs.
+    pub(crate) fn stop_run(&mut self) -> bool {
         let mut job = self.job.lock().expect("hits job lock");
-        if job.running {
-            job.queued = Some(args);
-            return;
+        if job.current.is_none() {
+            return false;
         }
-        job.running = true;
-        job.error = None;
+        job.queued = None;
+        job.stopped = true;
+        job.kill();
         drop(job);
-        let (job, command, sender) = (Arc::clone(&self.job), self.command.clone(), ctx.app_event_sender.clone());
-        std::thread::spawn(move || {
-            let mut args = args;
-            loop {
-                let result = Command::new(&command[0]).args(&command[1..]).args(&args).output();
-                let error = match result {
-                    Ok(out) if out.status.success() => {
-                        job.lock().expect("hits job lock").ok_args = Some(args.clone());
-                        None
-                    }
-                    Ok(out) => Some(
-                        String::from_utf8_lossy(&out.stderr).lines().rev().find(|l| !l.trim().is_empty())
-                            .unwrap_or("hits failed").to_owned(),
-                    ),
-                    Err(err) => Some(crate::shared::dependencies::cannot_run(&command[0], &err)),
-                };
-                let mut j = job.lock().expect("hits job lock");
-                j.error = error;
-                match j.queued.take() {
-                    Some(next) => args = next,
-                    None => {
-                        j.running = false;
-                        j.finished = true;
-                        break;
-                    }
-                }
-            }
-            let _ = sender.send(AppEvent::RequestRender);
-        });
+        status_info!("Stopped hits: the table keeps the rows it shows (change a filter or Apply to run it again)");
+        true
     }
 
     /// The Apply button: run `hits` (Hits), or ask Play to play the preview (Play runs `hits` on every change).
@@ -993,9 +982,9 @@ impl HitsPane {
     pub(crate) fn preview_info(&self) -> PreviewInfo {
         let (running, job_error) = {
             let j = self.job.lock().expect("hits job lock");
-            (j.running || j.queued.is_some(), j.error.clone())
+            (j.current.is_some(), j.error.clone())
         };
-        let current = self.filters.as_ref().map(|f| f.args(&self.path.to_string_lossy()));
+        let current =self.filters.as_ref().map(|f| f.args(&self.path.to_string_lossy()));
         let ready = !running && current.is_some() && self.applied_args == current && self.error.is_none();
         let rows: Vec<&HitsRow> = self.all_rows.iter().filter(|r| !r.excluded && !r.hidden).collect();
         let mut files: Vec<String> = Vec::new();
@@ -1381,19 +1370,15 @@ impl HitsPane {
         if cursor && self.focus_filters {
             button = button.add_modifier(Modifier::BOLD);
         }
-        let (running, queued) = {
-            let j = self.job.lock().expect("hits job lock");
-            (j.running, j.queued.is_some())
-        };
+        let running = self.job.lock().expect("hits job lock").current.is_some();
         let changed = self.applied_args.as_ref() != Some(&filters.args(&self.path.to_string_lossy()));
-        let state = match (running, queued, changed) {
+        let state = match (running, changed) {
             // Play runs hits on every change; the banner says whether Apply would play anything
-            (true, _, _) if self.play_mode => " preview…",
+            (true, _) if self.play_mode => " preview…",
             _ if self.play_mode => " (a)",
-            (true, true, _) => " running, then again",
-            (true, false, _) => " running…",
-            (false, _, true) => " • changed",
-            (false, _, false) => "",
+            (true, _) => " running… (Esc stops)",
+            (false, true) => " • changed",
+            (false, false) => "",
         };
         Line::from(vec![
             gutter,
@@ -2181,8 +2166,9 @@ impl HitsPane {
         if rerun {
             self.apply(ctx);
         }
-        if let Some(args) = self.job.lock().expect("hits job lock").ok_args.take() {
-            self.applied_args = Some(args);
+        if let Some(run) = self.job.lock().expect("hits job lock").ok.take() {
+            self.applied_args = Some(run.args);
+            self.shown = Some(run.filters);
         }
         if let Some(sets) = rormpc_sets::take_ready(&self.set_picker) {
             let added: Vec<String> = self.filters.as_ref().map(|f| f.named.iter().map(|n| n.key.clone()).collect()).unwrap_or_default();
@@ -2299,6 +2285,32 @@ impl HitsPane {
             frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), t);
             frame.render_widget(Paragraph::new(Line::from(count)), c);
         }
+        // the banner over the column headers names what the rows were computed for while they are not current
+        let (running, asked) = {
+            let j = self.job.lock().expect("hits job lock");
+            let newest = j.queued.as_ref().or(j.current.as_ref());
+            (newest.map(|r| r.filters.clone()), newest.map(|r| r.asked))
+        };
+        let banner = self.filters.as_ref().and_then(|column| {
+            let running = running.as_ref().zip(asked.map(|a| a.elapsed()));
+            stale_banner(self.shown.as_ref(), running, column)
+        });
+        if running.is_some() {
+            // delay: not a wait, the banner's elapsed-time clock advances once a second while hits runs
+            ctx.scheduler.schedule_replace(self.tick_id, Duration::from_secs(1), |(tx, _)| {
+                Ok(tx.send(AppEvent::RequestRender)?)
+            });
+        }
+        let banner_lines = banner.as_ref().map_or(0, |b| {
+            let width = usize::from(table_area.width).max(1);
+            unicode_width::UnicodeWidthStr::width(b.as_str()).div_ceil(width).clamp(1, 3) as u16
+        });
+        let [banner_area, table_area] =
+            Layout::vertical([Constraint::Length(banner_lines), Constraint::Min(1)]).areas(table_area);
+        if let Some(text) = &banner {
+            let style = ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD);
+            frame.render_widget(Paragraph::new(Span::styled(text.clone(), style)).wrap(Wrap { trim: true }), banner_area);
+        }
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
 
@@ -2386,17 +2398,15 @@ impl HitsPane {
         ])
         .header(header)
         .column_spacing(1)
-        .style(ctx.config.as_text_style())
+        // stale rows are dimmed as well as named by the banner, so it shows without color too
+        .style(if banner.is_some() { ctx.config.as_text_style().add_modifier(Modifier::DIM) } else { ctx.config.as_text_style() })
         .row_highlight_style(ctx.config.theme.current_item_style);
         frame.render_stateful_widget(table, table_area, self.state.as_render_state_ref());
 
         let owned = self.rows.iter().filter(|r| r.file.is_some()).count();
-        let (running, job_error) = {
-            let j = self.job.lock().expect("hits job lock");
-            (j.running, j.error.clone())
-        };
-        let status = match (running, job_error.or_else(|| self.error.clone())) {
-            (true, _) => Span::styled(" running hits… (the table shows the previous result)", Style::default().add_modifier(Modifier::BOLD)),
+        let job_error = self.job.lock().expect("hits job lock").error.clone();
+        let status = match (running.is_some(), job_error.or_else(|| self.error.clone())) {
+            (true, _) => Span::styled(" running hits… (Esc stops)", Style::default().add_modifier(Modifier::BOLD)),
             (false, Some(err)) => Span::styled(err, Style::default().add_modifier(Modifier::BOLD)),
             (false, None) => Span::styled(
                 format!(
@@ -2630,6 +2640,11 @@ impl Pane for HitsPane {
             return Ok(());
         };
         self.hover_filter = None; // a key press: the cursor is what counts, until the mouse moves again
+        // Esc stops a running `hits` first, wherever the cursor is (Downloads keeps Esc for leaving it)
+        if matches!(action, CommonAction::Close) && !self.downloads && self.stop_run() {
+            ctx.render()?;
+            return Ok(());
+        }
         if self.focus_filters {
             if self.filter_action(&action, ctx) {
                 ctx.render()?;
@@ -2697,6 +2712,60 @@ impl Pane for HitsPane {
 // ---------------------------------------------------------------- filters (rormpc)
 
 const DECADES: [i32; 8] = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
+/// the first Billboard Year-End Hot 100 (`FIRST_YEAR` in `hits`)
+const FIRST_CHART_YEAR: i32 = 1959;
+
+fn this_year() -> i32 {
+    chrono::Datelike::year(&chrono::Local::now())
+}
+
+/// Where `shown` (the filters of the rows on screen) and `other` differ, as "Period: 1980–1989, Rank by: …"
+/// for each side.
+fn facet_diff(shown: &Filters, other: &Filters) -> (String, String) {
+    let (a, b) = (shown.facets(), other.facets());
+    let value = |facets: &[(&'static str, String)], label: &str| {
+        facets.iter().find(|(l, _)| *l == label).map_or_else(|| "—".to_owned(), |(_, v)| v.clone())
+    };
+    let mut labels: Vec<&'static str> = b.iter().map(|(l, _)| *l).collect();
+    labels.extend(a.iter().map(|(l, _)| *l).filter(|l| !b.iter().any(|(m, _)| m == l)));
+    let (mut old, mut new) = (Vec::new(), Vec::new());
+    for label in labels {
+        let (x, y) = (value(&a, label), value(&b, label));
+        if x != y {
+            old.push(format!("{label}: {x}"));
+            new.push(format!("{label}: {y}"));
+        }
+    }
+    (old.join(", "), new.join(", "))
+}
+
+/// "1:12"
+fn clock(elapsed: Duration) -> String {
+    let s = elapsed.as_secs();
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
+/// The banner pinned over the table's column headers, or None when the rows on screen are current: nothing
+/// runs and they were computed for the filters in the column. `shown`: the filters of the rows on screen
+/// (None: no result yet); `running`: the filters the newest run computes, and how long ago it was asked for.
+fn stale_banner(shown: Option<&Filters>, running: Option<(&Filters, Duration)>, column: &Filters) -> Option<String> {
+    match (shown, running) {
+        (None, Some((_, t))) => Some(format!("No result yet · computing · {} · Esc stops", clock(t))),
+        (None, None) => None,
+        (Some(shown), Some((target, t))) => {
+            let (old, new) = facet_diff(shown, target);
+            Some(if new.is_empty() {
+                format!("Showing these filters · updating · {} · Esc stops", clock(t))
+            } else {
+                format!("Showing {old} · updating for {new} · {} · Esc stops", clock(t))
+            })
+        }
+        (Some(shown), None) => {
+            let (old, new) = facet_diff(shown, column);
+            (!new.is_empty()).then(|| format!("Showing {old} · not computed yet: {new}"))
+        }
+    }
+}
 const TOPS: [(u32, u32); 3] = [(1, 10), (11, 20), (21, 50)];
 const GENRES: [&str; 19] = [
     "rock", "pop", "hip hop", "r&b", "soul", "dance", "electronic", "disco", "funk", "country", "metal",
@@ -2891,7 +2960,49 @@ impl Filters {
             .filter(|(_, on)| *on)
             .map(|(d, _)| format!("{}-{}", d, d + 9))
             .collect();
-        if ranges.is_empty() { "1980-1989".to_owned() } else { ranges.join(",") }
+        // no decade ticked on the chart years: every year-end chart (`hits` reads the finished ones)
+        if ranges.is_empty() { format!("{FIRST_CHART_YEAR}-{}", this_year()) } else { ranges.join(",") }
+    }
+
+    /// The period as the banner names it: "All years" with no decade ticked, "1980–1989, 1990–1999", or
+    /// None when the sets have no years (recommendations alone).
+    fn period_label(&self) -> Option<String> {
+        if !self.has_years() {
+            return None;
+        }
+        if !self.by_range && !self.decades.iter().any(|d| *d) {
+            return Some("All years".to_owned());
+        }
+        Some(self.years().replace('-', "–").replace(',', ", "))
+    }
+
+    /// The filters as named values, in column order: what the banner over a stale table compares.
+    fn facets(&self) -> Vec<(&'static str, String)> {
+        let sets = rormpc_hits_rules::formula(&rormpc_hits_rules::Rules {
+            sets: self.sets,
+            named: &self.named,
+            period: None,
+            top: None,
+            genres: &[],
+            artists: &[],
+            owned: false,
+        });
+        let or_all = |s: String| if s.is_empty() { "all".to_owned() } else { s };
+        let on = |b: bool| if b { "on" } else { "off" }.to_owned();
+        let mut out = vec![("Sets", sets), ("Rank by", self.rank.label().to_owned())];
+        if let Some(period) = self.period_label() {
+            out.push(("Years of", self.effective_years_of().arg().to_owned()));
+            out.push(("Period", period));
+        }
+        out.extend([
+            ("Top", self.top().map_or_else(|| "all rows".to_owned(), |t| format!("{t}%"))),
+            ("Genres", or_all(self.genre_spec())),
+            ("Artists", or_all(self.artist_spec())),
+            ("Owned only", on(self.owned)),
+            ("Show excluded", on(self.show_excluded)),
+            ("List", self.open_list.as_ref().map_or_else(|| "none".to_owned(), |(_, name)| name.clone())),
+        ]);
+        out
     }
 
     /// "Genres: all", "Genres: +2", "Genres: -1" or "Genres: +2 -1": counts, since names don't fit 24 columns.
@@ -3061,7 +3172,11 @@ impl Filters {
                 is_decade.then(|| DECADES.iter().position(|d| d == lo)).flatten()
             })
             .collect();
-        if !parts.is_empty() && decade_parts.len() == parts.len() {
+        // every chart year (`years` with no decade ticked) reads back as no decade ticked
+        let every_year = matches!(parts.as_slice(), [(lo, hi)] if *lo <= FIRST_CHART_YEAR && *hi >= this_year() - 1);
+        if every_year {
+            f.decades = [false; 8];
+        } else if !parts.is_empty() && decade_parts.len() == parts.len() {
             f.decades = [false; 8];
             decade_parts.into_iter().for_each(|i| f.decades[i] = true);
         } else if let Some((lo, hi)) = parts.first() {
@@ -3135,7 +3250,13 @@ impl Filters {
             FilterRow::Mode => format!(
                 "{} {}",
                 if self.effective_years_of() == YearsOf::Listened { "Listened:" } else { "Period:" },
-                if self.by_range { "‹year range›" } else { "‹decades›" }
+                if self.by_range {
+                    "‹year range›"
+                } else if self.decades.iter().any(|d| *d) {
+                    "‹decades›"
+                } else {
+                    "‹All years›" // no decade ticked: what the table is computed for, never a hidden default
+                }
             ),
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
             FilterRow::From => format!("  from ‹ {} ›", self.from),
@@ -3234,8 +3355,7 @@ impl Filters {
     /// h / l on a year row; false when the row has nothing to adjust.
     fn adjust(&mut self, row: FilterRow, delta: i32) -> bool {
         // up to this year: my charts can show the year in progress
-        let this_year = chrono::Datelike::year(&chrono::Local::now());
-        let clamp = |y: i32| y.clamp(1959, this_year);
+        let clamp = |y: i32| y.clamp(FIRST_CHART_YEAR, this_year());
         match row {
             FilterRow::From => self.from = clamp(self.from + delta),
             FilterRow::To => self.to = clamp(self.to + delta),
@@ -3251,15 +3371,159 @@ impl Filters {
 /// State shared with the thread that runs `hits`.
 #[derive(Debug, Default)]
 struct Job {
-    running: bool,
-    /// Apply pressed while running: run again with these args when the current run ends
-    queued: Option<Vec<String>>,
+    /// the run in progress (None: nothing runs)
+    current: Option<Run>,
+    /// its `hits` process until it exited: set only while the child is unreaped, so the pid is never another
+    /// process's when `kill` signals it
+    pid: Option<u32>,
+    /// asked for while `current` runs, which was stopped for it: starts as soon as `current` exited
+    queued: Option<Run>,
+    /// Esc stopped `current`: its output is thrown away, and nothing runs after it
+    stopped: bool,
     error: Option<String>,
     finished: bool,
     /// a hide/unhide changed the result: run hits again with the current filters
     rerun: bool,
-    /// arguments of the last run that succeeded, taken by the next render
-    ok_args: Option<Vec<String>>,
+    /// the last run that succeeded (its result is in the file now), taken by the next render
+    ok: Option<Run>,
+}
+
+/// One `hits` run: what it computes and when it was asked for.
+#[derive(Debug, Clone)]
+struct Run {
+    /// the arguments as the filters give them; `--json` names the result file, which the run's own temp file
+    /// replaces only if the run is still the newest when it ends
+    args: Vec<String>,
+    filters: Filters,
+    asked: Instant,
+}
+
+impl Job {
+    /// Signal the running `hits`, if it has not exited yet; its thread sees the exit and goes on.
+    fn kill(&self) {
+        if let Some(pid) = self.pid {
+            // SAFETY: kill(2) on our own child, which is not reaped while `pid` is set (see `run_hits`)
+            unsafe {
+                libc::kill(pid.cast_signed(), libc::SIGTERM);
+            }
+        }
+    }
+
+    /// The current run's output must not replace the result: a newer run is queued, or Esc stopped it.
+    fn superseded(&self) -> bool {
+        self.queued.is_some() || self.stopped
+    }
+}
+
+/// Start `run`, or, while one runs, stop that one and queue `run` to start when it exited (replacing an
+/// older queued run): the newest run wins, and a superseded result never replaces the table.
+fn start_run(job: &Arc<Mutex<Job>>, run: Run, command: &[String], path: &Path, sender: crossbeam::channel::Sender<AppEvent>) {
+    let mut j = job.lock().expect("hits job lock");
+    if j.current.is_some() {
+        j.queued = Some(run);
+        j.kill();
+        return;
+    }
+    j.current = Some(run);
+    j.stopped = false;
+    j.error = None;
+    drop(j);
+    let (job, command, path) = (Arc::clone(job), command.to_vec(), path.to_path_buf());
+    std::thread::spawn(move || {
+        loop {
+            let args = job.lock().expect("hits job lock").current.as_ref().map(|r| r.args.clone()).unwrap_or_default();
+            let tmp = run_file(&path);
+            let result = run_hits(&job, &command, &args, &tmp);
+            let mut j = job.lock().expect("hits job lock");
+            if j.superseded() {
+                let _ = std::fs::remove_file(&tmp);
+                if j.stopped && j.queued.is_none() {
+                    j.error = Some("hits stopped (Esc): the table shows the previous result".to_owned());
+                }
+            } else {
+                // still the newest run, under the lock `start_run` queues with: publish its result atomically
+                let published = result.and_then(|()| {
+                    std::fs::rename(&tmp, &path).map_err(|e| format!("hits result {}: {e}", path.display()))
+                });
+                match published {
+                    Ok(()) => {
+                        j.error = None;
+                        let current = j.current.clone();
+                        j.ok = current;
+                    }
+                    Err(err) => {
+                        let _ = std::fs::remove_file(&tmp);
+                        j.error = Some(err);
+                    }
+                }
+            }
+            j.stopped = false;
+            j.current = j.queued.take();
+            if j.current.is_none() {
+                j.finished = true;
+                break;
+            }
+        }
+        let _ = sender.send(AppEvent::RequestRender);
+    });
+}
+
+/// A temp file beside the result for one run, distinct per run (`hits` writes its own `<stem>.tmp` next to it).
+fn run_file(path: &Path) -> PathBuf {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let stem = path.file_stem().map_or_else(|| "hits".into(), |s| s.to_string_lossy());
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    path.with_file_name(format!(".{stem}.run-{}-{n}.json", std::process::id()))
+}
+
+/// Run `hits` with `--json` pointed at `tmp` until it exits; its pid is in the job meanwhile, so a newer run or
+/// Esc can stop it. Err: the last line of its stderr, or why it could not start.
+fn run_hits(job: &Mutex<Job>, command: &[String], args: &[String], tmp: &Path) -> Result<(), String> {
+    let mut args = args.to_vec();
+    if let Some(value) = args.iter().position(|a| a == "--json").and_then(|i| args.get_mut(i + 1)) {
+        *value = tmp.to_string_lossy().into_owned();
+    }
+    let mut child = Command::new(&command[0])
+        .args(&command[1..])
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| crate::shared::dependencies::cannot_run(&command[0], &err))?;
+    let pid = child.id();
+    {
+        let mut j = job.lock().expect("hits job lock");
+        j.pid = Some(pid);
+        if j.superseded() {
+            j.kill(); // stopped or replaced before it had a pid
+        }
+    }
+    let mut stderr = Vec::new();
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_end(&mut stderr);
+    }
+    wait_exited(pid);
+    job.lock().expect("hits job lock").pid = None; // from here on the pid may be reaped and reused
+    let status = child.wait().map_err(|e| format!("hits: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(last_line(&stderr, "hits failed"))
+    }
+}
+
+/// Block until child `pid` exited, without reaping it (WNOWAIT): until `Child::wait`, its pid stays ours.
+fn wait_exited(pid: u32) {
+    loop {
+        // SAFETY: a zeroed siginfo_t is a valid out-parameter for waitid(2)
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: waitid on our own child, with a valid pointer to `info`
+        let rc = unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &raw mut info, libc::WEXITED | libc::WNOWAIT) };
+        if rc == 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return;
+        }
+    }
 }
 
 /// Tokens of a genre spec as `hits` reads them (`genre_filter`): a token runs to a comma or to whitespace
@@ -3472,6 +3736,112 @@ mod tests {
     }
 
     #[test]
+    fn the_banner_names_the_filters_of_stale_rows_and_what_runs() {
+        let shown = Filters::default(); // Billboard, chart years, the 1980s
+        let mut target = Filters::default();
+        target.rank = RankBy::Plays;
+        target.decades = [false; 8];
+        let t = Duration::from_secs(72); // delay: not a wait, an elapsed time the banner formats
+        assert_eq!(
+            stale_banner(Some(&shown), Some((&target, t)), &target).as_deref(),
+            Some("Showing Rank by: Billboard, Years of: chart, Period: 1980–1989 · updating for Rank by: my plays, \
+                  Years of: listened, Period: All years · 1:12 · Esc stops")
+        );
+        // a rerun of the same filters (an exception changed the result) still says the rows are being updated
+        let five = Duration::from_secs(5); // delay: not a wait, an elapsed time the banner formats
+        assert_eq!(
+            stale_banner(Some(&shown), Some((&shown, five)), &shown).as_deref(),
+            Some("Showing these filters · updating · 0:05 · Esc stops")
+        );
+        assert_eq!(stale_banner(Some(&shown), None, &shown), None, "current rows: no banner");
+        assert_eq!(
+            stale_banner(Some(&shown), None, &target).as_deref(),
+            Some("Showing Rank by: Billboard, Years of: chart, Period: 1980–1989 · not computed yet: Rank by: my plays, \
+                  Years of: listened, Period: All years")
+        );
+        assert_eq!(stale_banner(None, Some((&target, t)), &target).as_deref(), Some("No result yet · computing · 1:12 · Esc stops"));
+    }
+
+    #[test]
+    fn no_decade_ticked_reads_all_years_and_means_every_chart_year() {
+        let mut f = Filters::default();
+        f.decades = [false; 8];
+        assert_eq!(f.line(FilterRow::Mode), "Period: ‹All years›");
+        assert_eq!(f.period_label().as_deref(), Some("All years"));
+        // Billboard's chart years need a period: every year-end chart, not a hidden 1980s
+        let args = f.args("x.json");
+        let at = args.iter().position(|a| a == "--years").unwrap();
+        assert_eq!(args[at + 1], format!("1959-{}", this_year()));
+        let back = Filters::from_args(&written_args(&args));
+        assert!(!back.by_range && back.decades == [false; 8], "it reads back as no decade ticked");
+        f.decades[3] = true;
+        f.decades[4] = true;
+        assert_eq!(f.period_label().as_deref(), Some("1980–1989, 1990–1999"));
+    }
+
+    /// A stand-in for `hits`: writes its first argument into the `--json` file, or, given "block", runs until
+    /// it is killed.
+    fn fake_hits() -> Vec<String> {
+        let script = r#"for a; do [ "$prev" = --json ] && out=$a; prev=$a; done
+case " $* " in *" block "*) exec tail -f /dev/null;; esac
+printf '%s' "$1" > "$out""#;
+        ["sh", "-c", script, "sh"].map(str::to_owned).to_vec()
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rormpc-hits-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn fake_run(first: &str, path: &Path) -> Run {
+        let args = vec![first.to_owned(), "--json".to_owned(), path.to_string_lossy().into_owned()];
+        Run { args, filters: Filters::default(), asked: Instant::now() }
+    }
+
+    #[test]
+    fn a_newer_run_stops_the_running_one_whose_output_never_replaces_the_result() {
+        let dir = scratch_dir("newest");
+        let path = dir.join("hits.json");
+        std::fs::write(&path, "old").unwrap();
+        let (tx, rx) = crossbeam::channel::unbounded();
+        let job = Arc::new(Mutex::new(Job::default()));
+        start_run(&job, fake_run("block", &path), &fake_hits(), &path, tx.clone());
+        start_run(&job, fake_run("middle", &path), &fake_hits(), &path, tx.clone());
+        start_run(&job, fake_run("newest", &path), &fake_hits(), &path, tx);
+        rx.recv().unwrap(); // the runs' thread ends with a render request
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "newest");
+        let j = job.lock().unwrap();
+        assert!(j.current.is_none() && j.queued.is_none() && j.pid.is_none() && j.finished);
+        assert_eq!(j.ok.as_ref().map(|r| r.args[0].as_str()), Some("newest"));
+        assert_eq!(j.error, None);
+        drop(j);
+        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(left, vec![std::ffi::OsString::from("hits.json")], "no run's temp file is left behind");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn esc_stops_the_run_and_keeps_the_rows() {
+        let dir = scratch_dir("esc");
+        let path = dir.join("hits.json");
+        std::fs::write(&path, "old").unwrap();
+        let (tx, rx) = crossbeam::channel::unbounded();
+        let mut pane = HitsPane::new(path.to_string_lossy().into_owned(), fake_hits());
+        assert!(!pane.stop_run(), "nothing runs: Esc is left to the other uses");
+        start_run(&pane.job, fake_run("block", &path), &fake_hits(), &path, tx);
+        assert!(pane.stop_run());
+        rx.recv().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "old");
+        let j = pane.job.lock().unwrap();
+        assert!(j.current.is_none() && j.ok.is_none());
+        assert!(j.error.as_deref().is_some_and(|e| e.contains("stopped")));
+        drop(j);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn set_chips_rank_and_years_round_trip() {
         let mut f = Filters::default();
         assert_eq!(f.args("x.json")[..4], ["--set=+billboard", "--rank", "billboard", "--years-of"]);
@@ -3637,7 +4007,7 @@ mod tests {
         assert_eq!(back.tops, [false; 3]); // "1-100" was "no box ticked"
         let mine = Filters::from_args(&HitsArgs { source: Some("mine".to_owned()), ..HitsArgs::default() });
         assert_eq!((mine.sets, mine.rank, mine.years_of), ([0; 4], RankBy::Plays, None));
-        assert_eq!(mine.line(FilterRow::Mode), "Listened: ‹decades›");
+        assert_eq!(mine.line(FilterRow::Mode), "Listened: ‹All years›"); // no period: no decade ticked
         let charts = Filters::from_args(&HitsArgs { period: Some("1980-1989".to_owned()), ..HitsArgs::default() });
         assert_eq!((charts.sets, charts.rank, charts.years_of), ([1, 0, 0, 0], RankBy::Billboard, None));
     }
