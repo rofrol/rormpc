@@ -451,6 +451,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       2026-10-10: Music): the tab label in the built-in default and assets/example_config.ron, SwitchToTab names,
       RORMPC.md and plans; the pane type Pane(Play()) stays (explicit configs keep loading); your config's tab and
       its "1" key too.
+- [ ] Deleted becomes an overlay in Music (asked 2026-10-10: "why a separate Deleted tab and not inside Music? ask
+      the models"; Sol 1092fd62: overlay like Live with a badge for failed steps only; MiMo aee8f69d: keep a tab;
+      decided by the user 2026-10-10: an overlay in Music): the Deleted pane's table, restore/retry and download
+      allow/block in an overlay opened with gd (and a click on its badge), the badge counting failed or unresolved
+      steps only; the Deleted tab leaves the default tabs and your config; the pane stays loadable.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
