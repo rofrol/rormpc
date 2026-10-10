@@ -611,11 +611,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       work and artist within ±10 s), dry-run report, review, atomic writes keeping the old values, ~66 min at 1 req/s.
       The matcher now treats MusicBrainz's video flag like "(video)" and prefers an audio candidate (new downloads).
       Its 5 open choices are in "Needs a decision" ("Release years:").
-- [ ] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view:
+- [x] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view:
       "on hover the hearts don't light up like they used to, to show they can be clicked. ask the models"): a worker
       finds which change lost the hover highlight (the old Queue pane had it; Music / the plan projection may not
       pass hover state to the like column), consults the models on hover affordances for clickable cells in a TUI,
       and restores it in Music (both modes) and wherever else hearts are drawn.
+      Done in 1c78f61 (worker, consulted Sol + MiMo; cargo test 1051), installed: under the mouse ♥ and ✗ are bold and
+      underlined, an unrated song shows a dim underlined ♥; Queue, Hits and the weighted view (hover pinned to the
+      song from the last paint, cleared on scroll; Browse draws no hearts).
 - [ ] The forecast should always show 10 ahead (asked 2026-10-10 with a screenshot: -2, -1, 0 ▶ Eye of the Tiger,
       then nothing: "shouldn't there always be 10 ahead? ask the models"). Cause (checked): mpd-player's fill_plan
       draws only songs not heard in the current round; at the round's end it reports "round done: all N heard
