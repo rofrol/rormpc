@@ -473,6 +473,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only
       together with the install of a rormpc that knows it (the coordinator installs, then commits the config), never
       ahead of it (2026-10-10: ShowPlay(Deleted) broke loading the config until the install).
+- [ ] Media key Next lags (asked 2026-10-10: "the MacBook's Next media key works with some delay. ask the models"):
+      a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
+      MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
+      bug signal"); live tests with the media key on the user's MPD go to "Needs a decision" first.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
