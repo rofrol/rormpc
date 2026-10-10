@@ -423,6 +423,23 @@ impl<'a> MenuModal<'a> {
         self
     }
 
+    /// rormpc: after `build`, start the cursor on item `item` of section `section` instead of the first item
+    /// (the fork's menus have no unselectable title row). Ignored when there is no such item.
+    pub fn start_at(mut self, section: usize, item: usize, ctx: &Ctx) -> Self {
+        if self.sections.get(section).is_some_and(|s| item < s.len()) {
+            self.sections[self.current_section_idx].unselect(ctx);
+            self.current_section_idx = section;
+            self.sections[section].select(item);
+        }
+        self
+    }
+
+    /// The section and item under the cursor.
+    #[cfg(test)]
+    pub fn cursor(&self) -> (usize, Option<usize>) {
+        (self.current_section_idx, self.sections[self.current_section_idx].selected())
+    }
+
     pub fn list_section(
         mut self,
         ctx: &Ctx,
