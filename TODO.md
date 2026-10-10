@@ -996,13 +996,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, the coordinator adds both | other keys (name them) | no, the menu is enough
       Checked: assets/example_config.ron binds them (afcb9be); ~/.config/rormpc/config.ron line ~140 has an explicit
       queue map without them; neither key is bound there.
-- [ ] Combined view: Where do Browse and Live go inside Play?
+- [x] Combined view: Where do Browse and Live go inside Play? Decided by the user 2026-10-10: Browse in the left column (Filters | Browse), the playlist editor and Live as overlays (Sol's layout, not the plan's recommendation).
       Options: full-width bodies Queue | Browse | Live, B and the digits switch (reuses the browsers unchanged) | Browse in the left column, editor and Live as overlays (Sol) | right-pane modes Sources | Queue | Live (MiMo)
       Checked: plans/combined-view.md "Open choices" (13); the first option is the plan's recommendation.
-- [ ] Combined view: Does `P` (play an album, folder, artist or playlist, replacing the queue) ask for a confirmation?
+- [x] Combined view: Does `P` (play an album, folder, artist or playlist, replacing the queue) ask for a confirmation? Decided by the user 2026-10-10: Apply's rule (source kind change or more than 25% of the queue).
       Options: Apply's rule: only on a source kind change or more than 25% of the queue | never, Previous sources undoes it | always
       Checked: plans/combined-view.md "Open choices" (14); the first option is the plan's recommendation.
-- [ ] Combined view: A song appended (`a`) to a queue holding a Hits source while weighted is on: what happens to it?
+- [x] Combined view: A song appended (`a`) to a queue holding a Hits source while weighted is on: what happens to it? Decided by the user 2026-10-10: it joins the source's files and the round, the source shows "+N added".
       Options: it joins the source's files and the round, the source shows "+N added" | it becomes an Up next request | it stays outside the round (today: never drawn)
       Checked: plans/combined-view.md "Open choices" (15); the first option is the plan's recommendation.
 - [ ] Combined view: Stored playlist editor: immediate edits or a save buffer?
@@ -1017,7 +1017,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Combined view: An unapplied preview when a Browse action changes the queue?
       Options: the preview stays, its counts are recomputed, Apply judges the confirmation then (Sol) | the preview is dropped with a note (MiMo)
       Checked: plans/combined-view.md "Open choices" (19); the first option is the plan's recommendation.
-- [ ] Combined view: Artists and Album artists in Browse?
+- [x] Combined view: Artists and Album artists in Browse? Decided by the user 2026-10-10: two separate groupings.
       Options: two separate groupings (MiMo; the code has both) | one grouping with a toggle
       Checked: plans/combined-view.md "Open choices" (20); the first option is the plan's recommendation.
 - [ ] Scrobble status: What does "62% of 50%" mean?
