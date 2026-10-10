@@ -1173,10 +1173,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (MiMo also suggested polling `listclients`: dismissed, MPD has no such command.) Fourth option added below.
       Decided by the user 2026-10-10: keep MPD, only cheap fixes (the main one, appended songs joining the round,
       is done in phase 3b); no fork, no short-queue rebuild.
-- [ ] Deleted songs: should an undo of a deletion also leave Asked 2026-10-10; the user did not understand the question ("I delete something and you write restored?"): explained, asked again. a "restored" event in the log, for history (today the
+- [ ] Deleted songs: should an undo of a deletion also leave a "restored" event in the log, for history (today the
       journal record just disappears with its block)?
       Options: no, as it is | yes, append "restored" to deletions/allowed.jsonl
       Checked: MiMo's point in the deleted-songs consult round 2026-10-10; the worker left it as it is.
+      Asked 2026-10-10; the user did not understand it ("I delete something and you write restored?"): it is about
+      undoing a deletion (Ctrl-y); explained in plain text, recommended to leave it as it is.
 - [x] Deleted songs: should deleting only a duplicate (another file of the recording stays) block the whole
       recording too?
       Options: only that file's YouTube video (as built) | the whole recording
