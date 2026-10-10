@@ -337,6 +337,17 @@ impl QueuePane {
                     }
                     Ok(())
                 });
+                // rormpc: the playing song's listen, same as oL (only where a scrobbler writes its status)
+                if selected_song_id.is_some()
+                    && selected_song_id == ctx.status.songid
+                    && crate::ui::rormpc_scrobble::status().is_some()
+                {
+                    let hint = crate::ui::rormpc_scrobble::key_hint(ctx);
+                    section.add_item(format!("Send to ListenBrainz now{hint}"), |ctx| {
+                        crate::ui::rormpc_scrobble::send_now(ctx);
+                        Ok(())
+                    });
+                }
                 Some(section)
             })
             .list_section(ctx, |mut section| {
