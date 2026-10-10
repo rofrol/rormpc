@@ -46,6 +46,9 @@ A file for [guiding AI coding agents](https://agents.md/).
   the build before a fix, run a backup binary from `~/.cache/rormpc/installed/`.
 - A debug build (`target/debug/rormpc`) finds no config file by itself (`debuginfo` says "Config path None"): pass
   `-c ~/.config/rormpc/config.ron`, or the user's key bindings (`og`, `om`, ...) silently do nothing.
+- A copy of the user's config for tests needs the `themes/` directory next to it: the config names its theme
+  (`theme: "roman"`), which is looked up as `themes/roman.ron` beside the config file; without it rormpc silently
+  falls back to the default values.
 - With random on, `mpc insert` appends at the end; use `mpc add` + `mpc move` to put a song at a position.
 - `/` and a query may go in one batch (`herdr pane send-keys <pane> / c l`, one key per argument, or
   `herdr pane send-text <pane> "/cl"`): the event loop handles the action a key resolves to before the next key,
