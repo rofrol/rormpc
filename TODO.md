@@ -360,6 +360,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "scrobbled ✓"; "scrobbler not running"; Sol's table in the consult round), a "Send to ListenBrainz now" item in
       the Queue menu for the playing song next to oL, and `(kind: Property(Status(Scrobble)))` next to the progress
       bar before the time in your theme (dotfiles ~/.config/rormpc/themes/roman.ron).
+- [ ] ro-listenbrainz-mpd remembers a sent listen (manual or automatic) across its own restart in the middle of a
+      song, in its SQLite database, so a later automatic listen of the same play is never sent twice (decided
+      2026-10-10).
 - [ ] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
       browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
       the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
@@ -1050,11 +1053,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Scrobble status: When does a manual send ask for a confirmation? Decided by the user 2026-10-10: when the rule is not met yet (as built).
       Options: when the rule is not met yet (as built) | always | never
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [ ] Scrobble status: Which timestamp does a manual send carry after a seek under the uninterrupted rule?
+- [x] Scrobble status: Which timestamp does a manual send carry after a seek under the uninterrupted rule? Decided by the user 2026-10-10: the seek (as built).
       Options: the seek (as built, the same as an automatic listen) | the song's start
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [ ] Scrobble status: Should the scrobbler remember a send across its own restart in the middle of a song (today a later automatic listen could go a second time)?
+- [x] Scrobble status: Should the scrobbler remember a send across its own restart in the middle of a song (today a later automatic listen could go a second time)?
       Options: leave it (rare) | store it in the daemon's SQLite database
+      Decided by the user 2026-10-10: store it in the daemon's SQLite database (queued in Next).
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
 - [x] Scrobble status: Add Status(Scrobble) to your theme in dotfiles? Decided by the user 2026-10-10: next to the progress bar, before the time (queued in Next; the coordinator edits the theme).
       Options: next to the progress bar, before the time | in the header | no
