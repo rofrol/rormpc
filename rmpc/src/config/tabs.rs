@@ -274,6 +274,8 @@ pub enum PlayView {
     Live,
     /// the deletion journal (the Deleted pane as an overlay)
     Deleted,
+    /// the queue (or the plan) with the cursor on its "Up next · N" row
+    UpNext,
 }
 
 impl PlayView {
@@ -283,6 +285,7 @@ impl PlayView {
             PlayView::Browse(g) => format!("Browse › {}", g.label()),
             PlayView::Live => "the Live playlists inbox".to_owned(),
             PlayView::Deleted => "the Deleted journal".to_owned(),
+            PlayView::UpNext => "Up next".to_owned(),
         }
     }
 }
@@ -294,6 +297,7 @@ impl std::fmt::Display for PlayView {
             PlayView::Browse(g) => write!(f, "Browse({g})"),
             PlayView::Live => write!(f, "Live"),
             PlayView::Deleted => write!(f, "Deleted"),
+            PlayView::UpNext => write!(f, "UpNext"),
         }
     }
 }
@@ -1132,21 +1136,6 @@ impl Default for TabsFile {
                 },
             },
             TabFile {
-                name: "Up next".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    direction: DirectionFile::Vertical,
-                    borders: BordersFile::NONE,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        borders: BordersFile::ALL,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::UpNext()),
-                        ..Default::default()
-                    }],
-                },
-            },
-            TabFile {
                 name: "Search".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
@@ -1256,20 +1245,21 @@ mod rormpc_tests {
     use super::*;
 
     #[test]
-    fn play_first_and_one_top_level_up_next() {
+    fn music_first_and_no_up_next_tab() -> anyhow::Result<()> {
         let tabs = TabsFile::default();
         assert_eq!(tabs.0[0].name, "Music");
-        assert_eq!(tabs.0[1].name, "Up next");
+        assert_eq!(tabs.0[1].name, "Search");
         let converted = tabs.convert(&HashMap::new(), &BorderSetLib::default()).unwrap();
         // Play replaces Hits, Queue and Shuffle in the default, Deleted is an overlay in it; their panes stay for
         // explicit configs
         let panes: Vec<_> = converted.tabs.values().flat_map(|t| t.panes.panes_iter().map(|p| p.pane.clone())).collect();
         assert!(panes.contains(&PaneType::Play));
         assert!(!panes.iter().any(|p| matches!(p, PaneType::Queue | PaneType::Hits { .. } | PaneType::Shuffle | PaneType::Deleted)));
-        let up_next_tabs = converted.tabs.values().filter(|tab| {
-            tab.panes.panes_iter().any(|pane| matches!(pane.pane, PaneType::UpNext))
-        }).collect_vec();
-        assert_eq!(up_next_tabs.len(), 1);
-        assert_eq!(up_next_tabs[0].name, TabName::from("Up next"));
+        // Up next lives in Music (its header row); Pane(UpNext()) still loads for explicit configs
+        assert!(!panes.contains(&PaneType::UpNext));
+        let file = TabsFile(ron::from_str(r#"[(name: "Up next", pane: Pane(UpNext()))]"#)?);
+        let converted = file.convert(&HashMap::new(), &BorderSetLib::default())?;
+        assert!(converted.tabs.values().any(|t| t.panes.panes_iter().any(|p| p.pane == PaneType::UpNext)));
+        Ok(())
     }
 }

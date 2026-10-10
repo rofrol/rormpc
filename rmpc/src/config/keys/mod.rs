@@ -108,9 +108,9 @@ impl Default for KeyConfigFile {
             // rormpc: the browsing tabs live in Music (plans/combined-view.md, phase 3b): their digits open Music's
             // Browse on that grouping, 0 and gl the Live inbox
             (s().char('1'),                       G::SwitchToTab("Music".to_string())),
-            (s().char('2'),                       G::SwitchToTab("Up next".to_string())),
+            (s().char('2'),                       G::ShowPlay(PlayView::UpNext)),
             (s().char('3'),                       G::SwitchToTab("Search".to_string())),
-            (s().char('g').char('u'),             G::SwitchToTab("Up next".to_string())),
+            (s().char('g').char('u'),             G::ShowPlay(PlayView::UpNext)),
             (s().char('g').char('v'),             G::SwitchToTab("Versions".to_string())),
             (s().char('g').char('y'),             G::SwitchToTab("Lyrics".to_string())),
             (s().char('5'),                       G::ShowPlay(PlayView::Browse(PlayGrouping::Folders))),

@@ -202,8 +202,25 @@ fn watch_path(path: PathBuf, tx: Sender<AppEvent>) -> Result<RecommendedWatcher>
     Ok(watcher)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// What `upnext_file()` returns in this test thread: (waiting entries, error). Default: nothing waiting.
+    pub static TEST_UPNEXT: std::cell::RefCell<(Vec<Waiting>, Option<String>)> = std::cell::RefCell::default();
+}
+
 /// mpd-player's upnext.json, cached until its mtime changes or its watcher invalidates it.
 fn upnext_file() -> UpNextFile {
+    #[cfg(test)]
+    return TEST_UPNEXT.with(|t| {
+        let (entries, error) = t.borrow().clone();
+        UpNextFile { entries, playing: None, error }
+    });
+    #[cfg(not(test))]
+    upnext_file_from_disk()
+}
+
+#[cfg(not(test))]
+fn upnext_file_from_disk() -> UpNextFile {
     let p = rormpc_player::state_path("upnext");
     let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
     let cache = UP_NEXT_CACHE.get_or_init(|| Mutex::new((None, UpNextFile::default())));
@@ -366,6 +383,62 @@ pub fn clear(ctx: &Ctx) {
 /// Play the waiting entry `id` now.
 pub fn play_entry(ctx: &Ctx, id: u32) {
     send(ctx, vec![format!("upnext play {id}")]);
+}
+
+/// "Clear Up next (N)…": every waiting entry goes, after a confirmation.
+pub fn confirm_clear(ctx: &Ctx, n: usize) {
+    let message = vec![format!(
+        "Clear Up next ({n})?\n\nSongs added only for Up next leave the queue; songs of the source stay where they are."
+    )];
+    modal!(
+        ctx,
+        ConfirmModal::builder()
+            .ctx(ctx)
+            .message(message)
+            .action(Action::CustomButtons {
+                buttons: vec![
+                    ("Cancel", Box::new(|_: &Ctx| Ok(()))),
+                    ("Clear", Box::new(|ctx: &Ctx| {
+                        clear(ctx);
+                        Ok(())
+                    })),
+                ],
+            })
+            .build()
+    );
+}
+
+/// The menu of Music's "Up next · N" header row (Enter or the context menu on it).
+pub fn open_block_menu(ctx: &Ctx, n: usize) {
+    let menu = MenuModal::new(ctx)
+        .list_section(ctx, move |mut section| {
+            if n > 0 {
+                section.add_item(format!("Clear Up next ({n})…"), move |ctx| {
+                    confirm_clear(ctx, n);
+                    Ok(())
+                });
+            }
+            if rormpc_player::shuffle_state().round.is_some_and(|r| r.done) {
+                section.add_item("New round (every song of the source once more)", |ctx| {
+                    rormpc_player::new_round(ctx);
+                    Ok(())
+                });
+            }
+            Some(section)
+        })
+        .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
+        .build();
+    modal!(ctx, menu);
+}
+
+/// The label of Music's header row above the waiting requests.
+pub fn block_label(n: usize) -> String {
+    format!("Up next · {n}")
+}
+
+/// mpd-player's last rejected Up next command ("Cannot play …"), kept until its next explicit successful action.
+pub fn error() -> Option<String> {
+    upnext_file().error
 }
 
 /// "Sources…": the whole library or a saved playlist, played now (it replaces the queue; Up next stays).

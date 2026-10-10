@@ -23,10 +23,7 @@ use crate::{
     },
     ui::{
         dirstack::DirState,
-        modals::{
-            confirm_modal::{Action, ConfirmModal},
-            menu::modal::MenuModal,
-        },
+        modals::menu::modal::MenuModal,
         rormpc_upnext::{self, Waiting},
     },
 };
@@ -65,28 +62,6 @@ impl UpNextPane {
         self.selected_id = self.rows.get(idx).map(|w| w.id);
     }
 
-    fn confirm_clear(ctx: &Ctx, n: usize) {
-        let message = vec![format!(
-            "Clear Up next ({n})?\n\nSongs added only for Up next leave the queue; songs of the source stay where they are."
-        )];
-        modal!(
-            ctx,
-            ConfirmModal::builder()
-                .ctx(ctx)
-                .message(message)
-                .action(Action::CustomButtons {
-                    buttons: vec![
-                        ("Cancel", Box::new(|_: &Ctx| Ok(()))),
-                        ("Clear", Box::new(|ctx: &Ctx| {
-                            rormpc_upnext::clear(ctx);
-                            Ok(())
-                        })),
-                    ],
-                })
-                .build()
-        );
-    }
-
     fn open_menu(&self, ctx: &Ctx) {
         let selected = self.selected().map(|w| w.id);
         let n = self.rows.len();
@@ -114,7 +89,7 @@ impl UpNextPane {
                 }
                 if n > 0 {
                     section.add_item(format!("Clear Up next ({n})…"), move |ctx| {
-                        Self::confirm_clear(ctx, n);
+                        rormpc_upnext::confirm_clear(ctx, n);
                         Ok(())
                     });
                 }

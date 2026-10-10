@@ -33,7 +33,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     prelude::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     symbols::border,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
@@ -367,6 +367,16 @@ impl PlayPane {
             }
             Some(PlayView::Live) => self.open_overlay(Overlay::Live, ctx),
             Some(PlayView::Deleted) => self.open_overlay(Overlay::Deleted, ctx),
+            // gu: the table gets the keys, the cursor goes to its "Up next · N" row
+            Some(PlayView::UpNext) => {
+                self.overlay = Overlay::None;
+                self.show_filters(false);
+                if self.shows_hits_table() {
+                    status_info!("Esc drops the preview first, then gu");
+                } else if !self.queue.jump_to_up_next(ctx) {
+                    status_info!("Up next is empty: t puts a song there");
+                }
+            }
             None => {}
         }
     }
@@ -870,6 +880,15 @@ impl Pane for PlayPane {
         frame.render_widget(Paragraph::new(Line::from(Span::styled(badge, style))), badge_area);
         self.areas.badge = badge_area;
         self.areas.deleted_badge = deleted_area;
+        // mpd-player's rejected Up next command, even with no request left; it goes with its next explicit
+        // successful action
+        let error = rormpc_upnext::error();
+        let [body, footer] =
+            Layout::vertical([Constraint::Min(1), Constraint::Length(u16::from(error.is_some()))]).areas(body);
+        if let Some(error) = error {
+            let line = Line::from(Span::styled(format!(" Up next: {error}"), Style::default().fg(Color::Red)));
+            frame.render_widget(Paragraph::new(line), footer);
+        }
         self.render_queue_body(frame, body, ctx)?;
         self.render_overlays(frame, body, ctx)
     }
