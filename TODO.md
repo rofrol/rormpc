@@ -647,6 +647,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rormpc_install.sh companions, replacing mpd-now-playable (its docs and the user's LaunchAgent removed after the
       switch). A worker plans it first with the models (macOS Now Playing from Python: PyObjC MediaPlayer or a small
       helper; MPRIS via D-Bus), open choices to "Needs a decision"; live key tests are the user's.
+      Planned in rormpc-tools df38f20 docs/media-keys-plan.md (worker, consult round 20261010-193113-cc90): a datagram
+      socket with a JSON allowlist (next, prev, toggle, play, pause, stop, seek) into mpd-player's command queue,
+      each command reading MPD's state first; Karabiner send_user_command (not Karabiner's default socket path);
+      Now Playing as a second process `mpd-player nowplaying` with its own launchd agent; MPRIS in the daemon via
+      dbus-fast; companions stops mpd-now-playable before starting the new one; karabiner.json only suggested. Six
+      open choices in "Needs a decision" ("Media keys:"); the build waits for them.
 - [ ] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
       "illogical that this is smaller than from. ask the models. Besides, no option to turn off either this or from?").
       Consulted (Sol 3f2a69ae, MiMo fb2e7e9b): clamp while stepping (from stops at to and back, equal years allowed;
@@ -1478,3 +1484,21 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: as built (one MPD priority per queue entry; a played song rests ≥ 12 h) | a display-only preview of
       later rounds without MPD priorities | duplicate entries in the queue (changes your queue)
       Checked: the forecast worker 2026-10-10.
+- [ ] Media keys: Now Playing on macOS: a second process, an in-daemon provider, or a Swift helper?
+      Options: a second process from the same package with its own launchd agent (both models) | inside the mpd-player daemon on a CoreFoundation loop | a small Swift helper
+      Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
+- [ ] Media keys: When should the provider claim Now Playing?
+      Options: on the first MPD play after it starts, then the true state (paused stays paused) | at startup as Playing like mpd-now-playable (takes the slot from a browser) | only while MPD plays
+      Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
+- [ ] Media keys: May a worker stop your mpd-now-playable for about 15 minutes for a Control Center test on a scratch MPD?
+      Options: no, you run that test after the install | yes, the worker stops it and starts it again
+      Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
+- [ ] Media keys: Next (key, Now Playing, MPRIS) while you have paused MPD: play the next song, or stay paused on it?
+      Options: play it, as Previous already does | stay paused, as MPD's own next does
+      Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
+- [ ] Media keys: Keep the old Karabiner shell script after the rule moves to send_user_command?
+      Options: keep it as a manual fallback for a week, then delete | delete it with the switch
+      Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
+- [ ] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in?
+      Options: on by default, warn when another MPD MPRIS bridge runs | opt-in with `mpd-player --mpris`
+      Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
