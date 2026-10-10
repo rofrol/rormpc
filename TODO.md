@@ -437,6 +437,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       collapsed line. Decided by the user 2026-10-10: remove them entirely; the pool stays reachable through `/`
       search and Browse. In Play's weighted mode and the Queue plan view: past plays, 0 ▶, Up next, the forecast,
       nothing after it; check what `/` and the row actions need when the matching song is outside the forecast.
+- [ ] Release rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab download
+      column, Hits ⌫ rows, scope-menu cursor, weighted view without unplanned rows) after the weighted-mode change
+      (decided 2026-10-10; the coordinator does it).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1164,15 +1167,17 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (MiMo also suggested polling `listclients`: dismissed, MPD has no such command.) Fourth option added below.
       Decided by the user 2026-10-10: keep MPD, only cheap fixes (the main one, appended songs joining the round,
       is done in phase 3b); no fork, no short-queue rebuild.
-- [ ] Deleted songs: should an undo of a deletion also leave a "restored" event in the log, for history (today the
+- [ ] Deleted songs: should an undo of a deletion also leave Asked 2026-10-10; the user did not understand the question ("I delete something and you write restored?"): explained, asked again. a "restored" event in the log, for history (today the
       journal record just disappears with its block)?
       Options: no, as it is | yes, append "restored" to deletions/allowed.jsonl
       Checked: MiMo's point in the deleted-songs consult round 2026-10-10; the worker left it as it is.
-- [ ] Deleted songs: should deleting only a duplicate (another file of the recording stays) block the whole
+- [x] Deleted songs: should deleting only a duplicate (another file of the recording stays) block the whole
       recording too?
       Options: only that file's YouTube video (as built) | the whole recording
       Checked: the deleted-songs worker 2026-10-10.
-- [ ] Release now: rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab
+      Decided by the user 2026-10-10: only that file's YouTube video (as built).
+- [x] Release now: rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab
       download column, Hits ⌫ rows, the scope-menu cursor)?
       Options: yes, now (the block only works once installed) | together with the weighted-mode change
       Checked: tests green; installed are tools 0.2.40 and rormpc 76104b2.
+      Decided by the user 2026-10-10: after the weighted-mode change, one release (queued in Next).
