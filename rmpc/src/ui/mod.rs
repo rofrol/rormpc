@@ -95,6 +95,7 @@ pub mod rormpc_smartlists;
 pub mod rormpc_tags;
 pub mod rormpc_upnext;
 pub mod rormpc_versions;
+pub mod rormpc_years;
 pub mod song_ext;
 pub mod tab_screen;
 pub mod widgets;

@@ -121,6 +121,7 @@ impl Default for KeyConfigFile {
             (s().char('0'),                       G::ShowPlay(PlayView::Live)),
             (s().char('g').char('l'),             G::ShowPlay(PlayView::Live)),
             (s().char('g').char('d'),             G::ShowPlay(PlayView::Deleted)),
+            (s().char('g').char('Y'),             G::ShowPlay(PlayView::Years)),
             (s().char('u'),                       G::Update),
             (s().char('U'),                       G::Rescan),
             (s().char('R'),                       G::AddRandom),

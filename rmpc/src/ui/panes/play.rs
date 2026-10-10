@@ -23,6 +23,7 @@
 //!   (`0`, `gl`, or the `Live N` badge in the header). An unapplied preview stays open through all of it.
 //! - The Deleted pane is a panel over Music too (decided by the user 2026-10-10): `gd`, or the `Deleted ! N` badge,
 //!   shown only while deletions have failed or unresolved steps.
+//! - "Years to review" (`gY`, `rormpc_years`) is a panel over Music like Deleted.
 //!
 //! It is composed, not copied: the filter column and the preview table are a `HitsPane` in Play mode, the table
 //! is a `QueuePane` whose view follows the weighted shuffle, Browse's groupings are the browser panes.
@@ -80,6 +81,7 @@ use crate::{
         rormpc_player,
         rormpc_smartlists::{self, Pick},
         rormpc_upnext::{self, HitsSource},
+        rormpc_years::YearsPane,
     },
 };
 
@@ -121,6 +123,7 @@ enum Overlay {
     None,
     Live,
     Deleted,
+    Years,
 }
 
 /// Areas of Browse's last render, for the mouse.
@@ -160,6 +163,8 @@ pub struct PlayPane {
     /// the Live playlists inbox and the Deleted journal: their panes keep their place while closed
     live: LivePlaylistsPane,
     deleted: DeletedPane,
+    /// the release years to review (`gY`)
+    years: YearsPane,
     overlay: Overlay,
     /// the rules the source being played was applied with (source.json), None for any other source; Esc brings
     /// the filters back to them (or to the defaults)
@@ -191,6 +196,7 @@ impl PlayPane {
             children: HashMap::new(),
             live: LivePlaylistsPane::new(),
             deleted: DeletedPane::new(),
+            years: YearsPane::new(),
             overlay: Overlay::None,
             baseline: None,
             baseline_hash: String::new(),
@@ -362,6 +368,7 @@ impl PlayPane {
             }
             Some(PlayView::Live) => self.open_overlay(Overlay::Live, ctx),
             Some(PlayView::Deleted) => self.open_overlay(Overlay::Deleted, ctx),
+            Some(PlayView::Years) => self.open_overlay(Overlay::Years, ctx),
             // gu: the table gets the keys, the cursor goes to its "Up next · N" row
             Some(PlayView::UpNext) => {
                 self.overlay = Overlay::None;
@@ -382,6 +389,7 @@ impl PlayPane {
         let loaded = match overlay {
             Overlay::Live => self.live.before_show(ctx),
             Overlay::Deleted => self.deleted.before_show(ctx),
+            Overlay::Years => self.years.before_show(ctx),
             Overlay::None => Ok(()),
         };
         if let Err(err) = loaded {
@@ -644,6 +652,12 @@ impl PlayPane {
                 self.areas.overlay = rect;
                 return self.deleted.render(frame, inner, ctx);
             }
+            Overlay::Years => {
+                let title = " Years to review · Space marks · a accept · D reject (again: undecide) · h/l filter · Enter menu · Esc closes ".to_owned();
+                let (rect, inner) = Self::panel(frame, area, title, ctx);
+                self.areas.overlay = rect;
+                return self.years.render(frame, inner, ctx);
+            }
             Overlay::None => {}
         }
         if let Some(name) = self.editing() {
@@ -898,6 +912,7 @@ impl Pane for PlayPane {
         self.live.on_event(event, is_visible && self.overlay == Overlay::Live, ctx)?;
         // the journal reloads on a Ctrl-x or Ctrl-y while Music is shown: the badge follows it
         self.deleted.on_event(event, is_visible, ctx)?;
+        self.years.on_event(event, is_visible && self.overlay == Overlay::Years, ctx)?;
         self.queue.on_event(event, is_visible, ctx)
     }
 
@@ -951,9 +966,10 @@ impl Pane for PlayPane {
         let queue_action = event.actions.iter().find_map(|a| a.as_queue()).cloned();
         // a panel over Play has every key; Esc (with nothing marked in the Live inbox) closes it
         match self.overlay {
-            Overlay::Live | Overlay::Deleted
+            Overlay::Live | Overlay::Deleted | Overlay::Years
                 if matches!(common, Some(CommonAction::Close))
-                    && !(self.overlay == Overlay::Live && self.live.has_marks()) =>
+                    && !(self.overlay == Overlay::Live && self.live.has_marks())
+                    && !(self.overlay == Overlay::Years && self.years.has_marks()) =>
             {
                 let _ = event.claim_common();
                 self.overlay = Overlay::None;
@@ -961,6 +977,7 @@ impl Pane for PlayPane {
             }
             Overlay::Live => return self.live.handle_action(event, ctx),
             Overlay::Deleted => return self.deleted.handle_action(event, ctx),
+            Overlay::Years => return self.years.handle_action(event, ctx),
             Overlay::None => {}
         }
         // B, [ and ]: the left column and Browse's groupings, from anywhere in Play
@@ -1065,6 +1082,7 @@ impl Pane for PlayPane {
                 match self.overlay {
                     Overlay::Live => return self.live.handle_mouse_event(event, ctx),
                     Overlay::Deleted => return self.deleted.handle_mouse_event(event, ctx),
+                    Overlay::Years => return self.years.handle_mouse_event(event, ctx),
                     Overlay::None => {}
                 }
                 if let Some(Child::Lists(b)) = self.children.get_mut(&PlayGrouping::Lists) {

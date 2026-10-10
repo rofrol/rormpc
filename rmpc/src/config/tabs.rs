@@ -274,6 +274,8 @@ pub enum PlayView {
     Live,
     /// the deletion journal (the Deleted pane as an overlay)
     Deleted,
+    /// the release years to review (`musicdb years`, an overlay)
+    Years,
     /// the queue (or the plan) with the cursor on its "Up next · N" row
     UpNext,
 }
@@ -285,6 +287,7 @@ impl PlayView {
             PlayView::Browse(g) => format!("Browse › {}", g.label()),
             PlayView::Live => "the Live playlists inbox".to_owned(),
             PlayView::Deleted => "the Deleted journal".to_owned(),
+            PlayView::Years => "Years to review".to_owned(),
             PlayView::UpNext => "Up next".to_owned(),
         }
     }
@@ -297,6 +300,7 @@ impl std::fmt::Display for PlayView {
             PlayView::Browse(g) => write!(f, "Browse({g})"),
             PlayView::Live => write!(f, "Live"),
             PlayView::Deleted => write!(f, "Deleted"),
+            PlayView::Years => write!(f, "Years"),
             PlayView::UpNext => write!(f, "UpNext"),
         }
     }
