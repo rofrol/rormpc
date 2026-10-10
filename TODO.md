@@ -652,7 +652,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rename or --name, the playlist file moved, the subscription updated).
       Done in rormpc-tools af44539 (worker): `liveplaylist rename ID NAME` moves the .m3u and records the name
       (refuses a taken name, undoes the move if the save fails); new radio subscriptions default to
-      "radio.omarchy.org". Not released. The live rename of the user's subscription was blocked by the auto-mode
+      "radio.omarchy.org". Released in v0.2.46. The live rename of the user's subscription was blocked by the auto-mode
       classifier (see "Needs a decision").
 - [ ] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant,
       without apply. Work out with the models how to do it."): a worker studies how a filter change in the Music view
@@ -665,9 +665,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       dropped by generation, rounds scoped to the playing source, undo instead of Apply; one hits run 0.19-0.31 s.
       Found: Replace::run writes source.json after changing the queue (mpd-player can draw from the old source for
       ~30 s); the plan fixes the order in its step 2. Eight open choices in "Needs a decision" ("Instant filtering:").
-- [ ] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
+- [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
+      Done: rormpc-tools 165b8a1 (`liveplaylist check --kind omarchy --notify`), rormpc 40e9c85 (companions: a
+      LaunchAgent at 10:00, a missed run follows on wake; systemd OnCalendar=daily, Persistent=true; a status line)
+      (worker). Released v0.2.46 (with the rename command) and installed 2026-10-10; the first run: 0 new.
 - [ ] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
       in mpd-player as the one control interface (next through the plan, previous through its history, toggle);
       the user's Karabiner F7/F8/F9 call it with send_user_command (no shell, mpc or DNS lookup per press; the
