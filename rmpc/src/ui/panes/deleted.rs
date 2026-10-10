@@ -1,13 +1,16 @@
 //! rormpc: Deleted pane. The songs deleted with Ctrl-x (`musicdb deletions --json --all`): when, how (Trash or
 //! permanent, history kept or deleted), what happened to their ListenBrainz listens and YouTube playlist entries,
-//! and failed steps. Enter or the context menu restores a song still in the Trash (`musicdb undo --id`) or
-//! retries failed steps. Nothing here deletes: the irreversible actions stay in the Ctrl-x menu.
+//! and failed steps. Enter or the context menu retries failed steps or restores a song, from the Trash or
+//! downloaded again, with its plays, `ListenBrainz` listens and `YouTube` playlist entries ("Restore…": `musicdb
+//! restore ID --json` plans it without changing anything, the confirmation shows that plan, then
+//! `musicdb restore ID --yes`). Nothing here deletes: the irreversible actions stay in the Ctrl-x menu.
 //! A deleted song is never downloaded again (rormpc-tools `deleted.py`): the Download column says "blocked", and the
 //! menu allows a re-download (`musicdb deletions allow ID`) or blocks it again.
 //! Music shows the pane as an overlay (`gd`, or its `Deleted ! N` badge while steps failed or are unresolved);
 //! `Pane(Deleted())` stays loadable as a tab in explicit configs.
 
 use std::{
+    fmt::Write,
     process::Command,
     sync::{Arc, Mutex},
 };
@@ -33,10 +36,59 @@ use crate::{
         macros::{modal, status_error, status_info, status_warn},
         mouse_event::{MouseEvent, MouseEventKind},
     },
-    ui::{UiEvent, dirstack::DirState, modals::menu::modal::MenuModal},
+    ui::{
+        UiEvent,
+        dirstack::DirState,
+        modals::{
+            confirm_modal::{Action, ConfirmModal},
+            menu::modal::MenuModal,
+        },
+    },
 };
 
 const MUSICDB: &str = "musicdb";
+/// The `musicdb restore --json` plan this rormpc reads (rormpc-tools `restore.PLAN_VERSION`).
+const RESTORE_PLAN_VERSION: u32 = 1;
+
+/// What `musicdb restore ID --json` (a dry run) says it will do.
+#[derive(Debug, Clone, Deserialize)]
+struct RestorePlan {
+    version: u32,
+    id: String,
+    song: String,
+    can_restore: bool,
+    steps: Vec<PlanStep>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlanStep {
+    step: String,
+    /// will, done, skip, waiting, unknown, cannot, failed
+    state: String,
+    text: String,
+}
+
+/// The confirmation's text: one line per step, marked by what will happen to it.
+fn plan_message(plan: &RestorePlan) -> String {
+    let mut out = format!("Restore {}?\n", plan.song);
+    for s in &plan.steps {
+        let mark = match s.state.as_str() {
+            "will" => "+",
+            "done" => "✓",
+            "skip" => "–",
+            "waiting" => "…",
+            "cannot" | "failed" => "✗",
+            _ => "?",
+        };
+        let _ = write!(out, "\n{mark} {}: {}", s.step, s.text);
+    }
+    out.push_str(if plan.can_restore {
+        "\n\n+ will be done · … waits, retried hourly by musicdb update · ? unknown, see the text"
+    } else {
+        "\n\nIt cannot be restored as it stands (✗)."
+    });
+    out
+}
 
 #[derive(Debug, Clone, Deserialize)]
 struct Deleted {
@@ -68,6 +120,9 @@ struct Deleted {
     /// how the deletion gates the downloaders; missing from an older musicdb
     #[serde(default)]
     download: Option<Download>,
+    /// `musicdb restore`: "restored", "partial" (a step waits or failed) or none
+    #[serde(default)]
+    restore: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -88,6 +143,10 @@ impl Deleted {
         self.download.as_ref().map(|d| d.state == "blocked")
     }
 
+    fn restored(&self) -> bool {
+        self.restore.as_deref() == Some("restored")
+    }
+
     /// A step failed or is unresolved: an error, or a step whose outcome says "failed".
     fn needs_attention(&self) -> bool {
         self.error.is_some() || self.ops.values().any(|o| o.starts_with("failed"))
@@ -103,6 +162,8 @@ struct Job {
     error: Option<String>,
     /// a restore or retry finished: load again
     reload: bool,
+    /// a restore's dry-run plan, to confirm on the next render (building a modal needs the render's ctx)
+    plan: Option<RestorePlan>,
 }
 
 #[derive(Debug)]
@@ -181,12 +242,15 @@ impl DeletedPane {
     /// Take a finished load (keeping the selected row) and start the reload a restore or retry asked for.
     /// Returns whether a load runs and its error.
     pub fn refresh(&mut self, ctx: &Ctx) -> (bool, Option<String>) {
-        let (fresh, reload, loading, error) = {
+        let (fresh, reload, loading, error, plan) = {
             let mut j = self.job.lock().expect("deleted job lock");
-            (j.rows.take(), std::mem::take(&mut j.reload), j.loading, j.error.clone())
+            (j.rows.take(), std::mem::take(&mut j.reload), j.loading, j.error.clone(), j.plan.take())
         };
         if reload {
             self.load(ctx);
+        }
+        if let Some(plan) = plan {
+            self.confirm_restore(ctx, plan);
         }
         if let Some(rows) = fresh {
             let keep = self.selected().map(|r| r.id.clone());
@@ -210,15 +274,17 @@ impl DeletedPane {
     fn open_menu(&self, ctx: &Ctx) {
         let Some(r) = self.selected().cloned() else { return };
         let job = Arc::clone(&self.job);
-        let restore = r.restorable.then(|| r.id.clone());
+        let restore = (!r.restored()).then(|| r.id.clone());
+        let partial = r.restore.is_some();
         let retry = r.error.is_some();
         let gate = r.blocked().map(|blocked| (blocked, r.id.clone()));
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
                 if let Some(id) = restore {
                     let job = Arc::clone(&job);
-                    section.add_item("Restore to the library", move |ctx| {
-                        run_then_reload(ctx, job, vec!["undo".into(), "--id".into(), id], "Restored");
+                    let label = if partial { "Restore… (continue)" } else { "Restore…" };
+                    section.add_item(label, move |ctx| {
+                        plan_restore(ctx, job, id);
                         Ok(())
                     });
                 }
@@ -245,6 +311,28 @@ impl DeletedPane {
             .list_section(ctx, |section| Some(section.item("Cancel", |_| Ok(()))))
             .build();
         modal!(ctx, menu);
+    }
+
+    /// The dry run's plan as a confirmation: Restore runs `musicdb restore ID --yes`.
+    fn confirm_restore(&self, ctx: &Ctx, plan: RestorePlan) {
+        let message = vec![plan_message(&plan)];
+        let buttons: Vec<(&str, Box<dyn FnOnce(&Ctx) -> Result<()> + Send + Sync>)> = if plan.can_restore {
+            let (job, id, song) = (Arc::clone(&self.job), plan.id, plan.song);
+            vec![
+                ("Cancel", Box::new(|_: &Ctx| Ok(()))),
+                (
+                    "Restore",
+                    Box::new(move |ctx: &Ctx| {
+                        status_info!("Restoring {song}…");
+                        run_then_reload(ctx, job, vec!["restore".into(), id, "--yes".into()], "Restored");
+                        Ok(())
+                    }),
+                ),
+            ]
+        } else {
+            vec![("Close", Box::new(|_: &Ctx| Ok(())))]
+        };
+        modal!(ctx, ConfirmModal::builder().ctx(ctx).message(message).action(Action::CustomButtons { buttons }).build());
     }
 
     fn details(&self, ctx: &Ctx) -> Vec<Line<'static>> {
@@ -302,16 +390,37 @@ impl DeletedPane {
             lines.push(Line::from(Span::styled(format!("Failed: {err}"), Style::default().add_modifier(Modifier::BOLD))));
         }
         lines.push(Line::default());
-        let hint = match (r.restorable, r.error.is_some(), r.download.is_some()) {
-            (true, true, _) => "Enter: restore or retry",
-            (true, false, _) => "Enter: restore to the library",
-            (false, true, _) => "Enter: retry failed steps",
-            (false, false, true) => "Enter: allow or block downloading it again",
-            (false, false, false) => "",
+        let hint = match (r.restored(), r.error.is_some()) {
+            (false, true) => "Enter: restore or retry failed steps",
+            (false, false) => "Enter: restore (shows the plan first)",
+            (true, _) if r.download.is_some() => "Enter: allow or block downloading it again",
+            (true, _) => "",
         };
         lines.push(Line::from(Span::styled(hint, dim)));
         lines
     }
+}
+
+/// The restore's dry run (`musicdb restore ID --json`, changes nothing) in the background; its plan opens the
+/// confirmation on the next render.
+fn plan_restore(ctx: &Ctx, job: Arc<Mutex<Job>>, id: String) {
+    status_info!("Planning the restore…");
+    let sender = ctx.app_event_sender.clone();
+    std::thread::spawn(move || {
+        let plan = run(&["restore", &id, "--json"]).and_then(|out| {
+            let first = out.lines().next().unwrap_or_default();
+            serde_json::from_str::<RestorePlan>(first).map_err(|e| format!("unreadable restore plan: {e}"))
+        });
+        match plan {
+            Ok(plan) if plan.version != RESTORE_PLAN_VERSION => status_error!(
+                "musicdb restore plan version {} (this rormpc reads {RESTORE_PLAN_VERSION}): update rormpc and rormpc-tools together",
+                plan.version
+            ),
+            Ok(plan) => job.lock().expect("deleted job lock").plan = Some(plan),
+            Err(err) => status_error!("musicdb: {err}"),
+        }
+        let _ = sender.send(AppEvent::RequestRender);
+    });
 }
 
 /// Run `musicdb` for a restore or a retry in the background, report its last line, then reload the list.
@@ -333,6 +442,8 @@ fn run_then_reload(ctx: &Ctx, job: Arc<Mutex<Job>>, args: Vec<String>, ok: &'sta
 
 fn file_state(r: &Deleted) -> &'static str {
     match (r.mode.as_str(), r.restorable) {
+        _ if r.restored() => "restored",
+        _ if r.restore.is_some() => "restored, a step waits or failed (retried hourly)",
         ("permanent", _) => "deleted permanently",
         (_, true) => "in the Trash (restorable)",
         _ => "gone from the Trash",
@@ -351,6 +462,7 @@ impl Pane for DeletedPane {
         let dim = Style::default().add_modifier(Modifier::DIM);
         let rows = self.rows.iter().map(|r| {
             let how = match (r.mode.as_str(), r.restorable) {
+                _ if r.restore.is_some() => "restored",
                 ("permanent", _) => "deleted",
                 (_, true) => "Trash",
                 _ => "gone",
@@ -374,7 +486,7 @@ impl Pane for DeletedPane {
             Row::new(["Deleted", "File", "History", "Download", "", "Song"]).style(ctx.config.theme.preview_label_style);
         let table = Table::new(rows, [
             Constraint::Length(16),
-            Constraint::Length(7),
+            Constraint::Length(8),
             Constraint::Length(7),
             Constraint::Length(8),
             Constraint::Length(1),
@@ -463,7 +575,38 @@ impl Pane for DeletedPane {
 
 #[cfg(test)]
 mod tests {
-    use super::Deleted;
+    use super::{Deleted, RestorePlan, plan_message};
+
+    #[test]
+    fn the_restore_plan_becomes_the_confirmation() {
+        let json = r#"{"version": 1, "id": "i", "song": "Bon Jovi - Livin' on a Prayer", "file": "a.mp3",
+            "restored": false, "can_restore": true, "steps": [
+            {"step": "file", "state": "will", "text": "download https://youtu.be/x again"},
+            {"step": "listenbrainz", "state": "waiting", "text": "listen of 2026-10-06 16:35:51: still listed"},
+            {"step": "journal", "state": "done", "text": "the deletion is finished"}]}"#;
+        let plan: RestorePlan = serde_json::from_str(json).expect("a restore plan");
+        let text = plan_message(&plan);
+        assert!(text.starts_with("Restore Bon Jovi - Livin' on a Prayer?\n"));
+        assert!(text.contains("\n+ file: download https://youtu.be/x again"));
+        assert!(text.contains("\n… listenbrainz: listen of 2026-10-06 16:35:51: still listed"));
+        assert!(text.contains("\n✓ journal: "));
+        let blocked = RestorePlan { can_restore: false, ..plan };
+        assert!(plan_message(&blocked).ends_with("It cannot be restored as it stands (✗)."));
+    }
+
+    #[test]
+    fn a_restored_row_offers_no_second_restore() {
+        let row = |restore: &str| {
+            serde_json::from_str::<Deleted>(&format!(
+                r#"{{"id": "i", "file": "a.mp3", "mode": "permanent", "history": "delete",
+                "deleted_at": "2026-10-10T16:21:51", "restore": {restore}}}"#
+            ))
+            .expect("a journal row")
+        };
+        assert!(row(r#""restored""#).restored());
+        assert!(!row(r#""partial""#).restored() && row(r#""partial""#).restore.is_some());
+        assert!(!row("null").restored() && row("null").restore.is_none());
+    }
 
     #[test]
     fn journal_row_with_and_without_the_download_gate() {
