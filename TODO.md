@@ -295,9 +295,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       waits for both daemons' MPD channel subscriptions (an idle event, at most 20 events of 60 s), checks each
       MainPID runs the installed program and runs `musicdb --version`. Also found: `is-active` with several units
       exited 0 when any one was active. Green on GitHub: run 38012260320.
-- [ ] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
+- [x] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
       fake API URL is used for ListenBrainz (decided 2026-10-09); adjust the smoke test's musicdb step if its
       expected exit changes.
+      Done in rormpc-tools 380f87f (worker; pytest 332 offline): every token call (validate, lookup, listens import,
+      feedback, submit, playlists, delete) goes to the scrobbler config's api_url, built like listenbrainz-mpd builds
+      it; anonymous calls in hits.py stay on the public ListenBrainz; tests no longer read the real macOS config
+      (~/Library/Application Support/listenbrainz-mpd). The smoke test's musicdb step now fails on "connection
+      refused" from its fake api_url instead of "Token invalid" (its comment is outdated). Not released.
 - [ ] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
       `status` and dependency hint (decided 2026-10-09).
 
