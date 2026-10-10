@@ -1585,5 +1585,5 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: Only if the end-to-end time after the cache is over 0.15 s | Build `hits serve` in step 6 anyway | Never
       Checked: plans/instant-filtering.md (2026-10-10).
 - [ ] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
-      Options: cancel the timer and stay paused | leave it, the timer resumes at its deadline (today) | the same as `pause cancel` in rormpc
+      Options: cancel the timer and stay paused | leave it, the timer resumes at its deadline (today)
       Checked: rormpc-tools f4120da player/control.py `_pause` (2026-10-11).
