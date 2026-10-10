@@ -326,6 +326,31 @@ fn mouse_targets_projected_song_ids_after_recalculation(mut ctx: Ctx) {
 }
 
 #[rstest]
+fn hovering_the_like_cell_names_the_painted_song_until_the_pointer_leaves_or_scrolls(mut ctx: Ctx) {
+    live(&mut ctx);
+    publish(shuffle(&[4, 2, 3, 1]));
+    let mut view = PlanView::new();
+    view.area = Rect::new(0, 0, 80, 20);
+    view.like_cell = Some(Rect::new(10, 0, 1, 20));
+    view.refresh(&ctx, false);
+    view.remember_rendered(&ctx);
+    let id_at = |y: usize| view.rendered_rows[y].as_ref().map(|(id, _)| *id);
+    let (first, second) = (id_at(0), id_at(1));
+    let move_to = |view: &mut PlanView, x, y| {
+        view.mouse(MouseEvent { x, y, kind: MouseEventKind::Moved }, &ctx).unwrap();
+    };
+    move_to(&mut view, 10, 0);
+    assert_eq!(view.hover_like, first);
+    move_to(&mut view, 10, 1);
+    assert_eq!(view.hover_like, second);
+    move_to(&mut view, 11, 1);
+    assert_eq!(view.hover_like, None, "next to the cell: no hover");
+    move_to(&mut view, 10, 1);
+    view.mouse(MouseEvent { x: 10, y: 1, kind: MouseEventKind::ScrollDown }, &ctx).unwrap();
+    assert_eq!(view.hover_like, None, "a scroll puts another song under the pointer");
+}
+
+#[rstest]
 fn every_header_sort_is_disabled_in_plan_mode(mut ctx: Ctx) {
     live(&mut ctx);
     ctx.queue_plan.set(true);

@@ -2328,11 +2328,14 @@ impl HitsPane {
             let like = r.file.as_deref().and_then(|f| ctx.song_stickers(f)).and_then(|st| st.get("like").cloned());
             let like_cell = match (owned, like.as_deref()) {
                 (false, _) => Cell::from(Span::styled("·", dim)),
-                (true, Some("2")) => Cell::from("♥"),
-                (true, Some("0")) => Cell::from("✗"),
-                // the liked glyph, dimmed: same shape, so it reads "click to like" (♡ is narrower in some fonts)
-                (true, _) if hover == Some(i) => Cell::from(Span::styled("♥", Style::default().add_modifier(Modifier::DIM))),
-                (true, _) => Cell::from(""),
+                (true, like) => {
+                    let glyph = Line::from(match like {
+                        Some("2") => "♥",
+                        Some("0") => "✗",
+                        _ => "",
+                    });
+                    Cell::from(if hover == Some(i) { rormpc_actions::hovered_like(glyph) } else { glyph })
+                }
             };
             let state = match r.file.as_deref() {
                 None => String::new(),
