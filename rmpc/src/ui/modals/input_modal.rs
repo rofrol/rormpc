@@ -120,6 +120,10 @@ impl<'a, C: FnOnce(&Ctx, &str) -> Result<()> + 'a> Modal for InputModal<'a, C> {
     }
 
     fn render(&mut self, frame: &mut Frame, ctx: &mut Ctx) -> Result<()> {
+        // rormpc: the initial value was stored but never shown (renames started from an empty name)
+        if !self.initial_value.is_empty() {
+            ctx.input.create_buffer(self.input_buffer_id, Some(&std::mem::take(&mut self.initial_value)));
+        }
         let block = Block::default()
             .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
             .border_set(border::ROUNDED)

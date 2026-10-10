@@ -122,6 +122,11 @@ struct HitsArgs {
     rank: Option<String>,
     #[serde(default)]
     years_of: Option<String>,
+    /// the smart list open in Play (`--open-list`): its own exceptions applied; absent before smart lists
+    #[serde(default)]
+    open_list: Option<String>,
+    #[serde(default)]
+    open_list_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -860,6 +865,50 @@ impl HitsPane {
     /// The rule formula of the filters, for Play's collapsed source line.
     pub(crate) fn formula(&self) -> Option<String> {
         self.filters.as_ref().map(Filters::formula)
+    }
+
+    /// The smart list open in the filters (id, name).
+    pub(crate) fn open_list(&self) -> Option<(String, String)> {
+        self.filters.as_ref().and_then(|f| f.open_list.clone())
+    }
+
+    /// Play: load a smart list's or a previous source's rules (a result file's `args`) into the filters; the
+    /// next frame runs `hits` for them as a preview. Nothing plays.
+    pub(crate) fn load_filters(&mut self, args: &serde_json::Value) -> Result<(), String> {
+        let parsed = serde_json::from_value::<HitsArgs>(args.clone()).map_err(|e| e.to_string())?;
+        self.filters = Some(Filters::from_args(&parsed));
+        self.requested = None;
+        let rows = self.filter_rows();
+        self.filter_sel = snap(&rows, self.filter_sel.min(rows.len().saturating_sub(1)), true);
+        self.scroll_filters(0);
+        Ok(())
+    }
+
+    /// Play: leave the open smart list, keeping the filters (its exceptions stop applying).
+    pub(crate) fn close_list(&mut self) {
+        if let Some(f) = self.filters.as_mut() {
+            f.open_list = None;
+        }
+    }
+
+    /// The rules on screen as `hits` options (for `hits lists create|update`).
+    pub(crate) fn rule_args(&self) -> Vec<String> {
+        self.filters.as_ref().map(Filters::rule_args).unwrap_or_default()
+    }
+
+    /// The rules on screen in a few lines, for the Save modal.
+    pub(crate) fn rule_lines(&self) -> Vec<String> {
+        let Some(f) = &self.filters else { return Vec::new() };
+        let years = match f.period() {
+            Some(p) => format!("{} {p}", f.effective_years_of().arg()),
+            None => "every year".to_owned(),
+        };
+        let top = f.top().map_or_else(String::new, |t| format!(" · Top {t}%"));
+        vec![
+            format!("Rules     {}", f.formula()),
+            format!("Rank by   {}{top}", f.rank.label()),
+            format!("Years of  {years}"),
+        ]
     }
 
     /// The result file's `args`, when the result on screen was made by the filters on screen.
@@ -2614,13 +2663,15 @@ struct Filters {
     artists: Vec<(String, i8)>,
     owned: bool,
     show_excluded: bool,
+    /// the smart list open in Play (id, name): `hits --open-list` applies its exceptions; a part of the rules
+    open_list: Option<(String, String)>,
 }
 
 impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { sets: [1, 0, 0, 0], rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false }
+        Self { sets: [1, 0, 0, 0], rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false, open_list: None }
     }
 }
 
@@ -2780,6 +2831,19 @@ impl Filters {
     }
 
     fn args(&self, json: &str) -> Vec<String> {
+        let mut args = self.rule_args();
+        if self.show_excluded {
+            args.push("--show-excluded".to_owned());
+        }
+        if let Some((id, _)) = &self.open_list {
+            args.extend(["--open-list".to_owned(), id.clone()]);
+        }
+        args.extend(["--json".to_owned(), json.to_owned()]);
+        args
+    }
+
+    /// The rules alone as `hits` options: what `hits lists create|update` stores.
+    fn rule_args(&self) -> Vec<String> {
         let mut args: Vec<String> = SETS
             .iter()
             .zip(self.sets)
@@ -2809,10 +2873,6 @@ impl Filters {
         if self.owned {
             args.push("--owned".to_owned());
         }
-        if self.show_excluded {
-            args.push("--show-excluded".to_owned());
-        }
-        args.extend(["--json".to_owned(), json.to_owned()]);
         args
     }
 
@@ -2835,7 +2895,7 @@ impl Filters {
             .filter(|(_, sign)| *sign != 0)
             .map(|((key, _, _), sign)| format!("{}{key}", if sign > 0 { '+' } else { '-' }))
             .collect();
-        serde_json::json!({
+        let mut key = serde_json::json!({
             "v": 1,
             "sets": sets,
             "rank": self.rank.arg(),
@@ -2845,8 +2905,12 @@ impl Filters {
             "genres": signed(&self.genres),
             "artists": signed(&self.artists),
             "owned": self.owned,
-        })
-        .to_string()
+        });
+        // the open smart list's exceptions change the result; without one the key is as before smart lists
+        if let Some((id, _)) = &self.open_list {
+            key["list"] = serde_json::Value::from(id.as_str());
+        }
+        key.to_string()
     }
 
     /// Start from what produced the current file, so the column matches the table.
@@ -2895,6 +2959,10 @@ impl Filters {
         }
         f.owned = args.owned;
         f.show_excluded = args.show_excluded || args.show_hidden;
+        f.open_list = args.open_list.clone().map(|id| {
+            let name = args.open_list_name.clone().unwrap_or_else(|| id.chars().take(8).collect());
+            (id, name)
+        });
         // files before the set chips name an old source, mapped as `hits --source` maps it
         let (sets, rank, years_of) = rormpc_hits_rules::from_source(args.source.as_deref(), args.sort.as_deref());
         f.sets = args.sets.as_deref().map_or(sets, rormpc_hits_rules::parse_sets);
@@ -2905,7 +2973,8 @@ impl Filters {
         if args.period.is_none() {
             f.decades = [false; 8]; // all years
         }
-        if f.rank == RankBy::None || args.top.as_deref() == Some("1-100") {
+        // files with set chips write --top whenever a box is ticked: none there means none ticked
+        if f.rank == RankBy::None || args.top.as_deref() == Some("1-100") || (args.top.is_none() && args.sets.is_some()) {
             f.tops = [false; 3];
         }
         f
@@ -3276,6 +3345,43 @@ mod tests {
         assert_eq!(f.line(FilterRow::YearsOf), "Years of: ‹release›");
         let back = Filters::from_args(&written_args(&f.args("x.json")));
         assert_eq!(back.years_of, Some(YearsOf::Release));
+    }
+
+    #[test]
+    fn an_open_smart_list_is_part_of_the_rules_and_loads_back() {
+        // a smart list's `args` (hits lists --json): no Top % is "1-100"
+        let list = serde_json::json!({"period": "1985-1992", "top": "1-100", "genre": "+rock", "artist": "",
+            "owned": false, "rank": "billboard", "years_of": "chart", "sets": ["+billboard"],
+            "show_excluded": false, "source": null, "open_list": "L1", "open_list_name": "80s party"});
+        let mut play = HitsPane::for_play("/nonexistent/preview.json".into(), vec!["hits".into()]);
+        play.load_filters(&list).expect("a list's args load");
+        assert_eq!(play.open_list(), Some(("L1".to_owned(), "80s party".to_owned())));
+        let f = play.filters.clone().expect("filters");
+        assert_eq!(f.tops, [false; 3]);
+        let args = f.args("x.json");
+        let at = args.iter().position(|a| a == "--open-list").expect("--open-list");
+        assert_eq!(args[at + 1], "L1");
+        assert!(!f.rule_args().iter().any(|a| a == "--open-list" || a == "--json"));
+        // the list's exceptions change the result: its id is in the hash; without a list the key is as before
+        let with = play.rules_hash();
+        play.close_list();
+        assert!(play.open_list().is_none());
+        assert_ne!(play.rules_hash(), with);
+        assert!(!f.rules_key().contains("\"list\"") || f.open_list.is_some());
+        assert!(!Filters::default().rules_key().contains("\"list\""));
+        assert_eq!(HitsPane::rules_hash_of(Some(&list)), with.expect("hash"));
+        assert_eq!(play.rule_lines()[0], "Rules     Billboard ∩ 1985-1992 ∩ rock");
+    }
+
+    #[test]
+    fn a_result_with_set_chips_and_no_top_loads_with_no_box_ticked() {
+        let raw = serde_json::json!({"period": null, "top": null, "sets": ["-likes"], "rank": "plays", "years_of": "release"});
+        let f = Filters::from_args(&serde_json::from_value::<HitsArgs>(raw).expect("args"));
+        assert_eq!(f.tops, [false; 3]);
+        assert_eq!(f.top(), None);
+        // files before the set chips keep the pane's default
+        let old = Filters::from_args(&serde_json::from_value::<HitsArgs>(serde_json::json!({"period": "1980s"})).expect("args"));
+        assert_eq!(old.tops, [true, false, false]);
     }
 
     #[test]

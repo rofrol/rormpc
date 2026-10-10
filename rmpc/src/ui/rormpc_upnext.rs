@@ -410,6 +410,10 @@ impl Replace {
             }
         }
         let len = client.playlist_info()?.map_or(0, |q| q.len());
+        // Play's Apply: Previous sources remembers the rules, a smart list's playlist is exported
+        if let (Some(r), Some(h)) = (&rules, &rules_hash) {
+            crate::ui::rormpc_smartlists::after_apply(&name, r, h);
+        }
         let st = State { source: Some(Source { kind, name, len, files, rules, rules_hash }) };
         if let Ok(mut g) = state().lock() {
             *g = st.clone();
@@ -429,6 +433,11 @@ impl Replace {
         );
         Ok(())
     }
+}
+
+/// A stored playlist played as the source (Play's list picker), after the same confirmation as "Sources…".
+pub fn play_playlist(ctx: &Ctx, name: String) {
+    confirm_replace(ctx, "playlist".into(), name);
 }
 
 fn confirm_replace(ctx: &Ctx, kind: String, name: String) {

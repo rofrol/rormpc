@@ -88,6 +88,7 @@ pub mod rormpc_exceptions;
 pub mod rormpc_hits_rules;
 pub mod rormpc_play;
 pub mod rormpc_playlists;
+pub mod rormpc_smartlists;
 pub mod rormpc_tags;
 pub mod rormpc_upnext;
 pub mod rormpc_versions;

@@ -112,6 +112,38 @@ config; Up next stays its own tab. A header line always says what plays and how:
   rules being played; queue and plan rows (in the Queue pane too) show `✚` / `⊘` for a file an exception names
   (`hits exceptions --json`, read in the background and again after `+` / `-` or the Exceptions list).
 
+### Smart lists
+
+A smart list is Play's filters saved under a name (plans/combined-view.md, phase 4), kept by `hits lists` in the
+data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `hits` arguments).
+
+- `S` (QueueActions `SaveSmartList`) saves the filters on screen: a name prompt with the rules and the preview's
+  counts shown. A name that exists asks "Update it" (with the filters on screen) or "Another name". The saved list
+  becomes the open one.
+- `L` (`SmartLists`) opens the picker: Smart lists, Previous sources, then MPD playlists and Live playlists in their
+  own sections (the "Smart …" exports are left out of the MPD section). Enter loads a list's rules into the filter
+  column as a preview: nothing plays until Apply. On a list row `a` applies it (the preview is made, then played as
+  Apply plays it), `r` renames, `u` updates it with the filters on screen, `c` duplicates it (with its exceptions),
+  `d` deletes it after a confirmation (its exceptions and its "Smart NAME" playlist go with it); Left/Right and a
+  click pick the same buttons. The letters are matched by what they are bound to (Add, Rate, Update,
+  ToggleConsume/ConsumeOff, Delete), since a modal sees actions, not keys. Enter on an MPD or Live playlist plays it
+  as the source, after the same confirmation as "Sources…". "× Close the smart list" keeps the filters and leaves
+  the list.
+- The open smart list is part of the filters: Play runs `hits --open-list ID`, so the list's own exceptions
+  (scope `list:ID`) apply, and its id is part of the rules hash. The header names it (`Smart list: 80s party`,
+  "(changed)" once the filters differ from its rules); the collapsed source line says `smart list 80s party · …`,
+  and a list applied as saved plays as "Hits · smart list 80s party". A new pin or exclusion defaults to the open
+  list ("in the smart list 80s party only (while it is open)"), else library.
+- Export: Apply of a list writes it as the MPD playlist "Smart NAME" (`hits lists export ID` in the background) and
+  `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The export is a
+  snapshot for phones, never read back as rules, and `hits`' "my playlists" set leaves "Smart " playlists out.
+- Previous sources: each Apply in Play is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json` (the last 10
+  rule sets, the same rules once; local state, not the data repo). Enter loads one as a preview, `a` applies it, so
+  "weighted off, now give me the old queue back" is one explicit Apply.
+- A list whose rules or events this version cannot read shows `! NAME · made by a newer rormpc-tools, update it`
+  and is never loaded or exported (its last export stays).
+- `SelectAlbum`, `L` before, is `M` in the default keys and the example config.
+
 ## Hits pane
 
 Ranked chart hits produced by the `hits` CLI ([rormpc-tools](https://github.com/rofrol/rormpc-tools)), e.g.
@@ -212,7 +244,8 @@ Exceptions (pins and exclusions with a scope, `hits except`, rormpc-tools): `+` 
 song ✚, `-` excludes it ⊘ (QueueActions `PinSong` / `ExcludeSong`; the row menus have "Pin in results…" and
 "Exclude from results…"). A small menu asks the scope, the default first: library (every result) or one of the
 `+` sets of the filters (the Queue offers the `+` sets of the Hits result file), which applies only while that set
-is `+`; the default becomes the open smart list once smart lists exist. A pin puts the song in whatever the filters
+is `+`, or the smart list open in Play, which applies only while it is open and is the default then (see Smart
+lists). A pin puts the song in whatever the filters
 say (a `-` set, genre or artist included); it needs an owned file, has no rank ("—") and sits after the ranked rows,
 outside the ranking and the Top % cut. An exclusion takes the song out; any applicable exclusion beats any pin.
 `hits hide` is the same as an exclusion scoped to Billboard (keyed by the chart song, so it covers missing rows) and

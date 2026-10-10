@@ -1267,6 +1267,9 @@ impl Pane for QueuePane {
                 QueueActions::TogglePlanView => {} // handled before either Queue view claims input
                 QueueActions::Find => self.start_find(ctx),
                 QueueActions::FindVersions => self.find_versions(ctx),
+                QueueActions::SaveSmartList | QueueActions::SmartLists => {
+                    status_info!("Smart lists live in Play: S saves its filters, L opens the lists");
+                }
                 // rormpc: an exception to the Hits rules; the queue itself does not change
                 QueueActions::PinSong | QueueActions::ExcludeSong => {
                     let kind = if matches!(action, QueueActions::PinSong) {

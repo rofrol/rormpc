@@ -7,7 +7,10 @@
 //! - A filter change prepares a preview (`hits` into its own file, MPD untouched): the table shows it under a
 //!   banner with its counts; `a` (or Apply) plays it, Esc drops it and shows the playing source again. See
 //!   `rormpc_play` for Apply's confirmation and race rules.
-//! - The header line always says what plays and how: `▶ Playing from: … · weighted · round 12/84`.
+//! - The header line always says what plays and how: `▶ Playing from: … · weighted · round 12/84`, and the open
+//!   smart list (`Smart list: 80s party`, "changed" once the filters differ from its rules).
+//! - Smart lists (`rormpc_smartlists`): `S` saves the filters, `L` picks a list, a previous source or a playlist;
+//!   a picked list loads as a preview, `a` plays it.
 //!
 //! It is composed, not copied: the filter column and the preview table are a `HitsPane` in Play mode, the table
 //! is a `QueuePane` whose view follows the weighted shuffle. `Body` leaves room for the Browse and Live bodies of
@@ -42,6 +45,7 @@ use crate::{
         rormpc_exceptions::{self, Kind},
         rormpc_play,
         rormpc_player,
+        rormpc_smartlists::{self, Pick},
         rormpc_upnext::{self, HitsSource},
     },
 };
@@ -69,6 +73,10 @@ pub struct PlayPane {
     /// source.json's rules hash when `baseline` was taken (an Apply anywhere moves it); `synced` once taken
     source_hash: Option<String>,
     synced: bool,
+    /// what the list picker and the Save modal hand back (`rormpc_smartlists::Pick`)
+    inbox: rormpc_smartlists::Inbox,
+    /// a picked list's or previous source's Apply: play its preview once it is in
+    apply_when_ready: bool,
     /// areas of the last render, for the mouse
     collapsed_area: Rect,
     apply_area: Rect,
@@ -85,12 +93,87 @@ impl PlayPane {
             baseline_hash: String::new(),
             source_hash: None,
             synced: false,
+            inbox: rormpc_smartlists::Inbox::default(),
+            apply_when_ready: false,
             collapsed_area: Rect::default(),
             apply_area: Rect::default(),
             queue_area: Rect::default(),
         };
         s.sync(ctx);
+        rormpc_smartlists::load_in_background(ctx.app_event_sender.clone());
         s
+    }
+
+    /// The open smart list (id, name) with its current name, and whether the filters differ from its rules.
+    fn open_list(&self) -> Option<(String, String, bool)> {
+        let (id, name) = self.hits.open_list()?;
+        let list = rormpc_smartlists::cached(&id);
+        let name = list.as_ref().map_or(name, |l| l.name.clone());
+        let changed = list
+            .and_then(|l| l.args)
+            .is_some_and(|args| Some(HitsPane::rules_hash_of(Some(&args))) != self.hits.rules_hash());
+        Some((id, name, changed))
+    }
+
+    /// Take what the list picker or the Save modal left: load rules as a preview (Apply waits for it), or leave
+    /// the open list.
+    fn take_pick(&mut self) {
+        let pick = self.inbox.lock().ok().and_then(|mut p| p.take());
+        let (args, apply) = match pick {
+            Some(Pick::Load(args)) => (args, false),
+            Some(Pick::Apply(args)) => (args, true),
+            Some(Pick::CloseList) => {
+                self.hits.close_list();
+                (serde_json::Value::Null, false)
+            }
+            None => (serde_json::Value::Null, false),
+        };
+        if !args.is_null() {
+            if let Err(err) = self.hits.load_filters(&args) {
+                status_error!("These rules cannot be loaded: {err}");
+            } else if apply {
+                self.apply_when_ready = true;
+            } else {
+                self.apply_when_ready = false;
+                if !self.preview_active() {
+                    status_info!("The queue already plays these rules");
+                }
+            }
+        }
+        rormpc_smartlists::set_open(self.open_list().map(|(id, name, _)| (id, name)));
+    }
+
+    /// A picked Apply waits for its preview: play it once `hits` wrote it (its run ends with a render).
+    fn apply_if_ready(&mut self, ctx: &Ctx) {
+        if self.apply_when_ready {
+            let info = self.hits.preview_info();
+            if info.error.is_some() || info.ready {
+                self.apply_when_ready = false;
+                self.apply(ctx);
+            }
+        }
+    }
+
+    /// `S`: save the filters on screen as a smart list.
+    fn save_list(&self, ctx: &Ctx) {
+        let info = self.hits.preview_info();
+        let counts = (info.ready && !info.running).then(|| {
+            let missing = info.matched.saturating_sub(info.files.len());
+            format!("{} of {} ({missing} missing stay in the rules)", info.files.len(), info.matched)
+        });
+        let req = rormpc_smartlists::SaveRequest {
+            rule_args: self.hits.rule_args(),
+            lines: self.hits.rule_lines(),
+            counts,
+            open: self.open_list().map(|(id, name, _)| (id, name)),
+        };
+        rormpc_smartlists::open_save(ctx, std::sync::Arc::clone(&self.inbox), req);
+    }
+
+    /// `L`: the list picker.
+    fn pick_list(&self, ctx: &Ctx) {
+        let open = self.open_list().map(|(id, name, _)| (id, name));
+        rormpc_smartlists::open_picker(ctx, &self.inbox, self.hits.rule_args(), open.as_ref());
     }
 
     /// Follow what changed outside: the weighted shuffle switches the table's view, and a new source (Apply
@@ -155,7 +238,12 @@ impl PlayPane {
         let (Some(rules), Some(rules_hash)) = (self.hits.applied_rules(), self.hits.rules_hash()) else {
             return status_info!("The preview is still running: Apply when its counts are in the banner");
         };
-        rormpc_play::apply(ctx, HitsSource { name: info.label, files: info.files, rules, rules_hash });
+        // a smart list played as saved is named after it ("Playing from: Hits · smart list 80s party")
+        let name = match self.open_list() {
+            Some((_, name, false)) => format!("smart list {name}"),
+            _ => info.label,
+        };
+        rormpc_play::apply(ctx, HitsSource { name, files: info.files, rules, rules_hash });
     }
 
     /// Esc with nothing left to close inside the table: drop the preview, else close the column (normal mode).
@@ -185,19 +273,32 @@ impl PlayPane {
         } else {
             "in queue order · w: weighted".to_owned()
         };
-        format!("▶ {source} · {mode}")
+        // the open list, unless the source line already names it as played
+        let list = match self.open_list() {
+            Some((_, name, changed)) if changed || self.preview_active() => {
+                format!(" · Smart list: {name}{}", if changed { " (changed)" } else { "" })
+            }
+            _ => String::new(),
+        };
+        format!("▶ {source} · {mode}{list}")
     }
 
     /// The collapsed filter column: the rules of the source in one line.
     fn collapsed_line(&self) -> String {
         let rules = match rormpc_upnext::source_info().map(|(kind, name, _)| (kind, name)) {
-            Some((kind, _)) if kind == "hits" && self.baseline.is_some() => self.hits.formula().unwrap_or_default(),
+            Some((kind, _)) if kind == "hits" && self.baseline.is_some() => {
+                let formula = self.hits.formula().unwrap_or_default();
+                match self.open_list() {
+                    Some((_, name, _)) => format!("smart list {name} · {formula}"),
+                    None => formula,
+                }
+            }
             Some((kind, name)) if kind == "hits" => format!("Hits · {name}"),
             Some((kind, _)) if kind == "library" => "whole library".to_owned(),
             Some((_, name)) => name,
             None => "none yet".to_owned(),
         };
-        format!(" Source: {rules}  [h: filters]")
+        format!(" Source: {rules}  [h: filters · L: lists · S: save]")
     }
 
     fn render_queue_body(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
@@ -246,10 +347,13 @@ impl PlayPane {
 
 impl Pane for PlayPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
+        // a pick first: `prepare` then runs `hits` for the rules it loaded in this same frame
+        self.take_pick();
         self.hits.prepare(ctx);
         if self.hits.take_commit() {
             self.apply(ctx);
         }
+        self.apply_if_ready(ctx);
         self.sync(ctx);
         let [header, body] = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
         let line = Line::from(Span::styled(self.header_line(ctx), ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD)));
@@ -299,6 +403,18 @@ impl Pane for PlayPane {
         if matches!(common, Some(CommonAction::AddOptions { .. })) && event.claim_common().is_some() {
             self.apply(ctx);
             return Ok(ctx.render()?);
+        }
+        // S / L: smart lists, from the column, the preview or the queue alike (not while typing a search)
+        if matches!(queue_action, Some(QueueActions::SaveSmartList | QueueActions::SmartLists))
+            && !self.hits.typing()
+            && event.claim_queue().is_some()
+        {
+            if matches!(queue_action, Some(QueueActions::SaveSmartList)) {
+                self.save_list(ctx);
+            } else {
+                self.pick_list(ctx);
+            }
+            return Ok(());
         }
         if self.keys_to_hits() {
             self.hits.handle_action(event, ctx)?;
