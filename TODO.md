@@ -558,13 +558,21 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       affect weighted playback" dismissed (Apply replaces the queue in both modes). Decided by the user 2026-10-10:
       always open, in both modes (`h` keeps moving focus between the column and the table; Browse B as now).
       Done in d802514 (worker; read-only check on the real MPD), rormpc 0bf908e installed.
-- [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
+- [x] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
       offers (a playlist, a track history API, a stream with metadata), consults the models, and builds it as a
       Live playlists source if it fits (the same review, accept/reject, deleted-song blocks); open choices go to
       "Needs a decision".
       Moved up 2026-10-10: "radio next" (right after the item in progress).
+      Done in rormpc-tools 0bbe724, rormpc 2552f0f (worker, consulted Sol + MiMo; pytest 383, cargo test 1049): the site is a
+      static playlist.json (no stream); `liveplaylist add https://radio.omarchy.org/` makes the subscription
+      omarchy-radio (33 items today, all pending review), MPD playlist "Omarchy Radio"; check is one conditional
+      GET (ETag); malformed or duplicate entries are skipped and the list counts as partial (nothing marked removed
+      upstream); deleted songs blocked by path before download and by audio md5 after; an item whose audio is
+      already in the library refers to it; `hits --set +live:omarchy-radio` works. Also fixed: `add` did not mark
+      deleted songs at the first review (YouTube too). Live overlay shows the artist and a "Source" link. Tools and
+      rormpc must be released together. Dismissed: auto-accept (MiMo), blocking by artist+title alone.
 - [ ] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
       2000. Investigate with the models. A repair plan for the whole library?"): a worker finds where 2000 comes from
       for that song (file tags: date vs originaldate, a compilation's date, MusicBrainz release vs recording first
@@ -1399,3 +1407,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, from the journal (as built; the same video was recognised before) | keep it in staging for a decision
       Checked: the restore worker 2026-10-10.
       Decided by the user 2026-10-10: yes, from the journal (as built).
+- [ ] Radio: Should Omarchy Radio be checked on a schedule?
+      Options: manual check only, as today (Sol) | a daily conditional GET that only adds pending items and notifies (MiMo)
+      Checked: the radio worker 2026-10-10: the site changes rarely (last push 2026-10-07); an unchanged check costs one 304.
+- [ ] Radio: Which MPD playlist name for the station?
+      Options: "Omarchy Radio" (from playlist.json, the default) | "Live Radio Omarchy"
+      Checked: the radio worker 2026-10-10: YouTube subscriptions are named after the playlist title; --name overrides it.
+- [ ] Radio: Fetch a radio track's lyrics (/tracks/lyrics/<file>.lrc) into lyrics_dir?
+      Options: later, once a track has lyrics | now, one extra request per track
+      Checked: the radio worker 2026-10-10: no track in today's playlist.json has a lyrics field.
+- [ ] Radio: Detect an MP3 replaced under the same file name on the station?
+      Options: no, accept the limitation (rare) | a HEAD per accepted track on check, comparing its ETag
+      Checked: the radio worker 2026-10-10: the playlist.json ETag does not change when only an MP3 is replaced.
