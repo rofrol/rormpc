@@ -446,11 +446,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (decided 2026-10-10; the coordinator does it).
       Done 2026-10-10: v0.2.41 tagged and pushed (tests green), installer 1372bce, companions and rormpc 1372bce
       installed and pushed; the config loads; `musicdb deletions` works. Restart rormpc.
-- [ ] Rename the "Play" tab to "Music" (asked 2026-10-10 with a screenshot: "it looks like a button. another name? ask
+- [x] Rename the "Play" tab to "Music" (asked 2026-10-10 with a screenshot: "it looks like a button. another name? ask
       the models"; Sol 0eb6ec94 and MiMo 2f26e04d both put Music first, Player second; decided by the user
       2026-10-10: Music): the tab label in the built-in default and assets/example_config.ron, SwitchToTab names,
       RORMPC.md and plans; the pane type Pane(Play()) stays (explicit configs keep loading); your config's tab and
       its "1" key too.
+      Done in b75da20, dotfiles fd5e600 (worker; checked in a debug build with your config: the bar shows "Music").
+      The label lives in your config, so a rormpc restart shows it with the installed binary too.
 - [ ] Deleted becomes an overlay in Music (asked 2026-10-10: "why a separate Deleted tab and not inside Music? ask
       the models"; Sol 1092fd62: overlay like Live with a badge for failed steps only; MiMo aee8f69d: keep a tab;
       decided by the user 2026-10-10: an overlay in Music): the Deleted pane's table, restore/retry and download
