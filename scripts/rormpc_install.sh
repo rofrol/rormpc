@@ -40,10 +40,10 @@ backup_current() {
 # ---------------------------------------------------------------- companions
 
 RO_LB_REPO=https://github.com/rofrol/ro-listenbrainz-mpd
-RO_LB_TAG=v2.6.0-ro.4
+RO_LB_TAG=v2.6.0-ro.5
 RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
 RORMPC_TOOLS_REPO=https://github.com/rofrol/rormpc-tools
-RORMPC_TOOLS_TAG=v0.2.38
+RORMPC_TOOLS_TAG=v0.2.39
 RORMPC_TOOLS_DIR="${RORMPC_TOOLS_DIR:-$HOME/personal_projects/rormpc-tools}"
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
