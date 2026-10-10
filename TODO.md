@@ -1080,3 +1080,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       otherwise (MiMo) | always a generic line + a docs link to the per-manager table (Sol) | keep brew + apt
       Checked: consult round 2026-10-10 (see the "Install hints" item in Next); you run macOS, Omarchy (Arch) and
       Guix.
+- [ ] MPD (asked 2026-10-10: "do I have the impression that this MPD daemon, to which files have to be sent again
+      and again, is very limiting? ask the models to analyze, not change"): plan a change, or keep things as they are?
+      Options: keep MPD as is; only fix the cheap self-inflicted parts later (e.g. the round draws from queue ∩
+      source, so hand-appended songs count) | plan option (a): mpd-player owns what plays next, MPD keeps only the
+      current song + 1-2 (first test phone clients on a tiny queue) | look at Mopidy or an own libmpv player
+      Checked: consult round 2026-10-10 (Sol d359f945, MiMo bcad472d), analysis only. Both: partly right; sending
+      files is not a cost (MPD gets file references, 8,300 songs is small), the friction is the API shape. Inherent
+      to MPD: the queue is the only playback state, priorities are the only scheduling hook (they work only with
+      random on) and share the one queue version, random order cannot be walked back, no disconnect event.
+      Self-inflicted: whole-source queues, the plan published as priorities (hence the useless queue version),
+      rounds read a file list instead of the queue (hence appended songs never drawn). MPD gives what is costly to
+      lose: phone clients, gapless, outputs, database, stickers, idle events, headless. Verdict of both: keep MPD;
+      Sol: option (a) only if the friction justifies it, after deciding who owns phone edits; MiMo: (a) plus a
+      read-only "Up next" web page for phones; Mopidy's MPD frontend lacks priorities and stickers (a poor trade);
+      libmpv only if MPD itself blocks a feature.
