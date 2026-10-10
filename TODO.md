@@ -366,9 +366,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       time (it takes that width even when empty) and loads with the installed rormpc. The menu item was not clicked
       in a live TUI. Not released. The daemon reports no "too short" or "rule off" state today (it has neither
       rule); rormpc shows those texts once it does.
-- [ ] ro-listenbrainz-mpd remembers a sent listen (manual or automatic) across its own restart in the middle of a
+- [x] ro-listenbrainz-mpd remembers a sent listen (manual or automatic) across its own restart in the middle of a
       song, in its SQLite database, so a later automatic listen of the same play is never sent twice (decided
       2026-10-10).
+      Done in ro-listenbrainz-mpd d21d7a7 (worker; cargo test 27): a sent_listens table in the cache database (song id,
+      file, length, listen time, manual or not, last position and state); after a restart the same id + file +
+      a position reachable since the last observation is the same play: status "sent", no second listen, a manual
+      submit gets "already sent"; a real replay counts again. Left (in README): a pause longer than the song while
+      the daemon was down can look like a replay; a stop and restart of the same song then looks like the same
+      play; enable_cache = false remembers nothing; a kill between sending and writing the row loses it. Not
+      released.
 - [ ] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
       browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
       the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
