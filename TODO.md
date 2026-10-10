@@ -482,6 +482,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
       MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
       bug signal"); live tests with the media key on the user's MPD go to "Needs a decision" first.
+- [ ] Restore Bon Jovi "Livin' on a Prayer" and make a full restore possible (asked 2026-10-10, next: "I deleted
+      Jon Bon Jovi - Livin' on a Prayer. Restore it. And give a way to restore, together with the ListenBrainz
+      stats. Ask the models"). Checked: deletion 20261010-162151-140--Bon_Jovi--Bon_Jovi_-_Livin__On_A_Prayer--
+      lDK9QqIzhwk--20090617.mp3 at 16:21:51, permanent (the file is gone, not in the Trash), ListenBrainz listens
+      deleted, the YouTube playlist entry removed, so it is blocked from downloads. A worker consults the models,
+      then: a "Restore…" for any deletion (trash or permanent) that brings the song back (from the Trash, else
+      downloaded again from its video with the block lifted), resubmits its ListenBrainz listens from what the
+      journal or the local listens log kept (timestamps preserved, no duplicates), puts back the playlist entries
+      and play counts/stickers, and runs it for this song; anything it cannot restore is reported.
 - [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
