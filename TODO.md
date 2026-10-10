@@ -289,8 +289,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       chart songs only when the outer rules have chart rows too; the picker's count of a smart list is its last
       "Smart NAME" export (none before one); "× clear sets" also turns the fixed chips off (mockup 6); `set:list:ID`
       (a list used as a set) differs from `list:ID` (the open list). Not released.
-- [ ] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
+- [x] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
       executable, and a log line from it (decided 2026-10-09; a Type=simple unit is "active" with a missing binary).
+      Done in 7303772 (worker; failing runs shown in an OrbStack VM with each program missing): the step
+      waits for both daemons' MPD channel subscriptions (an idle event, at most 20 events of 60 s), checks each
+      MainPID runs the installed program and runs `musicdb --version`. Also found: `is-active` with several units
+      exited 0 when any one was active. Green on GitHub: run 38012260320.
 - [ ] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
       fake API URL is used for ListenBrainz (decided 2026-10-09); adjust the smoke test's musicdb step if its
       expected exit changes.
