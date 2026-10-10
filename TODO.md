@@ -354,6 +354,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Shepherd as unsupported. Unverified package names are footnoted (rsgain on Arch/Guix, fpcalc in Guix's
       chromaprint); the coordinator doubts Guix's "mpclient" for mpc (Guix may call it mpd-mpc): check on the
       Guix machine. Not released.
+- [ ] Scrobble status follow-ups (decided 2026-10-10): the wording "62% counted · need 90% · in 1:24" (counted =
+      since the last seek; with a max-seconds cap lower than the fraction show the effective share, e.g. "need
+      80%/4:00"; impossible: "no scrobble: seek to 20%; need 90%"; "no scrobble: song too short"; "scrobbling off";
+      "scrobbled ✓"; "scrobbler not running"; Sol's table in the consult round), a "Send to ListenBrainz now" item in
+      the Queue menu for the playing song next to oL, and `(kind: Property(Status(Scrobble)))` next to the progress
+      bar before the time in your theme (dotfiles ~/.config/rormpc/themes/roman.ron).
 - [ ] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
       browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
       the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
@@ -1035,7 +1041,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Combined view: Artists and Album artists in Browse? Decided by the user 2026-10-10: two separate groupings.
       Options: two separate groupings (MiMo; the code has both) | one grouping with a toggle
       Checked: plans/combined-view.md "Open choices" (20); the first option is the plan's recommendation.
-- [ ] Scrobble status: What does "62% of 50%" mean? Answered 2026-10-10: "62% listened. required 90%. ask the models" (consult, then decide).
+- [x] Scrobble status: What does "62% of 50%" mean? Answered 2026-10-10: "62% listened. required 90%. ask the models" (consult, then decide). Consulted (Sol 8ca9ba0f, MiMo 2bf1c6a3): "listened" is not honest under the uninterrupted rule. Decided by the user 2026-10-10: "62% counted · need 90% · in 1:24" (queued in Next).
       Options: progress toward the required share (62% of the way to the threshold, as built) | the share of the song heard ("31% of 50%")
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
 - [x] Scrobble status: Which key sends to ListenBrainz now? Decided by the user 2026-10-10: oL plus an item in the Queue menu for the playing song (queued in Next).
