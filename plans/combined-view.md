@@ -54,6 +54,9 @@ filter-driven table).
 - **Normal mode** (weighted off): the table is MPD's queue in its physical order, like today's Queue. The forecast
   column is empty, never stale. The filter column is collapsed to one line naming the source
   (`Source: 1980s · +rock · Top 10%`) and opens with `h` or a click.
+  Changed 2026-10-10 (decided by the user after seeing the column vanish on `w` off): the left column
+  (Filters | Browse) stays open in normal mode too, as in weighted mode; the `Source: …` line is gone, the
+  "Playing from" header stays, and `h`/`l` move the keys between the column and the table.
 - **Weighted mode** (`w`): the table is today's plan view: past plays, `0 ▶`, `↑n` requests, forecast `1`..`10`
   with the lane, and nothing after it (decided by the user 2026-10-10: the rest of the pool is reached through `/`
   and Browse). The filter column is open. A header line under the tab title
@@ -198,6 +201,8 @@ to SelectAlbum in the Queue; Play is a different pane, so it does not clash, but
 ## Mockups
 
 ### 1. Normal mode (weighted off)
+
+Superseded 2026-10-10: normal mode shows the open left column as in mockup 2, not this `Source:` line.
 
 ```
  Play ─ Source: 1980s · +Billboard · rock · Top 10%  [h: filters] ──────────────────────────
@@ -651,6 +656,7 @@ while open).
    Options: Play replaces them in the default config, the panes stay for explicit configs (recommended) | Keep all four tabs | Remove the old panes
 5. Where is the filter column in normal mode?
    Options: Collapsed to one source line, h opens it (recommended) | Always open | Hidden
+   Changed by the user 2026-10-10: always open, in both modes.
 6. Does a pin beat a `-` set or `-` genre?
    Options: Yes, an exception beats every rule (recommended) | No, a `-` rule beats pins (Sol) | Only a library-scope pin beats it
 7. What do a hand removal and a hand addition in the queue do by default?

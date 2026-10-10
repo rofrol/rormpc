@@ -1,10 +1,11 @@
 //! rormpc: the Play pane (plans/combined-view.md, phases 3 and 3b): Queue, Hits, Shuffle and the browsing tabs
 //! in one tab.
 //!
-//! - Normal mode (weighted off): MPD's queue in its order; the Hits filter column is collapsed to one line naming
-//!   the source, `h` or a click opens it.
+//! - The left column (Filters | Browse) is always open, in both modes (decided by the user 2026-10-10); `h` and
+//!   `l` move the keys between it and the table.
+//! - Normal mode (weighted off): MPD's queue in its order.
 //! - Weighted mode (`w`): the plan projection (past plays, `0 ▶`, Up next and the forecast; a pool song shows
-//!   only as a `/` match) with the filter column open. Turning weighted off keeps the queue as it is.
+//!   only as a `/` match). Turning weighted off keeps the queue as it is.
 //! - A filter change prepares a preview (`hits` into its own file, MPD untouched): the table shows it under a
 //!   banner with its counts; `a` (or Apply) plays it, Esc drops it and shows the playing source again. See
 //!   `rormpc_play` for Apply's confirmation and race rules.
@@ -89,7 +90,7 @@ const APPLY_BUTTON: &str = "[ a Apply ]";
 /// What Play's left column shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Left {
-    /// the Hits filter column (collapsed to one line in normal mode)
+    /// the Hits filter column
     Filters,
     /// the browser of a grouping
     Browse,
@@ -174,7 +175,6 @@ pub struct PlayPane {
     /// outdated): it plays once the preview is in
     wait: ApplyWait,
     /// areas of the last render, for the mouse
-    collapsed_area: Rect,
     apply_area: Rect,
     queue_area: Rect,
     areas: BrowseAreas,
@@ -198,7 +198,6 @@ impl PlayPane {
             synced: false,
             inbox: rormpc_smartlists::Inbox::default(),
             wait: ApplyWait::No,
-            collapsed_area: Rect::default(),
             apply_area: Rect::default(),
             queue_area: Rect::default(),
             areas: BrowseAreas::default(),
@@ -298,23 +297,9 @@ impl PlayPane {
         }
     }
 
-    fn weighted() -> bool {
-        rormpc_player::shuffle_state().enabled
-    }
-
     /// The filters on screen differ from the rules being played.
     fn preview_active(&self) -> bool {
         self.hits.rules_hash().is_some_and(|h| h != self.baseline_hash)
-    }
-
-    /// The left column is shown: Browse, or the filters while weighted, while they have the keys or show a
-    /// preview.
-    fn column_open(&self) -> bool {
-        self.left == Left::Browse
-            || Self::weighted()
-            || self.hits.focus_filters()
-            || self.preview_active()
-            || self.hits.in_downloads()
     }
 
     /// The table right of the column is the Hits result (a preview, or the Downloads view), not the queue.
@@ -324,7 +309,7 @@ impl PlayPane {
 
     /// Keys go to the Hits part (the column, or its table) rather than the queue.
     fn keys_to_hits(&self) -> bool {
-        (self.column_open() && self.left == Left::Filters && self.hits.focus_filters()) || self.shows_hits_table()
+        (self.left == Left::Filters && self.hits.focus_filters()) || self.shows_hits_table()
     }
 
     // ---------------------------------------------------------------- Browse
@@ -737,7 +722,7 @@ impl PlayPane {
         rormpc_play::apply(ctx, HitsSource { name, files: info.files, rules, rules_hash });
     }
 
-    /// Esc with nothing left to close inside the table: drop the preview, else close the column (normal mode).
+    /// Esc with nothing left to close inside the table: drop the preview.
     /// False when Play has nothing to do with it.
     fn escape(&mut self) -> bool {
         if self.hits.stop_run() {
@@ -747,10 +732,6 @@ impl PlayPane {
             self.hits.reset_filters(self.baseline.as_ref());
             self.wait = ApplyWait::No;
             status_info!("Preview dropped: the table shows the playing source again");
-            return true;
-        }
-        if self.hits.focus_filters() && !Self::weighted() {
-            self.hits.set_focus_filters(false);
             return true;
         }
         false
@@ -784,27 +765,6 @@ impl PlayPane {
         format!("▶ {source} · {mode}{list}{browse}")
     }
 
-    /// The collapsed filter column: the rules of the source in one line.
-    fn collapsed_line(&self) -> String {
-        let rules = match rormpc_upnext::source_info().map(|(kind, name, _)| (kind, name)) {
-            Some((kind, _)) if kind == "hits" && self.baseline.is_some() => {
-                let formula = self.hits.formula().unwrap_or_default();
-                match self.open_list() {
-                    Some((_, name, _)) => format!("smart list {name} · {formula}"),
-                    None => formula,
-                }
-            }
-            Some((kind, name)) if kind == "hits" => format!("Hits · {name}"),
-            Some((kind, _)) if kind == "library" => "whole library".to_owned(),
-            Some((kind, name)) if matches!(kind.as_str(), "album" | "artist" | "directory" | "selection") => {
-                format!("{} {name}", rormpc_upnext::kind_label(&kind))
-            }
-            Some((_, name)) => name,
-            None => "none yet".to_owned(),
-        };
-        format!(" Source: {rules}  [h: filters · B: browse · L: lists · S: save]")
-    }
-
     fn render_queue_body(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
         let preview = self.preview_active();
         let [banner, rest] =
@@ -831,28 +791,18 @@ impl PlayPane {
         self.areas.switch_browse = Rect::default();
         self.areas.chips.clear();
         self.areas.browser = Rect::default();
-        let (column, table) = if self.column_open() {
-            // Browse needs room for its columns (the three-column browser); the filters keep the Hits width
-            let width = if self.left == Left::Browse {
-                Constraint::Length((rest.width / 2).max(40).min(rest.width.saturating_sub(30)))
-            } else {
-                Constraint::Length(COLUMN_WIDTH)
-            };
-            let [c, t] = Layout::horizontal([width, Constraint::Min(1)]).spacing(2).areas(rest);
-            self.collapsed_area = Rect::default();
-            let [switch, below] = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(c);
-            self.render_switch(frame, switch, ctx);
-            (Some(below), t)
+        // Browse needs room for its columns (the three-column browser); the filters keep the Hits width
+        let width = if self.left == Left::Browse {
+            Constraint::Length((rest.width / 2).max(40).min(rest.width.saturating_sub(30)))
         } else {
-            let [line, t] = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(rest);
-            self.collapsed_area = line;
-            let dim = Style::default().add_modifier(Modifier::DIM);
-            frame.render_widget(Paragraph::new(Line::from(Span::styled(self.collapsed_line(), dim))), line);
-            (None, t)
+            Constraint::Length(COLUMN_WIDTH)
         };
-        let (filters, browse) = match (self.left, column) {
-            (Left::Browse, Some(c)) => (None, Some(c)),
-            (_, c) => (c, None),
+        let [column, table] = Layout::horizontal([width, Constraint::Min(1)]).spacing(2).areas(rest);
+        let [switch, column] = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(column);
+        self.render_switch(frame, switch, ctx);
+        let (filters, browse) = match self.left {
+            Left::Browse => (None, Some(column)),
+            Left::Filters => (Some(column), None),
         };
         if self.shows_hits_table() {
             let [dl_main, dl_details] =
@@ -1052,7 +1002,7 @@ impl Pane for PlayPane {
             self.hits.handle_action(event, ctx)?;
         } else {
             match (&common, &queue_action) {
-                // h: the left column (the filters open in normal mode; Browse takes the keys back)
+                // h: the left column (the filters or Browse take the keys)
                 (Some(CommonAction::Left), _) if event.claim_common().is_some() => {
                     if self.left == Left::Browse {
                         self.browse_focus = true;
@@ -1157,13 +1107,6 @@ impl Pane for PlayPane {
         if self.apply_area.contains(at) {
             if click {
                 self.apply(ctx);
-                ctx.render()?;
-            }
-            return Ok(());
-        }
-        if self.collapsed_area.contains(at) {
-            if click {
-                self.hits.set_focus_filters(true);
                 ctx.render()?;
             }
             return Ok(());

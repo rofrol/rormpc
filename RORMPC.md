@@ -91,12 +91,12 @@ what plays and how:
 The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowPlay(...)` and the action names
 (PlayReplace, PlayNext) keep their names, so explicit configs keep loading, a tab named "Play" included.
 
-- **Normal mode** (weighted off): the table is MPD's queue in its order, as in the Queue pane. The Hits filter
-  column is collapsed to one line naming the source's rules (`Source: Billboard ∩ 1980-1989 ∩ Top 1-10%`); `h` or a
-  click on it opens the column, `l` (or Esc without a preview) closes it again.
+- The left column (Filters | Browse) is always open, in both modes (decided by the user 2026-10-10; until then
+  normal mode collapsed it to a `Source: …` line). `h` gives it the keys, `l` gives them back to the table.
+- **Normal mode** (weighted off): the table is MPD's queue in its order, as in the Queue pane.
 - **Weighted mode** (`w`, ToggleWeightedShuffle, now also in the default keys): the table is the plan projection of
-  the Queue plan view (past plays, `0 ▶`, `↑n` requests and the forecast, nothing after it), and the filter
-  column stays open. `o` does nothing here: the table follows `w`. Turning weighted off keeps the queue as it is.
+  the Queue plan view (past plays, `0 ▶`, `↑n` requests and the forecast, nothing after it). `o` does nothing
+  here: the table follows `w`. Turning weighted off keeps the queue as it is.
 - **A filter change prepares**: `hits` runs at once (one run at a time, as Hits' Apply) into its own file,
   `~/.cache/rormpc/hits/preview.json` (`current.json` stays the Hits pane's), and the table shows that result under
   a banner: `Preview · <label> · 312 matched · 287 owned · 25 missing · playing song: outside  [ a Apply ]`. MPD is
@@ -203,8 +203,7 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
   the list.
 - The open smart list is part of the filters: Music runs `hits --open-list ID`, so the list's own exceptions
   (scope `list:ID`) apply, and its id is part of the rules hash. The header names it (`Smart list: 80s party`,
-  "(changed)" once the filters differ from its rules); the collapsed source line says `smart list 80s party · …`,
-  and a list applied as saved plays as "Hits · smart list 80s party". A new pin or exclusion defaults to the open
+  "(changed)" once the filters differ from its rules), and a list applied as saved plays as "Hits · smart list 80s party". A new pin or exclusion defaults to the open
   list ("in the smart list 80s party only (while it is open)"), else library.
 - Export: Apply of a list writes it as the MPD playlist "Smart NAME" (`hits lists export ID` in the background) and
   `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The export is a
