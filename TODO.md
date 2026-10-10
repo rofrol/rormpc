@@ -474,9 +474,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the install): "Up next · N" header in both modes, J/K/D/Make next bounded to the requests, "Clear Up next (N)…"
       on the header (Enter, menu, D), the rejected-play error in Music's footer, 2 and gu = ShowPlay(UpNext); "New
       round" moved from the Up next tab's menu to Music's song and header menus.
-- [ ] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only
+- [x] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only
       together with the install of a rormpc that knows it (the coordinator installs, then commits the config), never
       ahead of it (2026-10-10: ShowPlay(Deleted) broke loading the config until the install).
+      Done in 29d7250 (worker).
 - [ ] Media key Next lags (asked 2026-10-10: "the MacBook's Next media key works with some delay. ask the models"):
       a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
       MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
@@ -520,6 +521,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       on small sources (the least recently played eligible song, shown as relaxed). They differ on starting rounds:
       Sol an automatic continuous mode (manual rounds kept as an option), MiMo keep manual rounds and show the next
       round's picks dimmed as provisional. The choice is in "Needs a decision".
+      Decided by the user 2026-10-10: automatic rounds (a continuous mode; manual rounds may stay an option): the
+      forecast always aims at 10 playable songs, those of the next round marked "next round" and nothing marked
+      heard by planning; the reason shown when fewer ("4 ahead; 12 resting"); rest relaxed on a small source to the
+      least recently played eligible song, shown as relaxed.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1264,7 +1269,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, now (the block only works once installed) | together with the weighted-mode change
       Checked: tests green; installed are tools 0.2.40 and rormpc 76104b2.
       Decided by the user 2026-10-10: after the weighted-mode change, one release (queued in Next).
-- [ ] Forecast across rounds: when a round ends, start the next one automatically, or keep starting rounds by hand?
+- [x] Forecast across rounds: when a round ends, start the next one automatically, or keep starting rounds by hand?
       Options: automatic: the next round starts when one ends, the forecast shows its songs marked "next round"
       (Sol) | by hand as now, the forecast shows the next round's picks dimmed as provisional (MiMo)
       Checked: consult round 2026-10-10 (see "The forecast should always show 10 ahead" in Next).
+      Decided by the user 2026-10-10: automatic, the next round starts when one ends (Sol).
