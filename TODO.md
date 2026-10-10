@@ -762,6 +762,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
       timestamps into .lrc, language detection, cost per song), and plans or builds "Transcribe lyrics" for a song
       with no lyrics (radio tracks first), labelled as machine-transcribed like the machine translations.
+      Planned in rormpc-tools cd7fe61 docs/transcribe-lyrics-plan.md (worker, 7 songs measured, Sol + MiMo consulted):
+      mlx_whisper large-v3-turbo on a demucs vocal stem (Polish WER 0.05 with the language detected from the first
+      vocal entry, English 0.23-0.28; line timing 0.4-1.2 s off, enough to highlight lines), demucs on CPU ~2 min per
+      song (~10.5 h for the ~274 songs without lyrics); instrumentals detected by VAD on the stem (whisper writes
+      "Thank you." there); stored as <song>.transcript.json, never as .lrc, shown in rormpc as machine-transcribed.
+      Seven open choices in "Needs a decision" ("Transcribed lyrics:"); the build waits for them.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1635,3 +1641,24 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       or EP: swap to the one first released earliest, or keep the video?
       Options: swap (rule work-same-length-no-studio, as built) | keep the video match
       Checked: rormpc-tools 877205d years.audio_for (2026-10-11).
+- [ ] Transcribed lyrics: Transcribe new Omarchy Radio downloads automatically, or only on request?
+      Options: on request and by `--playlist` batch | automatically after each radio download | never in batch
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [ ] Transcribed lyrics: Run the whole library's songs without lyrics (about 274, about 10 hours of CPU)?
+      Options: no, only radio and on request | yes, once overnight | only a playlist the user names
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [ ] Transcribed lyrics: May a single-song `--current` request skip vocal separation to answer in about 20 s instead of about 2 min?
+      Options: no, always separate (accuracy, the instrumental gate and language detection need the stem) | yes, a fast mode on the mix with a lower-confidence label | ask each time
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [ ] Transcribed lyrics: Show a transcript that passed the checks at once, or only after the user accepts it?
+      Options: show at once with the machine-transcribed label | keep as draft until accepted in rormpc | show at once for radio tracks only
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [ ] Transcribed lyrics: Default Whisper model?
+      Options: large-v3-turbo | large-v3 | turbo by default with large-v3 on request per song
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [ ] Transcribed lyrics: Where do the heavy dependencies live?
+      Options: a separate uv tool with an inline-dependency script | a `transcribe` extra of rormpc-tools | documented manual install only
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [ ] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
+      Options: no | yes, only the public radio tracks | yes, the whole evaluation set
+      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
