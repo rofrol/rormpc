@@ -544,6 +544,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rows (MiMo against; the coordinator takes Sol's dim plus the banner, so it shows without color too). Also:
       why "Rank by: my plays" takes minutes (the play-history split per run): cache it across runs.
       Moved up 2026-10-10: "do it next".
+- [ ] The filter column stays open in normal mode too (asked 2026-10-10 with a screenshot after `w` off: "the whole
+      selection on the left disappeared. ask the models"; it was collapsed to one "Source: …" line by the plan's choice
+      5). Consulted (Sol 8d6fdb94, MiMo 5e81fe67): both would keep it collapsed with a notice; MiMo's "filters only
+      affect weighted playback" dismissed (Apply replaces the queue in both modes). Decided by the user 2026-10-10:
+      always open, in both modes (`h` keeps moving focus between the column and the table; Browse B as now).
 - [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
