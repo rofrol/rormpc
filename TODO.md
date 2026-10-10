@@ -552,11 +552,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       decade list silently sent 1980-1989; now it means all chart years (1959-now) and reads "Period: ‹All years›".
       "My plays" runs take 0.6-2.9 s here; the minutes came from queued old runs finishing one by one; the split is
       cached anyway (second run 0.001 s instead of 0.25 s).
-- [ ] The filter column stays open in normal mode too (asked 2026-10-10 with a screenshot after `w` off: "the whole
+- [x] The filter column stays open in normal mode too (asked 2026-10-10 with a screenshot after `w` off: "the whole
       selection on the left disappeared. ask the models"; it was collapsed to one "Source: …" line by the plan's choice
       5). Consulted (Sol 8d6fdb94, MiMo 5e81fe67): both would keep it collapsed with a notice; MiMo's "filters only
       affect weighted playback" dismissed (Apply replaces the queue in both modes). Decided by the user 2026-10-10:
       always open, in both modes (`h` keeps moving focus between the column and the table; Browse B as now).
+      Done in d802514 (worker; read-only check on the real MPD), rormpc 0bf908e installed.
 - [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
