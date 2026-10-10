@@ -1084,7 +1084,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       and again, is very limiting? ask the models to analyze, not change"): plan a change, or keep things as they are?
       Options: keep MPD as is; only fix the cheap self-inflicted parts later (e.g. the round draws from queue ∩
       source, so hand-appended songs count) | plan option (a): mpd-player owns what plays next, MPD keeps only the
-      current song + 1-2 (first test phone clients on a tiny queue) | look at Mopidy or an own libmpv player
+      current song + 1-2 (first test phone clients on a tiny queue) | look at Mopidy or an own libmpv player |
+      propose small patches to upstream MPD (idle on client disconnect, plan/edit versions), fork only if refused
       Checked: consult round 2026-10-10 (Sol d359f945, MiMo bcad472d), analysis only. Both: partly right; sending
       files is not a cost (MPD gets file references, 8,300 songs is small), the friction is the API shape. Inherent
       to MPD: the queue is the only playback state, priorities are the only scheduling hook (they work only with
@@ -1095,3 +1096,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Sol: option (a) only if the friction justifies it, after deciding who owns phone edits; MiMo: (a) plus a
       read-only "Up next" web page for phones; Mopidy's MPD frontend lacks priorities and stickers (a poor trade);
       libmpv only if MPD itself blocks a feature.
+      Asked 2026-10-10: "why not fork MPD so it works great with our architecture while clients stay compatible? ask
+      the models". Consulted (Sol 1ea0e3a1, MiMo 7d561134): both say don't fork now. Opt-in extensions keep phone
+      clients working (unknown commands and status keys are ignored), but the big win, an external "next song"
+      provider with the queue as a window, puts a foreign process in the playback path (audio stalls if it hangs)
+      and breaks what phone clients assume the queue is (reorder/delete of planned songs); small parts (separate
+      plan/edit versions ~30 lines, an idle event on disconnect ~20 lines) help only mpd-player; each fork costs a
+      rebase per MPD release and own packages for Homebrew, Arch and Guix. Upstream chances: an idle event on client
+      disconnect 20-30% (MiMo), conditional priority updates the strongest general case (Sol), an external sequencer
+      ~0. Flip to a fork only if upstream refuses and a no-fork prototype still fails a real phone workflow.
+      (MiMo also suggested polling `listclients`: dismissed, MPD has no such command.) Fourth option added below.
