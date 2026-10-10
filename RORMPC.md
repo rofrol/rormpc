@@ -193,12 +193,13 @@ with that error under the filters, never with an empty set. Named sets are passe
 in smart lists, and named in the formula ("Tag God", "Playlist NAME", "Live NAME", "Smart NAME"). The selection
 is (union of the + sets, or the whole library when none is +) − (union of the − sets) ∩ period ∩ genres ∩
 artists ∩ Top % ∩ owned (`hits --set ±KIND`). "Rank by" cycles Billboard (best year-end
-position) / my plays / rediscover (often played, not lately) / none; Top % is cut in the rank's own population (the
-chart songs of the period, or the library songs of the period), before the sets, genres and artists, so a song's
+position) / my plays / rediscover (often played, not lately) / none (my plays and rediscover leave out the weighted
+shuffle's own picks, with every Years of; the Plays column counts every play); Top % is cut in the rank's own population
+(the chart songs of the period, or the library songs of the period), before the sets, genres and artists, so a song's
 rank never depends on which chips are on, and a song outside that population shows "—" and stays only with no Top %
 box ticked. With Rank by none the Top % rows are dim and do nothing. "Years of" says what the period means: chart
-year, release year or listened year (the period row then reads "Listened:", the year in progress included; the
-weighted shuffle's own picks don't count; "thin data" under 30 plays); "auto" follows Rank by (Billboard → chart,
+year, release year or listened year (the period row then reads "Listened:", the year in progress included; "thin
+data" under 30 plays); "auto" follows Rank by (Billboard → chart,
 my plays → listened, else release), cycling it picks one. A period with no decade ticked means every year, except
 for Billboard chart years. Under the rows, above Apply, the rule formula is printed, with the result's counts once
 Apply ran with these filters: "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ Top 1-10% ∩ rock · 87 of 1,056"
