@@ -1311,12 +1311,22 @@ impl HitsPane {
             .collect();
         frame.render_widget(Paragraph::new(lines), area);
         let width = usize::from(self.summary_area.width.saturating_sub(1)).max(1);
-        let summary: Vec<Line> = rormpc_hits_rules::wrap(&self.summary(filters), width)
+        let hint = self.row_hint().map_or_else(Vec::new, |h| rormpc_hits_rules::wrap(h, width));
+        let summary: Vec<Line> = hint
             .into_iter()
+            .chain(rormpc_hits_rules::wrap(&self.summary(filters), width))
             .map(|l| Line::from(vec![Span::raw(" "), Span::styled(l, Style::default().add_modifier(Modifier::DIM))]))
             .collect();
         frame.render_widget(Paragraph::new(summary), self.summary_area);
         frame.render_widget(Paragraph::new(self.apply_line(filters, apply_idx, ctx)), self.apply_area);
+    }
+
+    /// The keys of the focused filter row, shown above the rule summary: only the year range's bounds have
+    /// keys that their label does not show.
+    fn row_hint(&self) -> Option<&'static str> {
+        let row = self.filter_rows().get(self.filter_sel).copied();
+        (self.focus_filters && matches!(row, Some(FilterRow::From | FilterRow::To)))
+            .then_some("←/→ change year · Space toggle bound")
     }
 
     /// The rule formula of the filters, with the counts of the result on screen when it was made by them:
@@ -2233,7 +2243,8 @@ impl HitsPane {
         // Apply gets its row first, so even a tiny pane shows it; the rule summary sits above it, never scrolled
         let summary_lines = self.filters.as_ref().map_or(0, |f| {
             let width = usize::from(filter_area.width.saturating_sub(1)).max(1);
-            rormpc_hits_rules::wrap(&self.summary(f), width).len().min(4) as u16
+            let hint = self.row_hint().map_or(0, |h| rormpc_hits_rules::wrap(h, width).len());
+            (hint + rormpc_hits_rules::wrap(&self.summary(f), width).len().min(4)) as u16
         });
         let [list_area, summary_area, apply_area] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(summary_lines), Constraint::Length(1)])
@@ -2834,8 +2845,12 @@ struct Filters {
     years_of: Option<YearsOf>,
     by_range: bool,
     decades: [bool; 8],
+    /// the year range's bounds; kept while a bound is off ("Any"), so turning it back on restores it
     from: i32,
     to: i32,
+    /// false: that end of the year range is open ("From: Any")
+    from_on: bool,
+    to_on: bool,
     tops: [bool; 3],
     /// the pinned genres (or GENRES) first, then typed ones; -1 exclude, 0 off, 1 include
     genres: Vec<(String, i8)>,
@@ -2851,7 +2866,7 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { sets: [1, 0, 0, 0], named: Vec::new(), rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false, open_list: None }
+        Self { sets: [1, 0, 0, 0], named: Vec::new(), rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, from_on: true, to_on: true, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false, open_list: None }
     }
 }
 
@@ -2922,10 +2937,13 @@ impl Filters {
     /// default), any other axis without a ticked decade means all years.
     fn period(&self) -> Option<String> {
         let chart_years = self.rank == RankBy::Billboard && self.effective_years_of() == YearsOf::Chart;
-        let all_years = !chart_years
-            && !self.by_range
-            && !self.decades.iter().any(|d| *d);
+        let all_years = !chart_years && self.any_year();
         (self.has_years() && !all_years).then(|| self.years())
+    }
+
+    /// No decade ticked, or a year range with both ends open: every year.
+    fn any_year(&self) -> bool {
+        if self.by_range { !self.from_on && !self.to_on } else { !self.decades.iter().any(|d| *d) }
     }
 
     /// The Top % ranges as `--top`, or None: no box ticked, or Rank by none (no rank to cut).
@@ -2949,8 +2967,13 @@ impl Filters {
     }
 
     fn years(&self) -> String {
-        if self.by_range {
-            return format!("{}-{}", self.from.min(self.to), self.from.max(self.to));
+        // an open end is left empty ("-1991", "2000-"); both open fall through to every chart year
+        match (self.by_range, self.from_on, self.to_on) {
+            (true, true, true) => return format!("{}-{}", self.from.min(self.to), self.from.max(self.to)),
+            (true, true, false) => return format!("{}-", self.from),
+            (true, false, true) => return format!("-{}", self.to),
+            (true, false, false) => return format!("{FIRST_CHART_YEAR}-{}", this_year()),
+            (false, ..) => {}
         }
         let ranges: Vec<String> = DECADES
             .iter()
@@ -2962,13 +2985,22 @@ impl Filters {
         if ranges.is_empty() { format!("{FIRST_CHART_YEAR}-{}", this_year()) } else { ranges.join(",") }
     }
 
-    /// The period as the banner names it: "All years" with no decade ticked, "1980–1989, 1990–1999", or
-    /// None when the sets have no years (recommendations alone).
+    /// The period as the banner names it: "All years" with no decade ticked, "1980–1989, 1990–1999", a year
+    /// range as "1991–2000", "Up to 1991", "From 2000" or "Any year", or None when the sets have no years
+    /// (recommendations alone).
     fn period_label(&self) -> Option<String> {
         if !self.has_years() {
             return None;
         }
-        if !self.by_range && !self.decades.iter().any(|d| *d) {
+        if self.by_range {
+            return Some(match (self.from_on, self.to_on) {
+                (true, true) => format!("{}–{}", self.from.min(self.to), self.from.max(self.to)),
+                (true, false) => format!("From {}", self.from),
+                (false, true) => format!("Up to {}", self.to),
+                (false, false) => "Any year".to_owned(),
+            });
+        }
+        if self.any_year() {
             return Some("All years".to_owned());
         }
         Some(self.years().replace('-', "–").replace(',', ", "))
@@ -3156,31 +3188,45 @@ impl Filters {
     fn from_args(args: &HitsArgs) -> Self {
         let mut f = Self::default();
         let period = args.period.clone().unwrap_or_default();
-        let parts: Vec<(i32, i32)> = period
+        // (from, to), None for an open end: "1985-1992", "-1991", "2000-", "1987", the decade "1980s"
+        let year = |s: &str| if s.is_empty() { Some(None) } else { s.parse().ok().map(Some) };
+        let parts: Vec<(Option<i32>, Option<i32>)> = period
             .split(',')
+            .map(str::trim)
             .filter_map(|p| {
-                let (lo, hi) = p.trim().split_once('-').unwrap_or((p.trim(), p.trim()));
-                Some((lo.trim_end_matches('s').parse().ok()?, hi.parse().unwrap_or(-1)))
+                if let Some((lo, hi)) = p.split_once('-') {
+                    return Some((year(lo.trim())?, year(hi.trim())?)).filter(|b| *b != (None, None));
+                }
+                let y: i32 = p.trim_end_matches('s').parse().ok()?;
+                Some((Some(y), Some(if p.ends_with('s') { y + 9 } else { y })))
             })
             .collect();
         let decade_parts: Vec<usize> = parts
             .iter()
-            .filter_map(|(lo, hi)| {
-                let is_decade = lo % 10 == 0 && (*hi == lo + 9 || *hi == -1);
-                is_decade.then(|| DECADES.iter().position(|d| d == lo)).flatten()
+            .filter_map(|b| match *b {
+                (Some(lo), Some(hi)) if lo % 10 == 0 && hi == lo + 9 => DECADES.iter().position(|d| *d == lo),
+                _ => None,
             })
             .collect();
         // every chart year (`years` with no decade ticked) reads back as no decade ticked
-        let every_year = matches!(parts.as_slice(), [(lo, hi)] if *lo <= FIRST_CHART_YEAR && *hi >= this_year() - 1);
+        let every_year =
+            matches!(parts.as_slice(), [(Some(lo), Some(hi))] if *lo <= FIRST_CHART_YEAR && *hi >= this_year() - 1);
         if every_year {
             f.decades = [false; 8];
         } else if !parts.is_empty() && decade_parts.len() == parts.len() {
             f.decades = [false; 8];
             decade_parts.into_iter().for_each(|i| f.decades[i] = true);
-        } else if let Some((lo, hi)) = parts.first() {
+        } else if let Some(&(lo, hi)) = parts.first() {
             f.by_range = true;
-            f.from = *lo;
-            f.to = if *hi > 0 { *hi } else { *lo };
+            (f.from_on, f.to_on) = (lo.is_some(), hi.is_some());
+            // an open end keeps a year to come back to, on the right side of the other bound
+            let (lo, hi) = match (lo, hi) {
+                (Some(lo), Some(hi)) => (lo.min(hi), lo.max(hi)),
+                (Some(lo), None) => (lo, lo.max(f.to)),
+                (None, Some(hi)) => (hi.min(f.from), hi),
+                (None, None) => (f.from, f.to),
+            };
+            (f.from, f.to) = (lo, hi);
         }
         if let Some(top) = &args.top {
             f.tops = [false; 3];
@@ -3257,8 +3303,10 @@ impl Filters {
                 }
             ),
             FilterRow::Decade(i) => format!("  {} {}s", check(self.decades[i]), DECADES[i]),
-            FilterRow::From => format!("  from ‹ {} ›", self.from),
-            FilterRow::To => format!("  to   ‹ {} ›", self.to),
+            FilterRow::From if self.from_on => format!("  From: ‹ {} ›", self.from),
+            FilterRow::From => "  From: Any".to_owned(),
+            FilterRow::To if self.to_on => format!("  To:   ‹ {} ›", self.to),
+            FilterRow::To => "  To:   Any".to_owned(),
             // every box sits at the same 2-cell indent under its heading: a hanging label per group made the
             // columns step like an expandable tree
             FilterRow::Heading("Genres") => self.genres_heading(),
@@ -3346,7 +3394,20 @@ impl Filters {
             FilterRow::ClearArtists => {}
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowExcluded => self.show_excluded = !self.show_excluded,
-            FilterRow::Heading(_) | FilterRow::Exceptions | FilterRow::Downloads | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::AddSet | FilterRow::Apply => {}
+            // a bound turned back on gets its old year, clamped to the other bound
+            FilterRow::From => {
+                self.from_on = !self.from_on;
+                if self.to_on {
+                    self.from = self.from.min(self.to);
+                }
+            }
+            FilterRow::To => {
+                self.to_on = !self.to_on;
+                if self.from_on {
+                    self.to = self.to.max(self.from);
+                }
+            }
+            FilterRow::Heading(_) | FilterRow::Exceptions | FilterRow::Downloads | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::AddSet | FilterRow::Apply => {}
         }
     }
 
@@ -3354,9 +3415,18 @@ impl Filters {
     fn adjust(&mut self, row: FilterRow, delta: i32) -> bool {
         // up to this year: my charts can show the year in progress
         let clamp = |y: i32| y.clamp(FIRST_CHART_YEAR, this_year());
+        // each bound stops at the other (equal allowed): never pushed along, never swapped; an open bound
+        // ("Any") has no year to step
         match row {
-            FilterRow::From => self.from = clamp(self.from + delta),
-            FilterRow::To => self.to = clamp(self.to + delta),
+            FilterRow::From if self.from_on => {
+                let max = if self.to_on { self.to } else { this_year() };
+                self.from = clamp(self.from + delta).min(max);
+            }
+            FilterRow::To if self.to_on => {
+                let min = if self.from_on { self.from } else { FIRST_CHART_YEAR };
+                self.to = clamp(self.to + delta).max(min);
+            }
+            FilterRow::From | FilterRow::To => {}
             FilterRow::Mode => self.by_range = !self.by_range,
             FilterRow::RankBy => self.rank = self.rank.next(delta),
             FilterRow::YearsOf => self.years_of = YearsOf::next(self.years_of, delta),
@@ -3775,6 +3845,73 @@ mod tests {
         f.decades[3] = true;
         f.decades[4] = true;
         assert_eq!(f.period_label().as_deref(), Some("1980–1989, 1990–1999"));
+    }
+
+    #[test]
+    fn year_range_bounds_stop_at_each_other_and_toggle_to_any() {
+        let mut f = Filters { by_range: true, ..Filters::default() }; // 1985–1992
+        let years = |f: &Filters| f.period();
+        for _ in 0..20 {
+            f.adjust(FilterRow::To, -1);
+        }
+        assert_eq!((f.from, f.to), (1985, 1985), "to stops at from: equal, never pushed or swapped");
+        f.adjust(FilterRow::From, 3);
+        assert_eq!(f.from, 1985, "from stops at to");
+        f.adjust(FilterRow::To, 15);
+        assert_eq!(f.line(FilterRow::From), "  From: ‹ 1985 ›");
+        assert_eq!(f.line(FilterRow::To), "  To:   ‹ 2000 ›");
+        assert_eq!(f.period_label().as_deref(), Some("1985–2000"));
+
+        f.toggle(FilterRow::From);
+        assert_eq!(f.line(FilterRow::From), "  From: Any");
+        assert_eq!((years(&f).as_deref(), f.period_label().as_deref()), (Some("-2000"), Some("Up to 2000")));
+        assert!(f.adjust(FilterRow::From, 1) && f.from == 1985, "an open bound has no year to step");
+        for _ in 0..10 {
+            f.adjust(FilterRow::To, -1);
+        }
+        assert_eq!(f.to, 1990, "with from open, to steps freely");
+        for _ in 0..10 {
+            f.adjust(FilterRow::To, -1);
+        }
+        assert_eq!(f.to, 1980);
+        f.toggle(FilterRow::From);
+        assert_eq!((f.from, f.to), (1980, 1980), "from comes back clamped to to");
+
+        f.toggle(FilterRow::To);
+        assert_eq!((years(&f).as_deref(), f.period_label().as_deref()), (Some("1980-"), Some("From 1980")));
+        f.toggle(FilterRow::From);
+        assert_eq!(f.period_label().as_deref(), Some("Any year"));
+        // Billboard's chart years need a period: every year-end chart; any other axis means every year
+        assert_eq!(years(&f), Some(format!("1959-{}", this_year())));
+        f.rank = RankBy::Plays;
+        assert_eq!(years(&f), None);
+    }
+
+    #[test]
+    fn open_year_ranges_read_back_and_old_periods_still_load() {
+        let load =
+            |period: &str| Filters::from_args(&HitsArgs { period: Some(period.to_owned()), ..HitsArgs::default() });
+        let f = load("-1991");
+        assert!(f.by_range && !f.from_on && f.to_on && f.to == 1991 && f.from <= f.to);
+        assert_eq!(f.period().as_deref(), Some("-1991"));
+        let f = load("2000-");
+        assert!(f.by_range && f.from_on && !f.to_on && f.from == 2000 && f.to >= f.from);
+        assert_eq!(f.period().as_deref(), Some("2000-"));
+        let f = load("1985-1992");
+        assert!(f.by_range && f.from_on && f.to_on && (f.from, f.to) == (1985, 1992));
+        let f = load("2000-1991"); // written before the clamp: read in order
+        assert_eq!((f.from, f.to), (1991, 2000));
+        let f = load("1987");
+        assert!(f.by_range && (f.from, f.to) == (1987, 1987));
+        for decade in ["1980-1989", "1980s"] {
+            let f = load(decade);
+            assert!(!f.by_range && f.decades[3] && f.decades.iter().filter(|d| **d).count() == 1, "{decade}");
+        }
+        // the period round-trips through the arguments hits is given
+        let mut f = Filters { by_range: true, from_on: false, ..Filters::default() };
+        f.rank = RankBy::Plays;
+        let back = Filters::from_args(&written_args(&f.args("x.json")));
+        assert_eq!(back.period_label().as_deref(), Some("Up to 1992"));
     }
 
     /// A stand-in for `hits`: writes its first argument into the `--json` file, or, given "block", runs until
