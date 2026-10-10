@@ -453,11 +453,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       its "1" key too.
       Done in b75da20, dotfiles fd5e600 (worker; checked in a debug build with your config: the bar shows "Music").
       The label lives in your config, so a rormpc restart shows it with the installed binary too.
-- [ ] Deleted becomes an overlay in Music (asked 2026-10-10: "why a separate Deleted tab and not inside Music? ask
+- [x] Deleted becomes an overlay in Music (asked 2026-10-10: "why a separate Deleted tab and not inside Music? ask
       the models"; Sol 1092fd62: overlay like Live with a badge for failed steps only; MiMo aee8f69d: keep a tab;
       decided by the user 2026-10-10: an overlay in Music): the Deleted pane's table, restore/retry and download
       allow/block in an overlay opened with gd (and a click on its badge), the badge counting failed or unresolved
       steps only; the Deleted tab leaves the default tabs and your config; the pane stays loadable.
+      Done in 46c2a3a, dotfiles 23175a9 (worker; cargo test 1033; gd and Esc checked read-only, the badge with a fake
+      musicdb; the badge click untested): gd = ShowPlay(Deleted), badge "Deleted ! N" only while steps failed.
+      Incident: the dotfiles commit used ShowPlay(Deleted), which the installed rormpc did not know, so your config
+      failed to load ("Unexpected variant named `Deleted`") until the coordinator installed rormpc 46c2a3a minutes
+      later (running instances were not affected). Lesson queued for AGENTS.md.
 - [ ] Remove the Up next tab; its last bits move into Music (asked 2026-10-10: "not needed at all. does it duplicate
       Music? ask the models"; Sol 54478bdf and MiMo 3e4eecf6: yes, a duplicate; Music already has the ↑ rows with
       play now, J/K, Make next, remove). Missing in Music and to be added: a header row "Up next · N" between the
@@ -465,6 +470,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       by accident), "Clear Up next…" (confirmed) on it, the rejected-play error in Music's footer even when no
       request row is left, a key to jump to the block (gu). The Up next tab leaves the default tabs and your config;
       the pane stays loadable.
+- [ ] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only
+      together with the install of a rormpc that knows it (the coordinator installs, then commits the config), never
+      ahead of it (2026-10-10: ShowPlay(Deleted) broke loading the config until the install).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
