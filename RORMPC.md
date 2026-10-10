@@ -772,7 +772,8 @@ uncommitted changes), usable in any theme property, e.g. a border title:
 ### Filters
 
 The left column edits what `hits` computes: Period (decades, several pooled into one ranking, or a year range
-from/to), Top % ranges (1-10, 11-20, 21-50; percent of the whole chart cohort after the genre filter, songs you
+from/to: each bound stops at the other while stepping, and Space turns a bound into "Any", an open end, keeping its
+year for when it is turned back on), Top % ranges (1-10, 11-20, 21-50; percent of the whole chart cohort after the genre filter, songs you
 don't have included), genres with three states each (off, `+` include, `−` exclude), owned only, and Apply.
 `h` / `l` move between the filters and the table (on a year row they change the year), Space / Enter toggle,
 Enter on Apply runs `hits ... --json PATH` in a background thread. One run at a time; an Apply during a run is
