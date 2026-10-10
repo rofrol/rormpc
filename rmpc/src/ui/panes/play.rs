@@ -433,7 +433,7 @@ impl Pane for PlayPane {
                 (_, Some(QueueActions::PinSong | QueueActions::ExcludeSong)) if event.claim_queue().is_some() => {
                     let kind = if matches!(queue_action, Some(QueueActions::PinSong)) { Kind::Pin } else { Kind::Exclude };
                     if let Some(song) = self.queue.selected_song(ctx) {
-                        let plus = self.baseline.as_ref().map_or([0; 4], rormpc_exceptions::plus_sets_of_args);
+                        let plus = self.baseline.as_ref().map_or_else(Vec::new, rormpc_exceptions::plus_sets_of_args);
                         rormpc_exceptions::open_for_song_with_sets(ctx, kind, &song, plus);
                     } else {
                         status_error!("No song selected");

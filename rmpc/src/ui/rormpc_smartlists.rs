@@ -65,6 +65,10 @@ pub struct SmartList {
     /// why this version cannot run it ("made by a newer rormpc-tools, update it (…)")
     #[serde(default)]
     pub blocked: Option<String>,
+    /// why it fails when it runs, though it loads ("smart list cycle: A → B → A": another list it uses as a set
+    /// leads back to it)
+    #[serde(default)]
+    pub error: Option<String>,
     /// its rules as a `hits` result's `args`: what the filter column loads
     #[serde(default)]
     pub args: Option<serde_json::Value>,
@@ -237,7 +241,8 @@ fn exported_label(list: &SmartList) -> String {
     }
 }
 
-/// The picker's line of a list: "▶ 80s party · +2 ✚ −1 ⊘ · 287 songs · exported 3 h ago".
+/// The picker's line of a list: "▶ 80s party · +2 ✚ −1 ⊘ · 287 songs · exported 3 h ago", then "· ! smart list
+/// cycle: A → B → A" when it cannot run.
 pub fn list_line(list: &SmartList, open: bool) -> String {
     let mut fixes = String::new();
     if list.exceptions.pins > 0 {
@@ -246,7 +251,8 @@ pub fn list_line(list: &SmartList, open: bool) -> String {
     if list.exceptions.exclusions > 0 {
         let _ = write!(fixes, " · −{} ⊘", list.exceptions.exclusions);
     }
-    format!("{} {}{fixes} · {}", if open { "▶" } else { " " }, list.name, exported_label(list))
+    let error = list.error.as_ref().map_or_else(String::new, |e| format!(" · ! {e}"));
+    format!("{} {}{fixes} · {}{error}", if open { "▶" } else { " " }, list.name, exported_label(list))
 }
 
 // ---------------------------------------------------------------- what Play takes back
@@ -675,9 +681,10 @@ mod tests {
     #[test]
     fn parses_the_lists_json() {
         let json = r#"{"version": 1, "lists": [
-            {"id": "L1", "name": "80s party", "rules": {"schema": 1}, "blocked": null,
+            {"id": "L1", "name": "80s party", "rules": {"schema": 1}, "blocked": null, "error": null,
              "args": {"period": "1985-1992", "top": "1-10", "genre": "+rock", "artist": "", "owned": false,
-                      "rank": "billboard", "years_of": "chart", "sets": ["+billboard"], "show_excluded": false,
+                      "rank": "billboard", "years_of": "chart", "sets": ["+billboard", "-tag:Christmas"],
+                      "set_names": {"tag:Christmas": "Tag Christmas"}, "show_excluded": false,
                       "source": null, "open_list": "L1", "open_list_name": "80s party"},
              "formula": "Billboard ∩ 1985-1992 ∩ Top 1-10% ∩ rock", "exceptions": {"pins": 2, "exclusions": 1},
              "playlist": "Smart 80s party", "exported": null, "exported_songs": 0,
@@ -690,6 +697,8 @@ mod tests {
         assert!(lists[0].args.as_ref().is_some_and(|a| a["open_list"] == "L1"));
         assert!(lists[1].blocked.as_deref().is_some_and(|b| b.starts_with("made by a newer rormpc-tools")));
         assert_eq!(list_line(&lists[0], true), "▶ 80s party · +2 ✚ · −1 ⊘ · not exported yet");
+        let cyclic = SmartList { error: Some("smart list cycle: A → B → A".to_owned()), ..lists[0].clone() };
+        assert_eq!(list_line(&cyclic, false), "  80s party · +2 ✚ · −1 ⊘ · not exported yet · ! smart list cycle: A → B → A");
         assert!(parse_lists(r#"{"version": 2, "lists": []}"#).is_err());
     }
 

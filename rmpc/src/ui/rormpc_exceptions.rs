@@ -27,7 +27,7 @@ use crate::{
         events::AppEvent,
         macros::{modal, status_error, status_info},
     },
-    ui::{modals::menu::modal::MenuModal, rormpc_hits_rules::SETS},
+    ui::modals::menu::modal::MenuModal,
 };
 
 /// Runs after an exception was recorded or removed (the Hits pane runs `hits` again to refresh its marks).
@@ -107,14 +107,15 @@ struct ListFile {
     exceptions: Vec<Listed>,
 }
 
-/// "library" -> "Library", "set:billboard" -> "Billboard US" (the chip's label), "list:ID" -> "smart list NAME".
+/// "library" -> "Library", "set:billboard" -> "Billboard US" (the chip's label), "set:tag:God" -> "Tag God",
+/// "set:list:ID" -> "Smart NAME" (a smart list used as a set), "list:ID" -> "smart list NAME" (the open list).
 pub fn scope_label(scope: &str) -> String {
     if let Some(id) = scope.strip_prefix("list:") {
         return format!("smart list {}", crate::ui::rormpc_smartlists::name_of(id));
     }
     match scope.strip_prefix("set:") {
         _ if scope == "library" => "Library".to_owned(),
-        Some(key) => SETS.iter().find(|(k, _, _)| *k == key).map_or_else(|| key.to_owned(), |(_, label, _)| (*label).to_owned()),
+        Some(key) => crate::ui::rormpc_hits_rules::set_label(key),
         None => scope.to_owned(),
     }
 }
@@ -137,15 +138,15 @@ pub fn default_scope() -> String {
     crate::ui::rormpc_smartlists::open().map_or_else(|| "library".to_owned(), |(id, _)| format!("list:{id}"))
 }
 
-/// The scopes `+` / `-` offer: the default first, then library and each `+` set of the selection.
-pub fn scopes(plus_sets: [i8; 4]) -> Vec<String> {
+/// The scopes `+` / `-` offer: the default first, then library and each `+` set of the selection (its keys,
+/// `rormpc_hits_rules::plus_keys`: the fixed ones, then the named ones).
+pub fn scopes(plus_sets: &[String]) -> Vec<String> {
     scopes_from(default_scope(), plus_sets)
 }
 
-fn scopes_from(default: String, plus_sets: [i8; 4]) -> Vec<String> {
+fn scopes_from(default: String, plus_sets: &[String]) -> Vec<String> {
     let mut out = vec![default];
-    let rest = std::iter::once("library".to_owned())
-        .chain(SETS.iter().zip(plus_sets).filter(|(_, s)| *s > 0).map(|((key, _, _), _)| format!("set:{key}")));
+    let rest = std::iter::once("library".to_owned()).chain(plus_sets.iter().map(|key| format!("set:{key}")));
     for scope in rest {
         if !out.contains(&scope) {
             out.push(scope);
@@ -205,7 +206,7 @@ fn target_args(target: &Target) -> Vec<String> {
 }
 
 /// `+` / `-` on a row: the scope menu, then `hits except pin|exclude`. A pin needs an owned file.
-pub fn open_scope_menu(ctx: &Ctx, command: Vec<String>, kind: Kind, target: Target, plus_sets: [i8; 4], done: Option<Done>) {
+pub fn open_scope_menu(ctx: &Ctx, command: Vec<String>, kind: Kind, target: Target, plus_sets: Vec<String>, done: Option<Done>) {
     if kind == Kind::Pin && target.file.is_none() {
         return status_info!("A pin needs an owned file: '{}' is missing (fetch it first, or exclude it)", target.title);
     }
@@ -218,7 +219,7 @@ pub fn open_scope_menu(ctx: &Ctx, command: Vec<String>, kind: Kind, target: Targ
         .width(60)
         .list_section(ctx, move |mut section| {
             section.add_item(title, |_| Ok(()));
-            for scope in scopes(plus_sets) {
+            for scope in scopes(&plus_sets) {
                 let (command, done) = (command.clone(), done.clone());
                 let mut args = vec!["except".to_owned(), kind.verb().to_owned(), "--scope".to_owned(), scope.clone()];
                 args.extend(target_args(&target));
@@ -243,7 +244,7 @@ pub fn grouped(mut items: Vec<Listed>) -> Vec<(String, Vec<Listed>)> {
         if scope == "library" {
             return 0;
         }
-        scope.strip_prefix("set:").and_then(|k| SETS.iter().position(|(key, _, _)| *key == k)).map_or(99, |i| i + 1)
+        scope.strip_prefix("set:").and_then(|k| crate::ui::rormpc_hits_rules::SETS.iter().position(|(key, _, _)| *key == k)).map_or(99, |i| i + 1)
     };
     items.sort_by(|a, b| {
         (order(&a.scope), &a.scope, &a.action, a.artist.as_deref().unwrap_or_default().to_lowercase())
@@ -289,10 +290,13 @@ pub fn open_list(ctx: &Ctx, command: &[String], done: Option<&Done>) {
     menu = menu.list_section(ctx, move |section| Some(section.item(title, |_| Ok(()))));
     for (scope, list) in grouped(items) {
         let (command, done) = (command.to_vec(), done.cloned());
-        let label = list
-            .first()
-            .and_then(|e| e.scope_name.clone())
-            .map_or_else(|| scope_label(&scope), |name| format!("smart list {name}"));
+        // `hits` names a smart list's scope ("80s party") and a named set's ("Tag God")
+        let name = list.first().and_then(|e| e.scope_name.clone());
+        let label = match name {
+            Some(name) if scope.starts_with("list:") => format!("smart list {name}"),
+            Some(name) => name,
+            None => scope_label(&scope),
+        };
         menu = menu.list_section(ctx, move |mut section| {
             section.add_item(label, |_| Ok(()));
             for e in list {
@@ -328,7 +332,7 @@ pub fn key_hint(ctx: &Ctx, kind: Kind) -> String {
 
 /// The `+` sets of the Hits result on screen (its file's `args.sets`), for the Queue's scope menu: the songs in
 /// the queue came from it when it was played as the source.
-pub fn applied_plus_sets(path: &str) -> [i8; 4] {
+pub fn applied_plus_sets(path: &str) -> Vec<String> {
     #[derive(Deserialize)]
     struct File {
         args: serde_json::Value,
@@ -338,28 +342,30 @@ pub fn applied_plus_sets(path: &str) -> [i8; 4] {
         _ => path.to_owned(),
     };
     let Some(file) = std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str::<File>(&t).ok()) else {
-        return [0; 4];
+        return Vec::new();
     };
     plus_sets_of_args(&file.args)
 }
 
-/// The `+` sets of a `hits` result's `args` (Play keeps them in source.json as the rules it played).
-pub fn plus_sets_of_args(args: &serde_json::Value) -> [i8; 4] {
+/// The keys of the `+` sets of a `hits` result's `args` (Play keeps them in source.json as the rules it played).
+pub fn plus_sets_of_args(args: &serde_json::Value) -> Vec<String> {
+    use crate::ui::rormpc_hits_rules as rules;
     #[derive(Deserialize)]
     struct Args {
         #[serde(default)]
         sets: Option<Vec<String>>,
         #[serde(default)]
+        set_names: Option<std::collections::HashMap<String, String>>,
+        #[serde(default)]
         source: Option<String>,
         #[serde(default)]
         sort: Option<String>,
     }
-    let Ok(args) = serde_json::from_value::<Args>(args.clone()) else { return [0; 4] };
-    let sets = match &args.sets {
-        Some(values) => crate::ui::rormpc_hits_rules::parse_sets(values),
-        None => crate::ui::rormpc_hits_rules::from_source(args.source.as_deref(), args.sort.as_deref()).0,
-    };
-    sets.map(|s| s.max(0))
+    let Ok(args) = serde_json::from_value::<Args>(args.clone()) else { return Vec::new() };
+    match &args.sets {
+        Some(values) => rules::plus_keys(rules::parse_sets(values), &rules::parse_named(values, args.set_names.as_ref())),
+        None => rules::plus_keys(rules::from_source(args.source.as_deref(), args.sort.as_deref()).0, &[]),
+    }
 }
 
 /// `+` / `-` on a Queue row: the song's file, the `+` sets of the Hits result the queue may have come from.
@@ -368,7 +374,7 @@ pub fn open_for_queue_song(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Son
 }
 
 /// `+` / `-` on a queued song, offering the `+` sets `plus` as scopes (Play: those of the rules it played).
-pub fn open_for_song_with_sets(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song, plus: [i8; 4]) {
+pub fn open_for_song_with_sets(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song, plus: Vec<String>) {
     let tag = |name: &str| song.metadata.get(name).map(|v| v.last().to_owned());
     let target = Target {
         file: Some(song.file.clone()),
@@ -471,7 +477,7 @@ mod tests {
 
     #[test]
     fn an_open_smart_list_is_the_default_scope_and_says_when_it_applies() {
-        assert_eq!(scopes_from("list:L1".to_owned(), [1, 0, 0, 0]), ["list:L1", "library", "set:billboard"]);
+        assert_eq!(scopes_from("list:L1".to_owned(), &["billboard".to_owned()]), ["list:L1", "library", "set:billboard"]);
         assert_eq!(scope_item(Kind::Pin, "list:abcdef1234"), "in the smart list abcdef12 only (while it is open)");
         assert_eq!(scope_item(Kind::Exclude, "list:abcdef1234"), "out of the smart list abcdef12 (while it is open)");
         let e = RowException { action: "pin".to_owned(), scope: "list:abcdef1234".to_owned(), applies: false, via: None };
@@ -480,10 +486,24 @@ mod tests {
 
     #[test]
     fn scopes_put_the_default_first_then_the_plus_sets() {
-        assert_eq!(scopes([1, 0, -1, 1]), ["library", "set:billboard", "set:recommended"]);
-        assert_eq!(scopes([0; 4]), ["library"]);
+        let plus = crate::ui::rormpc_hits_rules::plus_keys([1, 0, -1, 1], &[]);
+        assert_eq!(scopes(&plus), ["library", "set:billboard", "set:recommended"]);
+        assert_eq!(scopes(&[]), ["library"]);
         assert_eq!(scope_label("set:likes"), "my likes");
         assert_eq!(scope_label("library"), "Library");
+    }
+
+    #[test]
+    fn named_sets_are_scopes_too() {
+        let args = serde_json::json!({"sets": ["+billboard", "+tag:God", "-playlist:Road trip", "+live:yt-PL9"],
+            "set_names": {"live:yt-PL9": "Discover copy live"}});
+        let plus = plus_sets_of_args(&args);
+        assert_eq!(plus, ["billboard", "tag:God", "live:yt-PL9"]);
+        assert_eq!(scopes(&plus), ["library", "set:billboard", "set:tag:God", "set:live:yt-PL9"]);
+        assert_eq!(scope_label("set:tag:God"), "Tag God");
+        assert_eq!(scope_label("set:live:yt-PL9"), "Discover copy live");
+        assert_eq!(scope_label("set:list:abcdef1234"), "Smart abcdef12");
+        assert_eq!(scope_item(Kind::Pin, "set:tag:God"), "in Tag God only (while it is +)");
     }
 
     #[test]

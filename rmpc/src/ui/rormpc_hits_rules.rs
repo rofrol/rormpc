@@ -6,6 +6,14 @@
 //!
 //! Top % is cut in the rank's own population, so a song's rank never depends on which chips are on; with Rank by
 //! none there is no Top %.
+//!
+//! Named sets (phase 5) are added through "+ set…" (`rormpc_sets`): a tag list `tag:NAME`, a stored MPD playlist
+//! `playlist:NAME`, a Live playlist `live:ID` and a smart list `list:ID`, tri-state rows under the fixed ones.
+
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+};
 
 /// The fixed set chips: `hits --set` key, row label, name in the formula (as `hits_rules.SET_KINDS`).
 pub const SETS: [(&str, &str, &str); 4] = [
@@ -134,7 +142,87 @@ pub fn from_source(source: Option<&str>, sort: Option<&str>) -> ([i8; 4], RankBy
     }
 }
 
-/// `--set` values (`["+billboard", "-likes"]`) as chip signs; unknown kinds (later "+ set…" ones) are skipped.
+/// A set added through "+ set…": its canonical `hits` key, its name in the rows and the formula ("Tag God"), and
+/// its sign (-1 exclude, 0 off, 1 include; an added set keeps its row while off).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedSet {
+    pub key: String,
+    pub name: String,
+    pub sign: i8,
+}
+
+/// A named set's name from its key alone, as `hits_rules.set_name` makes it: "tag:God" -> "Tag God".
+pub fn default_label(key: &str) -> String {
+    let (kind, name) = key.split_once(':').unwrap_or((key, ""));
+    let kind = match kind {
+        "tag" => "Tag",
+        "playlist" => "Playlist",
+        "live" => "Live",
+        "list" => "Smart",
+        other => other,
+    };
+    format!("{kind} {name}")
+}
+
+fn names() -> &'static Mutex<HashMap<String, String>> {
+    static NAMES: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    NAMES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Keep a named set's name for scope labels elsewhere (a Live playlist and a smart list are keyed by id).
+pub fn remember(key: &str, name: &str) {
+    if let Ok(mut n) = names().lock() {
+        n.insert(key.to_owned(), name.to_owned());
+    }
+}
+
+/// A set's name: a fixed chip's label, else the name last seen for it, else a smart list's by the loaded lists,
+/// else one made from its key.
+pub fn set_label(key: &str) -> String {
+    if let Some((_, label, _)) = SETS.iter().find(|(k, _, _)| *k == key) {
+        return (*label).to_owned();
+    }
+    if let Some(name) = names().lock().ok().and_then(|n| n.get(key).cloned()) {
+        return name;
+    }
+    match key.strip_prefix("list:") {
+        Some(id) => format!("Smart {}", crate::ui::rormpc_smartlists::name_of(id)),
+        None => default_label(key),
+    }
+}
+
+/// The named sets of `--set` values (`"+tag:God"`), named by a result's `set_names` (else by their keys).
+pub fn parse_named(values: &[String], set_names: Option<&HashMap<String, String>>) -> Vec<NamedSet> {
+    let mut out: Vec<NamedSet> = Vec::new();
+    for v in values {
+        let (sign, key) = match v.strip_prefix('-') {
+            Some(key) => (-1, key),
+            None => (1, v.strip_prefix('+').unwrap_or(v)),
+        };
+        if !key.contains(':') {
+            continue;
+        }
+        let name = set_names.and_then(|n| n.get(key).cloned()).unwrap_or_else(|| set_label(key));
+        remember(key, &name);
+        match out.iter_mut().find(|n| n.key == key) {
+            Some(n) => n.sign = sign,
+            None => out.push(NamedSet { key: key.to_owned(), name, sign }),
+        }
+    }
+    out
+}
+
+/// The keys of the `+` sets, fixed ones first: the set scopes `+` / `-` on a row offer.
+pub fn plus_keys(sets: [i8; 4], named: &[NamedSet]) -> Vec<String> {
+    SETS.iter()
+        .zip(sets)
+        .filter(|(_, s)| *s > 0)
+        .map(|((key, _, _), _)| (*key).to_owned())
+        .chain(named.iter().filter(|n| n.sign > 0).map(|n| n.key.clone()))
+        .collect()
+}
+
+/// `--set` values (`["+billboard", "-likes"]`) as chip signs; named sets (`parse_named`) are skipped.
 pub fn parse_sets(values: &[String]) -> [i8; 4] {
     let mut sets = [0; 4];
     for v in values {
@@ -166,6 +254,8 @@ fn signed(items: &[(String, i8)]) -> String {
 /// What `formula` needs from the filter column.
 pub struct Rules<'a> {
     pub sets: [i8; 4],
+    /// the sets added through "+ set…", after the fixed ones (as `rule_args` passes them)
+    pub named: &'a [NamedSet],
     /// the `--years` passed, if any
     pub period: Option<String>,
     /// the Top % ranges passed ("1-10,11-20"), if any
@@ -176,10 +266,15 @@ pub struct Rules<'a> {
 }
 
 /// The selection in one line, the same text `hits` prints and writes as "formula" (`hits_rules.formula`):
-/// "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ Top 1-10% ∩ rock − country".
+/// "(Billboard ∪ Tag God) − Recommended ∩ 1980-1989 ∩ Top 1-10% ∩ rock − country".
 pub fn formula(r: &Rules) -> String {
     let names = |sign: i8| -> Vec<&str> {
-        SETS.iter().zip(r.sets).filter(|(_, s)| *s == sign).map(|((_, _, name), _)| *name).collect()
+        SETS.iter()
+            .zip(r.sets)
+            .filter(|(_, s)| *s == sign)
+            .map(|((_, _, name), _)| *name)
+            .chain(r.named.iter().filter(|n| n.sign == sign).map(|n| n.name.as_str()))
+            .collect()
     };
     let (plus, minus) = (names(1), names(-1));
     let mut out = if plus.is_empty() { "Library".to_owned() } else { union(&plus) };
@@ -256,6 +351,7 @@ mod tests {
         let artists = [("Queen".to_owned(), 1), ("Toto".to_owned(), 1)];
         let r = Rules {
             sets: [1, 1, 0, -1],
+            named: &[],
             period: Some("1980-1989".to_owned()),
             top: Some("1-10".to_owned()),
             genres: &genres,
@@ -266,8 +362,27 @@ mod tests {
             formula(&r),
             "(Billboard ∪ Likes) − Recommended ∩ 1980-1989 ∩ Top 1-10% ∩ rock − country ∩ (Queen ∪ Toto) ∩ owned"
         );
-        let r = Rules { sets: [0, -1, -1, 0], period: None, top: None, genres: &[], artists: &[], owned: false };
+        let r = Rules { sets: [0, -1, -1, 0], named: &[], period: None, top: None, genres: &[], artists: &[], owned: false };
         assert_eq!(formula(&r), "Library − (Likes ∪ Playlists)");
+    }
+
+    #[test]
+    fn named_sets_follow_the_fixed_ones_in_the_formula() {
+        // rormpc-tools' tests/test_hits_rules.py test_the_formula_names_named_sets
+        let names = HashMap::from([("list:L1".to_owned(), "Smart 80s".to_owned())]);
+        let values: Vec<String> =
+            ["+billboard", "+tag:God", "-list:L1", "-playlist:Road trip"].iter().map(|v| (*v).to_owned()).collect();
+        let named = parse_named(&values, Some(&names));
+        assert_eq!(named.iter().map(|n| (n.name.as_str(), n.sign)).collect::<Vec<_>>(), [
+            ("Tag God", 1),
+            ("Smart 80s", -1),
+            ("Playlist Road trip", -1)
+        ]);
+        let r = Rules { sets: parse_sets(&values), named: &named, period: None, top: None, genres: &[], artists: &[], owned: false };
+        assert_eq!(formula(&r), "(Billboard ∪ Tag God) − (Smart 80s ∪ Playlist Road trip)");
+        assert_eq!(plus_keys(r.sets, &named), ["billboard", "tag:God"]);
+        assert_eq!(set_label("list:L1"), "Smart 80s"); // remembered for scope labels
+        assert_eq!((set_label("likes"), default_label("live:yt-PL1")), ("my likes".to_owned(), "Live yt-PL1".to_owned()));
     }
 
     #[test]

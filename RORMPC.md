@@ -142,6 +142,9 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
   "weighted off, now give me the old queue back" is one explicit Apply.
 - A list whose rules or events this version cannot read shows `! NAME · made by a newer rormpc-tools, update it`
   and is never loaded or exported (its last export stays).
+- A smart list can use another one as a set ("+ set…"); updating a list so that it leads back to itself is
+  refused, and a cycle that arrives anyway (two machines' logs merged) shows `· ! smart list cycle: A → B → A` on
+  its row; it still loads, so the filters can be changed, but runs and exports stop with that error.
 - `SelectAlbum`, `L` before, is `M` in the default keys and the example config.
 
 ## Hits pane
@@ -175,8 +178,19 @@ playlists (the songs of all my stored MPD playlists together, each once; "Why" n
 the playlists the tools write themselves — `hits --playlist`'s, "LB …", "Folder …", "Skipped", "Not finished" —
 are left out, and the details line names the ones skipped; "Tag …" and Live playlists count) and recommended (songs
 of artists similar to the ones I play most, from ListenBrainz Radio; no years, the details say which artists led to
-each song). The selection is (union of the + sets, or the whole library when none is +) − (union of the − sets) ∩
-period ∩ genres ∩ artists ∩ Top % ∩ owned (`hits --set ±KIND`). "Rank by" cycles Billboard (best year-end
+each song). "+ set…" adds any other set as a row under these (plans/combined-view.md, phase 5): a tag list ("Tag
+God", `musicdb tag`), a stored MPD playlist (the generated ones, "Tag …" and the Live playlists' own are offered in
+their own sections or not at all), a followed Live playlist (its accepted, downloaded songs) or a smart list (what
+it selects, with its own exceptions). The picker (`hits sets --json`, read in the background) has a section per kind
+with the sizes and `/` searches it; a pick is added as `+`, and its row then cycles like a chip, staying while off;
+"× clear sets" turns every chip off and drops the added rows (dim while there is nothing to clear). A smart list
+that leads back to itself through the lists it uses (a cycle) is listed with the error and not added, the open
+smart list is not offered as its own set, and a run that meets a cycle or a missing tag list or playlist stops
+with that error under the filters, never with an empty set. Named sets are passed as `--set +tag:God`, `--set
+-playlist:NAME`, `--set +live:ID`, `--set +list:ID` (a name may hold spaces, colons and commas), stored that way
+in smart lists, and named in the formula ("Tag God", "Playlist NAME", "Live NAME", "Smart NAME"). The selection
+is (union of the + sets, or the whole library when none is +) − (union of the − sets) ∩ period ∩ genres ∩
+artists ∩ Top % ∩ owned (`hits --set ±KIND`). "Rank by" cycles Billboard (best year-end
 position) / my plays / rediscover (often played, not lately) / none; Top % is cut in the rank's own population (the
 chart songs of the period, or the library songs of the period), before the sets, genres and artists, so a song's
 rank never depends on which chips are on, and a song outside that population shows "—" and stays only with no Top %
@@ -243,8 +257,9 @@ Esc or the Downloads row again goes back to the chart; Apply does too.
 Exceptions (pins and exclusions with a scope, `hits except`, rormpc-tools): `+` on a Hits or Queue row pins the
 song ✚, `-` excludes it ⊘ (QueueActions `PinSong` / `ExcludeSong`; the row menus have "Pin in results…" and
 "Exclude from results…"). A small menu asks the scope, the default first: library (every result) or one of the
-`+` sets of the filters (the Queue offers the `+` sets of the Hits result file), which applies only while that set
-is `+`, or the smart list open in Play, which applies only while it is open and is the default then (see Smart
+`+` sets of the filters, an added one included (`set:tag:God`, `set:playlist:NAME`, `set:live:ID`,
+`set:list:ID`; the Queue offers the `+` sets of the Hits result file), which applies only while that set is `+`, or
+the smart list open in Play, which applies only while it is open and is the default then (see Smart
 lists). A pin puts the song in whatever the filters
 say (a `-` set, genre or artist included); it needs an owned file, has no rank ("—") and sits after the ranked rows,
 outside the ranking and the Top % cut. An exclusion takes the song out; any applicable exclusion beats any pin.
