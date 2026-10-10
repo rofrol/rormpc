@@ -489,7 +489,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       18-600 ms, mpc → MPD stop 20-30 ms, sometimes 90-430 ms: Karabiner's console user server has no launchd
       ProcessType, so its children are throttled and wait for CPU while agents run; mpc resolves "localhost" through
       mDNSResponder (up to 260 ms under load). Fix options in "Needs a decision".
-- [ ] Restore Bon Jovi "Livin' on a Prayer" and make a full restore possible (asked 2026-10-10, next: "I deleted
+- [x] Restore Bon Jovi "Livin' on a Prayer" and make a full restore possible (asked 2026-10-10, next: "I deleted
       Jon Bon Jovi - Livin' on a Prayer. Restore it. And give a way to restore, together with the ListenBrainz
       stats. Ask the models"). Checked: deletion 20261010-162151-140--Bon_Jovi--Bon_Jovi_-_Livin__On_A_Prayer--
       lDK9QqIzhwk--20090617.mp3 at 16:21:51, permanent (the file is gone, not in the Trash), ListenBrainz listens
@@ -508,6 +508,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       playCount 2, 2 play events, the 2026-10-06 16:35:51 listen waits until LB has processed the deletion, the
       2026-10-10 16:15:05 listen was never deleted on LB (imported back hourly), back into the YouTube playlist
       (appended), download allowed again. Open choices in "Needs a decision".
+      Restored 2026-10-10 16:47 by the coordinator (approved by the user), from the rormpc-tools checkout: re-downloaded
+      (another encode, noted), song id, stickers (playCount 2), 2 play events, YouTube playlist (appended),
+      downloads allowed; the 2026-10-06 16:35:51 listen waits for ListenBrainz to process its deletion. The hourly
+      retry needs `musicdb update` from a release with `restore` (installed is 0.2.41): next release.
 
 - [ ] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
       with a screenshot: "error. to the TODO"): Music, Hits 1980-1989 top 1-10% "(modified)", weighted, round done,
@@ -1345,9 +1349,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       for users without Karabiner, mpd-player registers as the Now Playing provider (macOS) / MPRIS player (Linux)
       using the same commands, installed by rormpc_install.sh; 127.0.0.1 in the script is only a stopgap.
       (MiMo's "prev sends both mpc prev and shuffle prev" was dismissed: the script sends one of them.)
-- [ ] Restore: a re-downloaded file whose audio MD5 differs from the deleted one (a new encode of the same video)?
+- [x] Restore: a re-downloaded file whose audio MD5 differs from the deleted one (a new encode of the same video)?
       Options: restore it and note the difference (as built) | keep it in staging for a decision | restore only identical audio
       Checked: the restore worker 2026-10-10.
-- [ ] Restore: when the tagger does not recognise the re-download, write MBID, artist and title from the journal?
+      Decided by the user 2026-10-10: restore it and note the difference (as built).
+- [x] Restore: when the tagger does not recognise the re-download, write MBID, artist and title from the journal?
       Options: yes, from the journal (as built; the same video was recognised before) | keep it in staging for a decision
       Checked: the restore worker 2026-10-10.
+      Decided by the user 2026-10-10: yes, from the journal (as built).
