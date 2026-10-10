@@ -379,8 +379,8 @@ fn plain_reason(f: &FetchItem) -> String {
     }
     if f.state == "blocked" {
         return format!(
-            "You deleted this song from the library: {reason}. It is not fetched again; allow it in the Deleted \
-             tab (or the song's menu), then Retry."
+            "You deleted this song from the library: {reason}. It is not fetched again; allow it in Deleted (gd) \
+             or the song's menu, then Retry."
         );
     }
     if error.contains("rejected before") {
@@ -1608,7 +1608,7 @@ impl HitsPane {
                 if let Some(d) = &r.deleted {
                     lines.push(field("Deleted", format!("{} ({})", d.date(), d.file)));
                     lines.push(Line::from(Span::styled(
-                        "not downloaded again · menu: Allow downloading again (also in the Deleted tab)",
+                        "not downloaded again · menu: Allow downloading again (also in Deleted, gd)",
                         dim,
                     )));
                 } else if let Some(f) = self.fetch_for(r) {

@@ -157,13 +157,19 @@ still load from an explicit config.
   the `Live` badge at the right of Music's header, which shows `Live 3` while items wait for a decision and `↓ 2`
   while a download runs. Space marks items; `a`, `D` and the menu's "Accept marked" / "Reject marked" act on the
   marked items (else the item under the cursor). Esc clears the marks, then closes the panel.
+- **Deleted** is the Deleted pane (see Deleted pane) as a panel over Music: `gd` (ShowPlay(Deleted)), or a click on
+  the `Deleted ! 2` badge left of `Live`, shown only while deletions have failed or unresolved steps (an error, or a
+  step whose outcome is "failed"). The panel has the pane's keys (Enter restores, retries, allows or blocks
+  downloading it again); Esc or a click outside closes it. It replaced the Deleted tab (decided by the user
+  2026-10-10).
 - **Keys** (built-in and `assets/example_config.ron`; `ShowPlay(...)` opens the Music tab from anywhere):
 
   | Key | Map | Action |
   |---|---|---|
-  | `1` / `2` / `3` | global | Music / Up next / Search tabs; `gu` Up next, `gv` Versions, `gd` Deleted, `gy` Lyrics |
+  | `1` / `2` / `3` | global | Music / Up next / Search tabs; `gu` Up next, `gv` Versions, `gy` Lyrics |
   | `5` `6` `7` `8` `9` | global | `ShowPlay(Browse(Folders))`, `(Artists)`, `(AlbumArtists)`, `(Albums)`, `(Lists)` |
   | `0`, `gl` | global | `ShowPlay(Live)`: the Live inbox (`ShowPlay(Queue)` brings the filters back) |
+  | `gd` | global | `ShowPlay(Deleted)`: the Deleted panel |
   | `B` | queue | ToggleBrowse: the left column, Filters or Browse |
   | `[` / `]` | queue | PreviousGrouping / NextGrouping in Browse |
   | `P` | navigation | PlayReplace: play the selection replacing the queue (Browse) |
@@ -174,7 +180,7 @@ still load from an explicit config.
   A config that binds `P` in its queue map (e.g. `"P": SortByColumn(4)`) drops the built-in navigation `P`: a key
   the user binds replaces the built-in binding in every map. Add `"P": PlayReplace` to its `navigation` map; both
   then reach Music, the queue claims its sort and Browse its PlayReplace. Configs with their own digits keep them;
-  bind `ShowPlay(...)` to reach Browse and Live by key (`B` and the badge work without it).
+  bind `ShowPlay(...)` to reach Browse, Live and Deleted by key (`B` and the badges work without it).
 
 ### Smart lists
 
@@ -231,9 +237,10 @@ if the playing song's file is in the visible table, it selects that row and focu
 centres it. A search that hides the song stays intact, and a missing match changes neither selection nor
 playback. Queue-only actions such as removing or reordering queue entries are not applied to chart rows.
 
-The default and example configurations have the tabs Music, Up next, Search, Versions, Deleted and Lyrics (Music
-replaced their Hits, Queue and browsing tabs, see Music tab). `1` opens Music, `2` Up next, `3` Search, `5`-`9` and
-`0` Music's Browse groupings and Live inbox; `gu` opens Up next from any pane. Existing explicit configurations
+The default and example configurations have the tabs Music, Up next, Search, Versions and Lyrics (Music
+replaced their Hits, Queue and browsing tabs and holds Deleted as a panel, see Music tab). `1` opens Music, `2` Up
+next, `3` Search, `5`-`9` and `0` Music's Browse groupings and Live inbox, `gd` its Deleted panel; `gu` opens Up
+next from any pane. Existing explicit configurations
 are not rewritten; the Hits pane works there as before. The last active tab is still restored on startup.
 
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "Sets" are
@@ -395,6 +402,8 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 The Download column says whether the downloaders skip the song (`blocked`: Hits, `hits fetch`, `yt-mp3-mb`,
 Live playlists never download it again; the details list what it matches: video, recording, chart song) or
 `allowed`; the menu switches it (`musicdb deletions allow|block ID`). Restoring a trashed song lifts the block.
+Music shows the pane as a panel (`gd`, or the `Deleted ! N` badge while steps failed or are unresolved); the
+default tabs no longer have a Deleted tab, but an explicit config can still put the pane in one:
 
 ```ron
 (name: "Deleted", pane: Split(size: "100%", direction: Vertical, panes: [
@@ -408,7 +417,7 @@ Public YouTube playlists followed by `liveplaylist` (rormpc-tools newer than 0.2
 when the last check failed, the number of new items), right the selected one's items in playlist order with their
 decision (`?` to review, `✓` accepted, `✗` rejected) and state (to review, queued, downloading, needs match, ready,
 in library, failed, blocked: deleted from the library before, accept it again after allowing it in the Deleted
-tab, gone upstream). Left/Right moves between the two lists. The footer shows the download's progress
+panel (`gd`), gone upstream). Left/Right moves between the two lists. The footer shows the download's progress
 (from the CLI's stderr and its `status.json`), the last download's errors, and for the selected item its error,
 the uncertain MusicBrainz proposal, its file or its video link.
 

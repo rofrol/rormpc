@@ -529,8 +529,8 @@ impl LivePlaylistsPane {
                     let label = match (it.decision.as_str(), it.job.as_deref()) {
                         (_, Some("needs_match")) => Some("Accept as it is (names only, no MBID)"),
                         (_, Some("failed")) => Some("Retry the download"),
-                        // deleted from the library before: accepting again downloads it once the Deleted tab allows it
-                        (_, Some("blocked")) => Some("Accept again (allowed again in the Deleted tab?)"),
+                        // deleted from the library before: accepting again downloads it once Deleted (gd) allows it
+                        (_, Some("blocked")) => Some("Accept again (allowed again in Deleted, gd?)"),
                         ("pending" | "rejected", _) => Some("Accept"),
                         _ => None,
                     };

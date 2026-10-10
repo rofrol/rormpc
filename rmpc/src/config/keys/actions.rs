@@ -137,7 +137,7 @@ pub enum GlobalActionFile {
     PreviousTab,
     SwitchToTab(String),
     /// rormpc: the Music tab with Browse on a grouping (`ShowPlay(Browse(Albums))`), the Live inbox
-    /// (`ShowPlay(Live)`) or the queue (`ShowPlay(Queue)`)
+    /// (`ShowPlay(Live)`), the Deleted journal (`ShowPlay(Deleted)`) or the queue (`ShowPlay(Queue)`)
     ShowPlay(crate::config::tabs::PlayView),
     QueueTab,
     DirectoriesTab,
