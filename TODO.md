@@ -456,6 +456,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       decided by the user 2026-10-10: an overlay in Music): the Deleted pane's table, restore/retry and download
       allow/block in an overlay opened with gd (and a click on its badge), the badge counting failed or unresolved
       steps only; the Deleted tab leaves the default tabs and your config; the pane stays loadable.
+- [ ] Remove the Up next tab; its last bits move into Music (asked 2026-10-10: "not needed at all. does it duplicate
+      Music? ask the models"; Sol 54478bdf and MiMo 3e4eecf6: yes, a duplicate; Music already has the ↑ rows with
+      play now, J/K, Make next, remove). Missing in Music and to be added: a header row "Up next · N" between the
+      playing song and the forecast in both modes, J/K/D/Make next bounded to that block (no moving a forecast row
+      by accident), "Clear Up next…" (confirmed) on it, the rejected-play error in Music's footer even when no
+      request row is left, a key to jump to the block (gu). The Up next tab leaves the default tabs and your config;
+      the pane stays loadable.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
