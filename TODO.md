@@ -399,8 +399,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       installer 76104b2, companions and rormpc 76104b2 installed; dotfiles e7b9272: tabs Play, Up next, Search,
       Versions, Deleted, Lyrics; digits 1-3 for them, 4-9 and 0 left to the built-in keys (Browse groupings, Live
       overlay), gs and gl removed, "P": PlayReplace in the navigation map; the config loads. Restart rormpc.
-- [ ] (approved 2026-10-10 from Proposed) rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
+- [x] (approved 2026-10-10 from Proposed) rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
       phase 1 and 2 workers left it out of scope).
+      Done in rormpc-tools f126481 (worker; README only, pushed).
 - [ ] (approved 2026-10-10 from Proposed) AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
       it (reported by the phase 1 worker 2026-10-10).
 - [ ] (approved 2026-10-10 from Proposed) The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
