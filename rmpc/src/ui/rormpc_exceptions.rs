@@ -11,14 +11,21 @@
 //! queue itself never changes here; the next Apply or "Play these" takes the exception into account. The
 //! Exceptions list (Hits filter column) shows every exception with `hits hide` included and removes one on Enter.
 
-use std::{process::Command, sync::Arc};
+use std::{
+    collections::HashMap,
+    process::Command,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 use serde::Deserialize;
 
 use crate::{
     ctx::Ctx,
     config::keys::QueueActions,
-    shared::macros::{modal, status_error, status_info},
+    shared::{
+        events::AppEvent,
+        macros::{modal, status_error, status_info},
+    },
     ui::{modals::menu::modal::MenuModal, rormpc_hits_rules::SETS},
 };
 
@@ -161,6 +168,7 @@ fn run_in_background(command: Vec<String>, args: Vec<String>, done: Option<Done>
     std::thread::spawn(move || match run(&command, &args) {
         Ok(_) => {
             status_info!("{ok}");
+            invalidate_marks();
             if let Some(done) = done {
                 done();
             }
@@ -302,17 +310,8 @@ pub fn key_hint(ctx: &Ctx, kind: Kind) -> String {
 /// the queue came from it when it was played as the source.
 pub fn applied_plus_sets(path: &str) -> [i8; 4] {
     #[derive(Deserialize)]
-    struct Args {
-        #[serde(default)]
-        sets: Option<Vec<String>>,
-        #[serde(default)]
-        source: Option<String>,
-        #[serde(default)]
-        sort: Option<String>,
-    }
-    #[derive(Deserialize)]
     struct File {
-        args: Args,
+        args: serde_json::Value,
     }
     let path = match (path.strip_prefix("~/"), std::env::var("HOME")) {
         (Some(rest), Ok(home)) => format!("{home}/{rest}"),
@@ -321,15 +320,35 @@ pub fn applied_plus_sets(path: &str) -> [i8; 4] {
     let Some(file) = std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str::<File>(&t).ok()) else {
         return [0; 4];
     };
-    let sets = match &file.args.sets {
+    plus_sets_of_args(&file.args)
+}
+
+/// The `+` sets of a `hits` result's `args` (Play keeps them in source.json as the rules it played).
+pub fn plus_sets_of_args(args: &serde_json::Value) -> [i8; 4] {
+    #[derive(Deserialize)]
+    struct Args {
+        #[serde(default)]
+        sets: Option<Vec<String>>,
+        #[serde(default)]
+        source: Option<String>,
+        #[serde(default)]
+        sort: Option<String>,
+    }
+    let Ok(args) = serde_json::from_value::<Args>(args.clone()) else { return [0; 4] };
+    let sets = match &args.sets {
         Some(values) => crate::ui::rormpc_hits_rules::parse_sets(values),
-        None => crate::ui::rormpc_hits_rules::from_source(file.args.source.as_deref(), file.args.sort.as_deref()).0,
+        None => crate::ui::rormpc_hits_rules::from_source(args.source.as_deref(), args.sort.as_deref()).0,
     };
     sets.map(|s| s.max(0))
 }
 
 /// `+` / `-` on a Queue row: the song's file, the `+` sets of the Hits result the queue may have come from.
 pub fn open_for_queue_song(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song) {
+    open_for_song_with_sets(ctx, kind, song, applied_plus_sets(HITS_FILE));
+}
+
+/// `+` / `-` on a queued song, offering the `+` sets `plus` as scopes (Play: those of the rules it played).
+pub fn open_for_song_with_sets(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song, plus: [i8; 4]) {
     let tag = |name: &str| song.metadata.get(name).map(|v| v.last().to_owned());
     let target = Target {
         file: Some(song.file.clone()),
@@ -337,8 +356,74 @@ pub fn open_for_queue_song(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Son
         artist: tag("artist").unwrap_or_default(),
         title: tag("title").unwrap_or_else(|| song.file.clone()),
     };
-    let plus = applied_plus_sets(HITS_FILE);
     open_scope_menu(ctx, vec![HITS.to_owned()], kind, target, plus, None);
+}
+
+/// The ✚ ⊘ marks of queue rows (Play and Queue): every exception by file, read with `hits exceptions --json` in
+/// the background on first use and again after `+` / `-` or the Exceptions list recorded or removed one.
+#[derive(Debug, Default)]
+struct Marks {
+    by_file: HashMap<String, Kind>,
+    loaded: bool,
+    loading: bool,
+    /// bumped by `invalidate_marks`: a read that started before it is not taken as current
+    generation: u64,
+}
+
+fn marks() -> &'static Mutex<Marks> {
+    static MARKS: OnceLock<Mutex<Marks>> = OnceLock::new();
+    MARKS.get_or_init(Mutex::default)
+}
+
+/// Each listed song's mark: an exclusion wins over a pin, whatever their scopes (the menu says which applies).
+fn marks_by_file(items: &[Listed]) -> HashMap<String, Kind> {
+    let mut out = HashMap::new();
+    for e in items {
+        let Some(file) = &e.file else { continue };
+        let kind = if e.action == "pin" { Kind::Pin } else { Kind::Exclude };
+        let slot = out.entry(file.clone()).or_insert(kind);
+        if kind == Kind::Exclude {
+            *slot = kind;
+        }
+    }
+    out
+}
+
+/// The mark of a queued file, if an exception names it. The first call starts the read; rows get their marks
+/// when it ends (it asks for a render). Unit tests never run `hits`.
+pub fn mark_for(ctx: &Ctx, file: &str) -> Option<Kind> {
+    if cfg!(test) {
+        return None;
+    }
+    let mut m = marks().lock().ok()?;
+    if !m.loaded && !m.loading {
+        m.loading = true;
+        let (generation, sender) = (m.generation, ctx.app_event_sender.clone());
+        std::thread::spawn(move || {
+            let by_file = run(&[HITS.to_owned()], &["exceptions".to_owned(), "--json".to_owned()])
+                .ok()
+                .and_then(|out| serde_json::from_str::<ListFile>(&out).ok())
+                .map(|f| marks_by_file(&f.exceptions))
+                .unwrap_or_default(); // no hits: no marks, and no retry until an exception is recorded
+            if let Ok(mut m) = marks().lock() {
+                m.loading = false;
+                if m.generation == generation {
+                    m.by_file = by_file;
+                    m.loaded = true;
+                }
+            }
+            let _ = sender.send(AppEvent::RequestRender);
+        });
+    }
+    m.by_file.get(file).copied()
+}
+
+/// An exception was recorded or removed: the next render reads the marks again.
+pub fn invalidate_marks() {
+    if let Ok(mut m) = marks().lock() {
+        m.generation += 1;
+        m.loaded = false;
+    }
 }
 
 /// The `hits` program and result file the Queue uses (the Hits pane's defaults, `config/tabs.rs`).
@@ -392,6 +477,19 @@ mod tests {
             ("library", vec!["⊘ Crazy Frog · t".to_owned(), "✚ Kombi · t".to_owned(), "! ✚ Maanam · t (file gone)".to_owned()]),
             ("set:billboard", vec!["⊘ Toto · t".to_owned()]),
         ]);
+    }
+
+    #[test]
+    fn an_exclusion_marks_over_a_pin_and_rows_without_a_file_have_none() {
+        let mut excl = listed("exclude", "set:billboard", "Toto");
+        excl.file = Some("f".to_owned());
+        let mut chart = listed("exclude", "library", "Crazy Frog");
+        chart.file = None;
+        let marks = marks_by_file(&[listed("pin", "library", "Kombi"), excl, chart]);
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks.get("f"), Some(&Kind::Exclude));
+        let pin_only = marks_by_file(&[listed("pin", "library", "Kombi")]);
+        assert_eq!(pin_only.get("f"), Some(&Kind::Pin));
     }
 
     #[test]

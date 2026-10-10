@@ -102,6 +102,7 @@ pub mod volume;
 pub mod versions;
 pub mod up_next;
 pub mod shuffle;
+pub mod play;
 
 #[derive(Debug, Display, strum::EnumDiscriminants)]
 pub enum Panes<'pane_ref, 'pane> {
@@ -338,6 +339,7 @@ impl<'panes> PaneContainer<'panes> {
                 PaneType::LivePlaylists => {
                     Some((pane.pane.clone(), Box::new(LivePlaylistsPane::new()) as Box<dyn BoxedPane>))
                 }
+                PaneType::Play => Some((pane.pane.clone(), Box::new(play::PlayPane::new(ctx)) as Box<dyn BoxedPane>)),
                 _ => None,
             })
     }
@@ -384,7 +386,7 @@ impl<'panes> PaneContainer<'panes> {
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
             )),
-            p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext | PaneType::Shuffle | PaneType::LivePlaylists) => Ok(Panes::Others(
+            p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext | PaneType::Shuffle | PaneType::LivePlaylists | PaneType::Play) => Ok(Panes::Others(
                 self.others
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,

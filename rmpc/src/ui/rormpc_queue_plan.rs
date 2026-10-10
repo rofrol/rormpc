@@ -167,6 +167,8 @@ pub struct PlanView {
     ack_timer: Id,
     freshness_timer: Id,
     scheduled_freshness: f64,
+    /// the title's name: Play's table follows `w`, the Queue pane's `o`
+    pub name: &'static str,
 }
 
 impl PlanView {
@@ -192,7 +194,13 @@ impl PlanView {
             ack_timer: id::new(),
             freshness_timer: id::new(),
             scheduled_freshness: 0.0,
+            name: "Queue · plan (o: queue)",
         }
+    }
+
+    /// The `/` search narrows the rows (typed or kept after Enter).
+    pub fn has_query(&self) -> bool {
+        !self.query.is_empty()
     }
 
     pub fn refresh(&mut self, ctx: &Ctx, snap: bool) {
@@ -784,7 +792,7 @@ impl PlanView {
         };
         let pending = if self.pending.is_some() { " · awaiting patch" } else { "" };
         frame.render_widget(
-            Line::from(format!("Queue · plan (o: queue) · {freshness}{pending}"))
+            Line::from(format!("{} · {freshness}{pending}", self.name))
                 .style(ctx.config.theme.preview_label_style),
             title,
         );
@@ -810,7 +818,12 @@ impl PlanView {
                 .map(|(i, format)| {
                     let is_next = format!("{:?}", format.prop).contains("ShuffleNext");
                     let marked = Some(i) == marker_col && self.marked.contains(&song.id);
+                    // a pin ✚ or an exclusion ⊘ names this file
+                    let except = (Some(i) == marker_col)
+                        .then(|| crate::ui::rormpc_exceptions::mark_for(ctx, &song.file))
+                        .flatten();
                     let prefix_width = if i == 0 && !has_next { 4 } else { 0 }
+                        + if except.is_some() { 2 } else { 0 }
                         + if marked {
                             Line::from(ctx.config.theme.symbols.marker.as_str()).width()
                         } else {
@@ -829,6 +842,9 @@ impl PlanView {
                         )
                         .unwrap_or_default()
                     };
+                    if let Some(kind) = except {
+                        line.spans.insert(0, Span::raw(format!("{} ", kind.mark())));
+                    }
                     if i == 0 && !has_next {
                         let marker_style = if self.is_stale && matches!(row.turn, Turn::Forecast(_))
                         {

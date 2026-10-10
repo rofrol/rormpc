@@ -78,6 +78,40 @@ are left alone; AirPods/Bluetooth buttons and external keyboards' media keys sti
 
 On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-mpris or mpDris2; see TODO.md).
 
+## Play pane
+
+`Pane(Play())`, the first tab of the default config (`1`), is Queue, Hits and Shuffle in one tab
+(plans/combined-view.md, phase 3). The old `Queue`, `Hits()` and `Shuffle()` panes still load from an explicit
+config; Up next stays its own tab. A header line always says what plays and how:
+`▶ Playing from: Hits · 1980s … · weighted · round 12/84` or `… · in queue order`.
+
+- **Normal mode** (weighted off): the table is MPD's queue in its order, as in the Queue pane. The Hits filter
+  column is collapsed to one line naming the source's rules (`Source: Billboard ∩ 1980-1989 ∩ Top 1-10%`); `h` or a
+  click on it opens the column, `l` (or Esc without a preview) closes it again.
+- **Weighted mode** (`w`, ToggleWeightedShuffle, now also in the default keys): the table is the plan projection of
+  the Queue plan view (past plays, `0 ▶`, `↑n` requests, the forecast, then the unplanned rest), and the filter
+  column stays open. `o` does nothing here: the table follows `w`. Turning weighted off keeps the queue as it is.
+- **A filter change prepares**: `hits` runs at once (one run at a time, as Hits' Apply) into its own file,
+  `~/.cache/rormpc/hits/preview.json` (`current.json` stays the Hits pane's), and the table shows that result under
+  a banner: `Preview · <label> · 312 matched · 287 owned · 25 missing · playing song: outside  [ a Apply ]`. MPD is
+  not touched. Esc drops the preview and brings the filters back to the rules being played.
+- **Apply plays**: `a`, the banner's button, the column's `[ Apply ]` or the row menu's "Apply" replace the queue
+  with the preview's owned songs like "Play these N songs": the playing song goes on (outside the new source it
+  plays on and is not in the round), Up next is kept, and `source.json` gets the result's `args` as `rules` and
+  their canonical hash `rules_hash` (sets, Rank by, Years of, period, Top %, genres and artists in any order,
+  owned; not "show excluded"). mpd-player keys its round by that hash: the same rules keep the round, other rules
+  start a new one. Apply asks first only when the queue holds another kind of source (the whole library, a
+  playlist, nothing known) or more than a quarter of the queue (the playing song and Up next not counted) would
+  go. With 0 owned songs it is off ("widen the filter"); the queue is never emptied.
+- **The queue version**: the counts and the confirmation are judged on the queue as it is when `a` is pressed;
+  the replace carries MPD's `playlist` version of that moment and refuses with "The queue changed, preview again"
+  when MPD's differs (a phone, mpc, another rormpc changed it meanwhile). No retry, no delay: `a` again judges the
+  new queue. mpd-player's priority updates count as changes too, so a confirmation left open across a song change
+  is refused.
+- Pins and exclusions: `+` / `-` on a row (queue, plan or preview) open the scope menu with the `+` sets of the
+  rules being played; queue and plan rows (in the Queue pane too) show `✚` / `⊘` for a file an exception names
+  (`hits exceptions --json`, read in the background and again after `+` / `-` or the Exceptions list).
+
 ## Hits pane
 
 Ranked chart hits produced by the `hits` CLI ([rormpc-tools](https://github.com/rofrol/rormpc-tools)), e.g.
@@ -98,10 +132,10 @@ if the playing song's file is in the visible table, it selects that row and focu
 centres it. A search that hides the song stays intact, and a missing match changes neither selection nor
 playback. Queue-only actions such as removing or reordering queue entries are not applied to chart rows.
 
-The default and example configurations put Hits first, Queue second and one top-level Up next tab after Queue.
-`1` opens Hits, `2` Queue, `3`-`8` the library/search tabs; `gu` opens Up next from any pane. Existing explicit
-configurations are not rewritten; move their Hits tab and update their named bindings separately. The last
-active tab is still restored on startup, rather than forcing Hits on every launch.
+The default and example configurations put Play first (it replaced their Hits and Queue tabs, see Play pane)
+and one top-level Up next tab after it. `1` opens Play, `3`-`8` the library/search tabs (`2`, which opened Queue,
+is unbound until phase 3b renumbers the tabs); `gu` opens Up next from any pane. Existing explicit configurations
+are not rewritten; the Hits pane works there as before. The last active tab is still restored on startup.
 
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "Sets" are
 chips like the genre rows (click or Space cycles off → + → − → off): Billboard US (year-end charts), my likes, my

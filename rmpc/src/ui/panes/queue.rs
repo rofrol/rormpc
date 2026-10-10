@@ -102,6 +102,8 @@ pub struct QueuePane {
     /// rormpc: the like column (x, width) of the last render, and the row whose like cell the mouse is over
     like_col: Option<(u16, u16)>,
     hover_like: Option<usize>,
+    /// rormpc: Play's table follows the weighted shuffle instead of `o` (`follow_weighted`); None: `ctx.queue_plan`
+    forced_plan: Option<bool>,
 }
 
 /// rormpc: state of the Queue's live filter.
@@ -147,6 +149,7 @@ impl QueuePane {
             find: None,
             like_col: None,
             hover_like: None,
+            forced_plan: None,
         };
 
         s.recalculate_album_indices();
@@ -180,6 +183,73 @@ impl QueuePane {
 
     /// rormpc: point the physical-order Dir at the plan view's selected and marked song IDs, so the
     /// ordinary ID-based Queue actions act on the songs the plan view shows.
+    /// rormpc: the plan view is shown (Play: weighted on; elsewhere: `o`).
+    fn plan_view(&self, ctx: &Ctx) -> bool {
+        self.forced_plan.unwrap_or_else(|| ctx.queue_plan.get())
+    }
+
+    /// rormpc: Play's table: the plan view while the weighted shuffle is on, MPD's queue order while it is off.
+    /// It never touches `ctx.queue_plan`, so a Queue pane elsewhere keeps its own `o` state.
+    pub(crate) fn follow_weighted(&mut self, on: bool, ctx: &Ctx) {
+        self.plan.name = "Plan (w off: queue order)";
+        if self.forced_plan != Some(on) {
+            self.forced_plan = Some(!on); // switch_view goes from the view shown to the other one
+            self.switch_view(ctx);
+        }
+    }
+
+    /// rormpc: the song under the cursor, in either view.
+    pub(crate) fn selected_song(&self, ctx: &Ctx) -> Option<Song> {
+        if self.plan_view(ctx) {
+            let id = self.plan.selected_for_action()?;
+            return ctx.queue.iter().find(|s| s.id == id).cloned();
+        }
+        self.queue.selected().cloned()
+    }
+
+    /// rormpc: Esc has something to do in the table itself (marks, the `/` filter, the plan's search).
+    pub(crate) fn esc_pending(&self, ctx: &Ctx) -> bool {
+        if self.plan_view(ctx) {
+            return !self.plan.marked.is_empty() || self.plan.typing || self.plan.has_query();
+        }
+        !self.queue.marked().is_empty() || self.find.is_some()
+    }
+
+    /// rormpc: physical queue order <-> plan view, keeping the selected and marked songs by ID.
+    fn switch_view(&mut self, ctx: &Ctx) {
+        let to_plan = !self.plan_view(ctx);
+        if to_plan {
+            let selected = self.queue.selected().map(|s| s.id);
+            let marked = self
+                .queue
+                .marked()
+                .iter()
+                .filter_map(|i| self.queue.items.get(*i))
+                .map(|s| s.id)
+                .collect();
+            if self.find.is_some() {
+                self.end_find(ctx, false);
+            }
+            self.plan.select_id(selected);
+            self.plan.marked = marked;
+        } else {
+            let selected = self.plan.selected_id;
+            self.queue.items.clone_from(&ctx.queue);
+            let idx = selected.and_then(|id| ctx.queue.iter().position(|s| s.id == id));
+            self.queue.select_idx(idx.unwrap_or(0), ctx.config.scrolloff);
+            self.map_plan_marks(ctx);
+            self.recalculate_album_indices();
+        }
+        match self.forced_plan.as_mut() {
+            Some(forced) => *forced = to_plan,
+            None => ctx.queue_plan.set(to_plan),
+        }
+        if to_plan {
+            self.plan.refresh(ctx, false);
+            crate::ui::rormpc_player::refresh_presence(ctx);
+        }
+    }
+
     fn map_plan_selection(&mut self, ctx: &Ctx) {
         self.queue.items.clone_from(&ctx.queue);
         self.queue.state.set_content_len(Some(ctx.queue.len()));
@@ -532,7 +602,7 @@ impl QueuePane {
 
 impl Pane for QueuePane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> anyhow::Result<()> {
-        if ctx.queue_plan.get() {
+        if self.plan_view(ctx) {
             self.plan.render(frame, area, ctx);
             return Ok(());
         }
@@ -603,6 +673,9 @@ impl Pane for QueuePane {
                 let up_badge = (!has_next_col)
                     .then(|| up_next.iter().position(|id| *id == song.id).map(|k| format!("↑{} ", k + 1)))
                     .flatten();
+                // a pin ✚ or an exclusion ⊘ (`+` / `-`) names this file
+                let except_badge =
+                    crate::ui::rormpc_exceptions::mark_for(ctx, &song.file).map(|k| format!("{} ", k.mark()));
                 let matches_filter = is_currently_playing_song
                     || if self.queue.filter_active {
                         song.matches_formats(self.column_formats.as_slice(), &filter, ctx)
@@ -623,6 +696,9 @@ impl Pane for QueuePane {
                         max_len = max_len.saturating_sub(DUPLICATE_BADGE.chars().count());
                     }
                     if let (Some(badge), 0) = (&up_badge, i) {
+                        max_len = max_len.saturating_sub(badge.chars().count());
+                    }
+                    if let (Some(badge), 0) = (&except_badge, i) {
                         max_len = max_len.saturating_sub(badge.chars().count());
                     }
                     let format = &formats[i];
@@ -663,6 +739,9 @@ impl Pane for QueuePane {
                     if let (Some(badge), 0) = (&up_badge, i) {
                         let badge = Span::styled(badge.clone(), Style::default().add_modifier(Modifier::BOLD));
                         line.spans.insert(usize::from(is_marked), badge);
+                    }
+                    if let (Some(badge), 0) = (&except_badge, i) {
+                        line.spans.insert(usize::from(is_marked), Span::raw(badge.clone()));
                     }
                     if Some(i) == like_idx && hover_like == Some(idx) && line.width() == 0 {
                         // the liked glyph, dimmed: same shape, so it reads "click to like" (♡ is narrower in some fonts)
@@ -854,7 +933,7 @@ impl Pane for QueuePane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
-        if ctx.queue_plan.get() {
+        if self.plan_view(ctx) {
             if !self.plan.mouse(event, ctx)? {
                 self.map_plan_selection(ctx);
                 self.open_context_menu(ctx);
@@ -1049,7 +1128,7 @@ impl Pane for QueuePane {
     }
 
     fn handle_insert_mode(&mut self, kind: InputResultEvent, ctx: &mut Ctx) -> Result<()> {
-        if ctx.queue_plan.get() {
+        if self.plan_view(ctx) {
             return self.plan.insert(&kind, ctx);
         }
         if let Some(f) = self.find.as_mut().filter(|f| f.typing) {
@@ -1087,7 +1166,7 @@ impl Pane for QueuePane {
     }
 
     fn handle_insert_nav(&mut self, down: bool, handled: &mut bool, ctx: &mut Ctx) -> Result<()> {
-        if ctx.queue_plan.get() && self.plan.typing {
+        if self.plan_view(ctx) && self.plan.typing {
             *handled = true;
             return self.plan.insert_nav(down, ctx);
         }
@@ -1114,35 +1193,14 @@ impl Pane for QueuePane {
             if event.claim_queue().is_none() {
                 return Ok(());
             }
-            if ctx.queue_plan.get() {
-                let selected = self.plan.selected_id;
-                self.queue.items.clone_from(&ctx.queue);
-                let idx = selected.and_then(|id| ctx.queue.iter().position(|s| s.id == id));
-                self.queue.select_idx(idx.unwrap_or(0), ctx.config.scrolloff);
-                self.map_plan_marks(ctx);
-                self.recalculate_album_indices();
-                ctx.queue_plan.set(false);
+            if self.forced_plan.is_some() {
+                status_info!("In Play the table follows w: the plan while weighted, else the queue order");
             } else {
-                let selected = self.queue.selected().map(|s| s.id);
-                let marked = self
-                    .queue
-                    .marked()
-                    .iter()
-                    .filter_map(|i| self.queue.items.get(*i))
-                    .map(|s| s.id)
-                    .collect();
-                if self.find.is_some() {
-                    self.end_find(ctx, false);
-                }
-                self.plan.select_id(selected);
-                self.plan.marked = marked;
-                ctx.queue_plan.set(true);
-                self.plan.refresh(ctx, false);
-                crate::ui::rormpc_player::refresh_presence(ctx);
+                self.switch_view(ctx);
             }
             return Ok(ctx.render()?);
         }
-        if ctx.queue_plan.get() {
+        if self.plan_view(ctx) {
             if self.plan.action(event, ctx)? {
                 return Ok(());
             }
@@ -1267,6 +1325,9 @@ impl Pane for QueuePane {
                         Ok(())
                     });
                     status_info!("Shuffled the queue");
+                }
+                QueueActions::SortByColumn(_) if self.forced_plan == Some(true) => {
+                    status_info!("The plan never sorts MPD; w (weighted off) shows the queue order");
                 }
                 QueueActions::SortByColumn(idx) => {
                     QueueHeaderPane::sort_by_column(self.column_formats.as_slice(), *idx, ctx)?;
