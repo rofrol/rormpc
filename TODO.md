@@ -735,9 +735,20 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Browse › Lists, the Live inbox with multi-select and a badge, a new phase 3b after phase 3. Found in the code:
       a song appended to a queue holding a Hits source with weighted on is never drawn today (shuffle.py draws only
       from source.json's members). Open choices 13-20 are in "Needs a decision".
-- [ ] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
+- [x] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
       opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
       source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
+      Done in rormpc e535666, rormpc-tools 49d85ae (worker; pytest 278, cargo test 1003; tested on a scratch MPD: preview,
+      Apply with the 25% confirmation, the queue-changed refusal, Esc, w on/off keeps the queue, rules hash keeps or
+      starts a round, 0 owned refused, + / - marks; the mouse was not tested). Not released. Settled by the
+      coordinator: the queue version is taken when `a` is pressed, not when the preview was made (mpd-player's
+      priority writes bump MPD's version on every song change, so a preview-time version would refuse almost every
+      Apply; a song change while the confirmation is open refuses it); `w` (ToggleWeightedShuffle) added to the
+      default keys; key 2 (old Queue tab) is unbound until phase 3b renumbers. Noted: the default Play tab is full
+      width (no album art or lyrics as the old Queue tab had); ✚ ⊘ show for every exception on a file, applicable
+      or not; Pane(Play()) has the hits command and ~/.cache/rormpc/hits/preview.json fixed; Enter in a preview row
+      plays/appends it as in Hits; re-applying the same rules works only with that result on screen ("The queue
+      already plays these filters"). Your config needs a Pane(Play()) tab to show it (choice 18).
 - [ ] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
       MPD export "Smart NAME" on by default; no freeze action.
 - [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
