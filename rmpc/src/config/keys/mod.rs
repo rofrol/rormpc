@@ -178,7 +178,9 @@ impl Default for KeyConfigFile {
             (s().char('V'),                       Q::FindVersions),
             (s().char('+'),                       Q::PinSong),
             (s().char('-'),                       Q::ExcludeSong),
-            (s().char('L'),                       Q::SelectAlbum()),
+            (s().char('S'),                       Q::SaveSmartList),
+            (s().char('L'),                       Q::SmartLists),
+            (s().char('M'),                       Q::SelectAlbum()),
             (s().char('X'),                       Q::Shuffle),
         ]);
 

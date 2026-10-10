@@ -4,8 +4,9 @@
 //!   rank and sits after the ranked rows.
 //! - Exclusion ⊘ (`-`): the song is out. Any applicable exclusion beats any pin; a pin beats `-` sets, genres
 //!   and artists.
-//! - Scope: library (every result) or one set, which applies only while that set is `+`. `+` / `-` ask for it in
-//!   a small menu, the default first.
+//! - Scope: library (every result), one set, which applies only while that set is `+`, or a smart list, which
+//!   applies only while that list is open in Play. `+` / `-` ask for it in a small menu, the default (the open
+//!   smart list, else library) first.
 //!
 //! A plain "Remove from queue" or a song added by hand stays a one-off: only `+` / `-` record an exception. The
 //! queue itself never changes here; the next Apply or "Play these" takes the exception into account. The
@@ -95,6 +96,9 @@ pub struct Listed {
     pub gone: bool,
     #[serde(default)]
     pub via: Option<String>,
+    /// a smart list scope's list name
+    #[serde(default)]
+    pub scope_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,8 +107,11 @@ struct ListFile {
     exceptions: Vec<Listed>,
 }
 
-/// "library" -> "Library", "set:billboard" -> "Billboard US" (the chip's label).
+/// "library" -> "Library", "set:billboard" -> "Billboard US" (the chip's label), "list:ID" -> "smart list NAME".
 pub fn scope_label(scope: &str) -> String {
+    if let Some(id) = scope.strip_prefix("list:") {
+        return format!("smart list {}", crate::ui::rormpc_smartlists::name_of(id));
+    }
     match scope.strip_prefix("set:") {
         _ if scope == "library" => "Library".to_owned(),
         Some(key) => SETS.iter().find(|(k, _, _)| *k == key).map_or_else(|| key.to_owned(), |(_, label, _)| (*label).to_owned()),
@@ -117,19 +124,26 @@ pub fn describe(e: &RowException) -> String {
     let what = if e.action == "pin" { "pinned" } else { "excluded" };
     let scope = if e.scope == "library" { "library".to_owned() } else { scope_label(&e.scope) };
     let hide = if e.via.as_deref() == Some("hide") { " (hits hide)" } else { "" };
-    let idle = if e.applies { "" } else { " — not now: only while that set is +" };
+    let idle = match (e.applies, e.scope.starts_with("list:")) {
+        (true, _) => "",
+        (false, true) => " — not now: only while that smart list is open",
+        (false, false) => " — not now: only while that set is +",
+    };
     format!("{what} · {scope}{hide}{idle}")
 }
 
-/// The default scope of a new pin or exclusion: the open smart list, else library (decided 2026-10-09). Smart
-/// lists come later (phase 4); until then it is always library.
+/// The default scope of a new pin or exclusion: the open smart list (Play's), else library (decided 2026-10-09).
 pub fn default_scope() -> String {
-    "library".to_owned()
+    crate::ui::rormpc_smartlists::open().map_or_else(|| "library".to_owned(), |(id, _)| format!("list:{id}"))
 }
 
 /// The scopes `+` / `-` offer: the default first, then library and each `+` set of the selection.
 pub fn scopes(plus_sets: [i8; 4]) -> Vec<String> {
-    let mut out = vec![default_scope()];
+    scopes_from(default_scope(), plus_sets)
+}
+
+fn scopes_from(default: String, plus_sets: [i8; 4]) -> Vec<String> {
+    let mut out = vec![default];
     let rest = std::iter::once("library".to_owned())
         .chain(SETS.iter().zip(plus_sets).filter(|(_, s)| *s > 0).map(|((key, _, _), _)| format!("set:{key}")));
     for scope in rest {
@@ -144,13 +158,15 @@ fn scope_item(kind: Kind, scope: &str) -> String {
     match (kind, scope) {
         (Kind::Pin, "library") => "in every list (library)".to_owned(),
         (Kind::Exclude, "library") => "out of every list (library)".to_owned(),
+        (Kind::Pin, s) if s.starts_with("list:") => format!("in the {} only (while it is open)", scope_label(s)),
+        (Kind::Exclude, s) if s.starts_with("list:") => format!("out of the {} (while it is open)", scope_label(s)),
         (Kind::Pin, s) => format!("in {} only (while it is +)", scope_label(s)),
         (Kind::Exclude, s) => format!("out of {} (while it is +)", scope_label(s)),
     }
 }
 
 /// `hits` with these arguments; Err is stderr's last line.
-fn run(command: &[String], args: &[String]) -> Result<String, String> {
+pub(crate) fn run(command: &[String], args: &[String]) -> Result<String, String> {
     match Command::new(&command[0]).args(&command[1..]).args(args).output() {
         Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
         Ok(out) => Err(String::from_utf8_lossy(&out.stderr)
@@ -220,8 +236,8 @@ pub fn open_scope_menu(ctx: &Ctx, command: Vec<String>, kind: Kind, target: Targ
     modal!(ctx, menu);
 }
 
-/// The exceptions grouped by scope (library first, then the sets in chip order, then anything else), as the
-/// list shows them.
+/// The exceptions grouped by scope (library first, then the sets in chip order, then smart lists and anything
+/// else), as the list shows them.
 pub fn grouped(mut items: Vec<Listed>) -> Vec<(String, Vec<Listed>)> {
     let order = |scope: &str| -> usize {
         if scope == "library" {
@@ -273,8 +289,12 @@ pub fn open_list(ctx: &Ctx, command: &[String], done: Option<&Done>) {
     menu = menu.list_section(ctx, move |section| Some(section.item(title, |_| Ok(()))));
     for (scope, list) in grouped(items) {
         let (command, done) = (command.to_vec(), done.cloned());
+        let label = list
+            .first()
+            .and_then(|e| e.scope_name.clone())
+            .map_or_else(|| scope_label(&scope), |name| format!("smart list {name}"));
         menu = menu.list_section(ctx, move |mut section| {
-            section.add_item(scope_label(&scope), |_| Ok(()));
+            section.add_item(label, |_| Ok(()));
             for e in list {
                 let mut args = vec!["except".to_owned(), "remove".to_owned(), "--scope".to_owned(), e.scope.clone()];
                 match (&e.song, &e.chart_key) {
@@ -445,7 +465,17 @@ mod tests {
             file: Some("f".to_owned()),
             gone: false,
             via: None,
+            scope_name: None,
         }
+    }
+
+    #[test]
+    fn an_open_smart_list_is_the_default_scope_and_says_when_it_applies() {
+        assert_eq!(scopes_from("list:L1".to_owned(), [1, 0, 0, 0]), ["list:L1", "library", "set:billboard"]);
+        assert_eq!(scope_item(Kind::Pin, "list:abcdef1234"), "in the smart list abcdef12 only (while it is open)");
+        assert_eq!(scope_item(Kind::Exclude, "list:abcdef1234"), "out of the smart list abcdef12 (while it is open)");
+        let e = RowException { action: "pin".to_owned(), scope: "list:abcdef1234".to_owned(), applies: false, via: None };
+        assert_eq!(describe(&e), "pinned · smart list abcdef12 — not now: only while that smart list is open");
     }
 
     #[test]

@@ -140,7 +140,9 @@
             "V":          FindVersions,
             "+":          PinSong,
             "-":          ExcludeSong,
-            "L":          SelectAlbum(),
+            "S":          SaveSmartList, // rormpc: Play's filters as a smart list
+            "L":          SmartLists, // rormpc: Play's list picker (smart lists, previous sources, playlists)
+            "M":          SelectAlbum(),
             "X":          Shuffle,
         },
     ),

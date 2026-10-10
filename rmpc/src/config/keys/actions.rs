@@ -379,6 +379,10 @@ pub enum QueueActionsFile {
     PinSong,
     /// rormpc: exclude the selected song (an exception to the Hits rules, with a scope)
     ExcludeSong,
+    /// rormpc: Play saves its filters as a smart list
+    SaveSmartList,
+    /// rormpc: Play's list picker (smart lists, previous sources, playlists)
+    SmartLists,
     Delete,
     DeleteAll,
     Play,
@@ -405,6 +409,8 @@ pub enum QueueActions {
     FindVersions,
     PinSong,
     ExcludeSong,
+    SaveSmartList,
+    SmartLists,
     Delete,
     DeleteAll,
     Play,
@@ -426,6 +432,8 @@ impl TryFrom<QueueActionsFile> for QueueActions {
             QueueActionsFile::FindVersions => Ok(QueueActions::FindVersions),
             QueueActionsFile::PinSong => Ok(QueueActions::PinSong),
             QueueActionsFile::ExcludeSong => Ok(QueueActions::ExcludeSong),
+            QueueActionsFile::SaveSmartList => Ok(QueueActions::SaveSmartList),
+            QueueActionsFile::SmartLists => Ok(QueueActions::SmartLists),
             QueueActionsFile::Delete => Ok(QueueActions::Delete),
             QueueActionsFile::DeleteAll => Ok(QueueActions::DeleteAll),
             QueueActionsFile::Play => Ok(QueueActions::Play),
@@ -471,6 +479,8 @@ impl ToDescription for QueueActions {
             QueueActions::FindVersions => "Open Versions on the selected song's group (Esc returns)".into(),
             QueueActions::PinSong => "Pin the song in Hits results (asks the scope; Queue and Hits)".into(),
             QueueActions::ExcludeSong => "Exclude the song from Hits results (asks the scope; Queue and Hits)".into(),
+            QueueActions::SaveSmartList => "Save Play's filters as a smart list (Play)".into(),
+            QueueActions::SmartLists => "Smart lists, previous sources and playlists (Play)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),
             QueueActions::Play => "Play song under cursor".into(),

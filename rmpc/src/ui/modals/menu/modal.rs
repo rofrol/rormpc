@@ -151,6 +151,15 @@ impl Modal for MenuModal<'_> {
     }
 
     fn handle_key(&mut self, key: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        // rormpc: a multi-action row's own keys (e.g. `a` Apply in Play's list picker)
+        if let Some(SectionType::Multi(s)) = self.sections.get_mut(self.current_section_idx)
+            && let Some(button) = s.shortcut(key)
+        {
+            if s.press(button, ctx)? {
+                self.hide(ctx)?;
+            }
+            return Ok(());
+        }
         if let Some(action) = key.claim_common() {
             match action {
                 CommonAction::EnterSearch => {

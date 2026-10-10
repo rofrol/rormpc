@@ -10,7 +10,7 @@ use ratatui::{
 use super::Section;
 use crate::{
     ctx::Ctx,
-    shared::ext::rect::RectExt as _,
+    shared::{ext::rect::RectExt as _, keys::ActionEvent},
     ui::widgets::button::{Button, ButtonGroup, ButtonGroupState},
 };
 
@@ -22,6 +22,9 @@ pub struct MultiActionSection<'a> {
     pub current_item_style: Style,
     #[debug(skip)]
     pub actions: Vec<(&'a str, Option<Box<dyn FnOnce(&Ctx, String) + Send + Sync + 'static>>)>,
+    /// rormpc: a key for each action (by the action it is bound to), pressed on the selected item
+    #[debug(skip)]
+    pub shortcuts: Vec<Option<fn(&ActionEvent) -> bool>>,
 }
 
 #[derive(derive_more::Debug)]
@@ -39,6 +42,7 @@ impl<'a> MultiActionSection<'a> {
             selected_idx: None,
             current_item_style,
             actions: Vec::new(),
+            shortcuts: Vec::new(),
         }
     }
 
@@ -65,7 +69,33 @@ impl<'a> MultiActionSection<'a> {
         action: impl FnOnce(&Ctx, String) + Send + Sync + 'static,
     ) -> Self {
         self.actions.push((label, Some(Box::new(action))));
+        self.shortcuts.push(None);
         self
+    }
+
+    /// rormpc: an action also run by a key on the selected item; `key` tells the key's bound actions apart.
+    pub fn add_action_with_key(
+        mut self,
+        label: &'a str,
+        key: fn(&ActionEvent) -> bool,
+        action: impl FnOnce(&Ctx, String) + Send + Sync + 'static,
+    ) -> Self {
+        self.actions.push((label, Some(Box::new(action))));
+        self.shortcuts.push(Some(key));
+        self
+    }
+
+    /// rormpc: the action whose key `event` came from, while an item is selected.
+    pub fn shortcut(&self, event: &ActionEvent) -> Option<usize> {
+        self.selected_idx?;
+        self.shortcuts.iter().position(|k| k.is_some_and(|k| k(event)))
+    }
+
+    /// rormpc: run action `button` on the selected item.
+    pub fn press(&mut self, button: usize, ctx: &Ctx) -> Result<bool> {
+        let Some(idx) = self.selected_idx else { return Ok(false) };
+        self.items[idx].buttons_state.select(button);
+        self.confirm(ctx)
     }
 
     pub fn build(&mut self) {
