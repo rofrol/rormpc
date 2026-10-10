@@ -416,10 +416,21 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       library), `chromaprint` ships fpcalc (mp3.scm, -DBUILD_TOOLS=ON), `rsgain` exists (audio.scm). Sol had all
       three right, MiMo was wrong on rsgain. Fixed in rormpc-tools c637b61 (worker, pushed); Arch's rsgain stays
       unverified.
-- [ ] Deleted songs are not downloaded again (asked 2026-10-10: "important. when I delete a song from the library
+- [x] Deleted songs are not downloaded again (asked 2026-10-10: "important. when I delete a song from the library
       and ListenBrainz, it has to be recorded among the deleted, so that it is not downloaded again. ask the
       models"): a worker consults the models, checks what `musicdb delete` and the Deleted tab already record, and
       makes every downloader (hits fetch, yt-mp3-mb, liveplaylist, Versions) skip a deleted song.
+      Done in rormpc-tools ecde9b2, rormpc a17d3ec (worker, consulted Sol + MiMo; pytest 358, cargo test 1032; the UI not run).
+      Before: the delete journal was read by no downloader; "Fetch missing…" after `hits fetch clear` would have
+      fetched a deleted chart song again, and so could yt-mp3-mb and liveplaylist. Now the blocks come from the
+      delete journal (old deletions included, 17 today; undo removes the block): the YouTube video id blocks in
+      every downloader before downloading; the recording MBID and the chart key block unless the delete only removed
+      a duplicate; the chart key gates only chart rows, never a URL you give; a download identified as a deleted
+      recording waits for review (hits fetch, Live "blocked") or is dropped with the reason (yt-mp3-mb). Deliberate
+      re-download: `musicdb deletions allow ID` (deletions/allowed.jsonl), the Deleted tab's and Hits' menus, or
+      `yt-mp3-mb --allow-deleted`. Today's deletion, Beyoncé "Irreplaceable" (14:40, permanent, with history), is
+      blocked by its video, recording and chart key. One old deletion (Bugi, Bugi (Dance RMX).mp3) has no id at all
+      and blocks nothing. Not released.
 - [ ] Weighted mode without the "unplanned" rows (asked 2026-10-10 with a screenshot: "what is the point of showing
       unplanned? ask the models"). Consulted (Sol 75b2c1f0, MiMo 8d2faf34): the rows give access to the pool, but
       "queue order" misleads (the shuffle never plays it) and a big source buries the forecast; both proposed a
@@ -1153,3 +1164,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (MiMo also suggested polling `listclients`: dismissed, MPD has no such command.) Fourth option added below.
       Decided by the user 2026-10-10: keep MPD, only cheap fixes (the main one, appended songs joining the round,
       is done in phase 3b); no fork, no short-queue rebuild.
+- [ ] Deleted songs: should an undo of a deletion also leave a "restored" event in the log, for history (today the
+      journal record just disappears with its block)?
+      Options: no, as it is | yes, append "restored" to deletions/allowed.jsonl
+      Checked: MiMo's point in the deleted-songs consult round 2026-10-10; the worker left it as it is.
+- [ ] Deleted songs: should deleting only a duplicate (another file of the recording stays) block the whole
+      recording too?
+      Options: only that file's YouTube video (as built) | the whole recording
+      Checked: the deleted-songs worker 2026-10-10.
+- [ ] Release now: rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab
+      download column, Hits ⌫ rows, the scope-menu cursor)?
+      Options: yes, now (the block only works once installed) | together with the weighted-mode change
+      Checked: tests green; installed are tools 0.2.40 and rormpc 76104b2.
