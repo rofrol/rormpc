@@ -583,6 +583,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rormpc_install.sh companions, replacing mpd-now-playable (its docs and the user's LaunchAgent removed after the
       switch). A worker plans it first with the models (macOS Now Playing from Python: PyObjC MediaPlayer or a small
       helper; MPRIS via D-Bus), open choices to "Needs a decision"; live key tests are the user's.
+- [ ] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
+      "illogical that this is smaller than from. ask the models. Besides, no option to turn off either this or from?").
+      Consulted (Sol 3f2a69ae, MiMo fb2e7e9b): clamp while stepping (from stops at to and back, equal years allowed;
+      no push, no swap). Decided by the user 2026-10-10 (Sol's way): Space on a bound row toggles it, the year is
+      remembered and re-clamped when turned back on; labels "From: Any" / "From: ‹ 2000 ›", the period line "Any
+      year", "Up to 1991", "From 2000", "1991–2000"; a footer hint "←/→ change year · Space toggle bound"; hits gets
+      an open-ended period.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
