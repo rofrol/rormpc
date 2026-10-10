@@ -393,8 +393,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Browse action (it writes ~/.cache/rormpc/hits/preview.json, the real one), Live multi-select with real items
       (unit test only). Noted: P's confirmation names the first song's file, not its title; t in the old browser
       tabs and in the queue now adds to Up next too. Not released.
-- [ ] After phase 3b: release and install, and change your config like the new default (Play, Up next, Search plus
+- [x] After phase 3b: release and install, and change your config like the new default (Play, Up next, Search plus
       Versions, Deleted, Lyrics; decided 2026-10-10; the coordinator does it).
+      Done 2026-10-10: rormpc-tools v0.2.40 and ro-listenbrainz-mpd v2.6.0-ro.6 tagged and pushed (tests green),
+      installer 76104b2, companions and rormpc 76104b2 installed; dotfiles e7b9272: tabs Play, Up next, Search,
+      Versions, Deleted, Lyrics; digits 1-3 for them, 4-9 and 0 left to the built-in keys (Browse groupings, Live
+      overlay), gs and gl removed, "P": PlayReplace in the navigation map; the config loads. Restart rormpc.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
