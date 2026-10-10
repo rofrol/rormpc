@@ -551,3 +551,71 @@ fn music_queue_order_has_the_up_next_row_and_keeps_songs_out_of_the_block(mut ct
     assert!(!rows.iter().any(|r| r.contains("Up next")), "{rows:#?}");
     Ok(())
 }
+
+/// mpd-player's plan with per-entry rounds and a relaxed rest (rormpc-tools newer than 0.2.43).
+fn rounds_shuffle(entries: &[(u32, u32, bool)], note: &str) -> ShuffleState {
+    let plan = entries
+        .iter()
+        .map(|(id, round, relaxed)| json!({"id": id, "file": format!("s{id}"), "round": round, "relaxed": relaxed}))
+        .collect::<Vec<_>>();
+    serde_json::from_value(json!({"enabled": true, "active": true, "plan_version": "session:1",
+        "updated_at": now() - 1.0, "ahead_note": note, "plan": plan}))
+    .expect("a valid shuffle.json")
+}
+
+#[rstest]
+fn next_round_rows_carry_a_mark_and_the_title_names_it(mut ctx: Ctx) -> Result<()> {
+    live(&mut ctx);
+    publish(rounds_shuffle(
+        &[(8, 0, false), (9, 0, false), (10, 1, false)],
+        "3 ahead · 4 songs in the source",
+    ));
+    let mut view = PlanView::new();
+    let mut terminal = Terminal::new(TestBackend::new(120, 8))?;
+    terminal.draw(|frame| view.render(frame, frame.area(), &ctx))?;
+    let rows = screen_rows(&terminal);
+    assert!(
+        rows[0].contains(
+            "forecast, redrawn every song · 3 ahead · 4 songs in the source · ↻ next round"
+        )
+    );
+    let labels: Vec<_> = view.rows.iter().map(|r| row_label(r, &view.snapshot)).collect();
+    assert_eq!(labels, vec!["1", "2", "3↻"]);
+    Ok(())
+}
+
+#[rstest]
+fn a_relaxed_rest_is_marked_and_explained_by_the_note(mut ctx: Ctx) -> Result<()> {
+    live(&mut ctx);
+    publish(rounds_shuffle(&[(8, 1, true)], "1 ahead · 2 resting · rest relaxed"));
+    let mut view = PlanView::new();
+    let mut terminal = Terminal::new(TestBackend::new(120, 8))?;
+    terminal.draw(|frame| view.render(frame, frame.area(), &ctx))?;
+    assert!(screen_rows(&terminal)[0].contains("· 1 ahead · 2 resting · ≈ rest relaxed"));
+    assert!(!screen_rows(&terminal)[0].contains("↻"));
+    assert_eq!(row_label(&view.rows[0], &view.snapshot), "1≈");
+    Ok(())
+}
+
+#[test]
+fn a_full_plan_has_no_notes_and_an_inactive_one_hides_its_note() {
+    assert_eq!(title_notes(&shuffle(&[1, 2])), "");
+    let mut sh = rounds_shuffle(&[(1, 0, false)], "1 ahead · 9 resting");
+    sh.active = false;
+    assert_eq!(title_notes(&sh), "");
+}
+
+#[rstest]
+fn j_k_never_swap_across_the_round_boundary(mut ctx: Ctx) {
+    live(&mut ctx);
+    publish(rounds_shuffle(&[(1, 0, false), (2, 1, false), (3, 1, false)], ""));
+    let mut view = PlanView::new();
+    view.select_id(Some(1));
+    view.refresh(&ctx, false);
+    view.move_selected(1, &ctx);
+    assert!(view.pending.is_none());
+    view.select_id(Some(2));
+    view.refresh(&ctx, false);
+    view.move_selected(1, &ctx); // within the next round
+    assert!(view.pending.is_some());
+}

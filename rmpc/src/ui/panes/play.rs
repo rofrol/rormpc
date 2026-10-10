@@ -745,7 +745,12 @@ impl PlayPane {
                 if r.done { " · round done".to_owned() } else { format!(" · round {}/{}", r.heard.len(), r.total) }
             });
             let waiting = if shuffle.active { String::new() } else { format!(" · waiting: {}", shuffle.reason) };
-            format!("weighted{round}{waiting}")
+            let short = if shuffle.active && !shuffle.ahead_note.is_empty() {
+                format!(" · {}", shuffle.ahead_note)
+            } else {
+                String::new()
+            };
+            format!("weighted{round}{short}{waiting}")
         } else {
             "in queue order · w: weighted".to_owned()
         };

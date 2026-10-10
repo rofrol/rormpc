@@ -126,6 +126,40 @@ pub fn project(
     rows.into_iter().map(|(_, row)| row).collect()
 }
 
+/// A forecast row's mark: `↻` drawn for the next round, `≈` drawn although resting (rest relaxed).
+pub fn forecast_mark(sh: &ShuffleState, id: Option<u32>) -> &'static str {
+    match sh.plan.iter().find(|e| Some(e.id) == id) {
+        Some(e) if e.relaxed => "≈",
+        Some(e) if e.round > 0 => "↻",
+        _ => "",
+    }
+}
+
+/// The turn column's text: a forecast number carries its mark.
+pub fn row_label(row: &PlanRow, sh: &ShuffleState) -> String {
+    match row.turn {
+        Turn::Forecast(_) => format!("{}{}", row.turn.label(), forecast_mark(sh, row.id)),
+        turn => turn.label(),
+    }
+}
+
+/// The title's tail: why the forecast is short ("4 ahead · 12 resting") and what the marks shown mean.
+pub fn title_notes(sh: &ShuffleState) -> String {
+    let note = if sh.active { sh.ahead_note.as_str() } else { "" };
+    let mut notes = Vec::new();
+    if !note.is_empty() {
+        // mpd-player names a relaxed rest in its note; the mark explains itself there
+        notes.push(note.replace("rest relaxed", "≈ rest relaxed"));
+    }
+    if sh.plan.iter().any(|e| e.round > 0 && !e.relaxed) {
+        notes.push("↻ next round".to_owned());
+    }
+    if sh.plan.iter().any(|e| e.relaxed) && !note.contains("rest relaxed") {
+        notes.push("≈ rest relaxed".to_owned());
+    }
+    if notes.is_empty() { String::new() } else { format!(" · {}", notes.join(" · ")) }
+}
+
 pub fn stale(sh: &ShuffleState, present: bool, now: f64) -> bool {
     !present
         || !sh.updated_at.is_finite()
@@ -469,6 +503,9 @@ impl PlanView {
                 else {
                     return;
                 };
+                if self.snapshot.plan.get(n - 1).is_some_and(|e| e.round != other.round) {
+                    return status_info!("J/K never move a song across the round boundary");
+                }
                 let token =
                     format!("{}-{}-{}", self.snapshot.plan_version, std::process::id(), *id::new());
                 let msg = format!(
@@ -841,7 +878,11 @@ impl PlanView {
         };
         let pending = if self.pending.is_some() { " · awaiting patch" } else { "" };
         frame.render_widget(
-            Line::from(format!("{} · {freshness}{pending}", self.name))
+            Line::from(format!(
+                "{} · {freshness}{}{pending}",
+                self.name,
+                title_notes(&self.snapshot)
+            ))
                 .style(ctx.config.theme.preview_label_style),
             title,
         );
@@ -879,7 +920,7 @@ impl PlanView {
                             0
                         };
                     let mut line = if is_next {
-                        Line::from(row.turn.label())
+                        Line::from(row_label(row, &self.snapshot))
                     } else {
                         song.as_line_ellipsized(
                             &format.prop,
@@ -903,7 +944,10 @@ impl PlanView {
                         };
                         line.spans.insert(
                             0,
-                            Span::styled(format!("{:>3} ", row.turn.label()), marker_style),
+                            Span::styled(
+                                format!("{:>3} ", row_label(row, &self.snapshot)),
+                                marker_style,
+                            ),
                         );
                     }
                     if marked {

@@ -664,8 +664,14 @@ a `w shuf` badge next to the mode badges: on_style while it picks, waiting_style
 on, single on, stopped), off_style when off.
 
 A Hits result played as the source ("Play these N songs (as the source)…" in the Hits menu: its owned rows, a
-snapshot that moving a filter never changes) is shuffled in rounds: each song once, then the shuffle stops
-nominating and says "round done"; a queue song's menu in Music (or the "Up next · N" row's) starts a new round. The Hits footer says what plays
+snapshot that moving a filter never changes) is shuffled in rounds: each song once, then the next round starts by
+itself (rormpc-tools newer than 0.2.43; decided by the user 2026-10-10). The forecast always aims at 10 songs: when
+the round has fewer left, the rest come from the next round, marked `↻` in the plan's turn column (`3↻`; J/K never
+swap across that boundary); planning marks nothing heard, the round moves on when such a song plays. When nothing
+is eligible (all resting), mpd-player relaxes the rest for the least recently played song, marked `≈`. A forecast
+shorter than 10 says why in the plan's title and Music's header (`· 4 ahead · 12 resting`). With
+`shuffle rounds manual` (mpd-player) the shuffle stops nominating at the round's end and says "round done"; a queue
+song's menu in Music (or the "Up next · N" row's) then starts a new round. The Hits footer says what plays
 ("Playing: Hits · 1980s top 10% · 84 playable · heard 12/84") and "browsing other results" when the filters on
 screen differ. Hits' State column shows only exceptions: `⏳5d` resting, `heard` in this round, `·` not in the
 snapshot being played.

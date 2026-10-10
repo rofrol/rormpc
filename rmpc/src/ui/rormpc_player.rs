@@ -170,6 +170,12 @@ pub struct Planned {
     pub file: String,
     #[serde(default)]
     pub why: String,
+    /// the round it is drawn for: 0 the current one, 1 the next (a Hits source's rounds)
+    #[serde(default)]
+    pub round: u32,
+    /// drawn although resting: nothing else was eligible ("rest relaxed")
+    #[serde(default)]
+    pub relaxed: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -196,6 +202,9 @@ pub struct ShuffleState {
     pub active: bool,
     #[serde(default)]
     pub reason: String,
+    /// why the plan holds fewer than ten songs ("4 ahead · 12 resting"), empty when it is full
+    #[serde(default)]
+    pub ahead_note: String,
     #[serde(default)]
     pub nominee: Option<Nominee>,
     #[serde(default)]
