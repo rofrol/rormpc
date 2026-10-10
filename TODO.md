@@ -1029,13 +1029,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Combined view: Artists and Album artists in Browse? Decided by the user 2026-10-10: two separate groupings.
       Options: two separate groupings (MiMo; the code has both) | one grouping with a toggle
       Checked: plans/combined-view.md "Open choices" (20); the first option is the plan's recommendation.
-- [ ] Scrobble status: What does "62% of 50%" mean?
+- [ ] Scrobble status: What does "62% of 50%" mean? Answered 2026-10-10: "62% listened. required 90%. ask the models" (consult, then decide).
       Options: progress toward the required share (62% of the way to the threshold, as built) | the share of the song heard ("31% of 50%")
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [ ] Scrobble status: Which key sends to ListenBrainz now?
+- [x] Scrobble status: Which key sends to ListenBrainz now? Decided by the user 2026-10-10: oL plus an item in the Queue menu for the playing song (queued in Next).
       Options: oL (as built) | oL plus an item in the Queue menu for the playing song | another key
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [ ] Scrobble status: When does a manual send ask for a confirmation?
+- [x] Scrobble status: When does a manual send ask for a confirmation? Decided by the user 2026-10-10: when the rule is not met yet (as built).
       Options: when the rule is not met yet (as built) | always | never
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
 - [ ] Scrobble status: Which timestamp does a manual send carry after a seek under the uninterrupted rule?
@@ -1044,7 +1044,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Scrobble status: Should the scrobbler remember a send across its own restart in the middle of a song (today a later automatic listen could go a second time)?
       Options: leave it (rare) | store it in the daemon's SQLite database
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [ ] Scrobble status: Add Status(Scrobble) to your theme in dotfiles?
+- [x] Scrobble status: Add Status(Scrobble) to your theme in dotfiles? Decided by the user 2026-10-10: next to the progress bar, before the time (queued in Next; the coordinator edits the theme).
       Options: next to the progress bar, before the time | in the header | no
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
 - [x] Release now: rormpc-tools v0.2.39 (smart lists, named sets, api_url, missing-program errors, my plays rank,
