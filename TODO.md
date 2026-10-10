@@ -653,13 +653,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Now Playing as a second process `mpd-player nowplaying` with its own launchd agent; MPRIS in the daemon via
       dbus-fast; companions stops mpd-now-playable before starting the new one; karabiner.json only suggested. Six
       open choices in "Needs a decision" ("Media keys:"); the build waits for them.
-- [ ] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
+- [x] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
       "illogical that this is smaller than from. ask the models. Besides, no option to turn off either this or from?").
       Consulted (Sol 3f2a69ae, MiMo fb2e7e9b): clamp while stepping (from stops at to and back, equal years allowed;
       no push, no swap). Decided by the user 2026-10-10 (Sol's way): Space on a bound row toggles it, the year is
       remembered and re-clamped when turned back on; labels "From: Any" / "From: ‹ 2000 ›", the period line "Any
       year", "Up to 1991", "From 2000", "1991–2000"; a footer hint "←/→ change year · Space toggle bound"; hits gets
       an open-ended period.
+      Done: rormpc fa87993, rormpc-tools c00c20f (worker); released v0.2.45 and installed 2026-10-10 (UI not
+      checked live by the worker).
 - [ ] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
