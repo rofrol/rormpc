@@ -671,7 +671,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done: rormpc-tools 165b8a1 (`liveplaylist check --kind omarchy --notify`), rormpc 40e9c85 (companions: a
       LaunchAgent at 10:00, a missed run follows on wake; systemd OnCalendar=daily, Persistent=true; a status line)
       (worker). Released v0.2.46 (with the rename command) and installed 2026-10-10; the first run: 0 new.
-- [ ] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
+- [x] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
       in mpd-player as the one control interface (next through the plan, previous through its history, toggle);
       the user's Karabiner F7/F8/F9 call it with send_user_command (no shell, mpc or DNS lookup per press; the
       dotfiles change goes in with the install, AGENTS.md "The user's config"); mpd-player registers as the macOS
@@ -701,6 +701,20 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       shows as "send_user_command: send_to failed" in Karabiner's console_user_server.log; rollback: revert
       dotfiles 5d47ea3. Left over: ~/.local/state/media-keys/ (the old script's log), for the user to delete.
       Stage 2 decides what `pause` does while "Pause for…" holds the pause (today: nothing, the timer runs on).
+      Stage 2 done 2026-10-11: rormpc-tools f4120da (`mpd-player nowplaying`: public MPNowPlayingInfoCenter and
+      MPRemoteCommandCenter, every command through the socket, claims Now Playing on the first MPD play after it
+      starts; MPRIS in the daemon via dbus-fast, on by default, `--no-mpris`; a Seeked signal when the same song is
+      over 1 s off its predicted position, a tolerance chosen by the worker), rormpc 678d973 (companions run
+      `nowplaying --check`, retire mpd-now-playable with its own uninstall-launchagent, start
+      mpd-player-nowplaying; Linux warns about mpd-mpris/mpDris2/rmpcd); released v0.2.48 and installed: the
+      mpd-now-playable LaunchAgent is uninstalled (its program stays), Now Playing running. Not tested: the Control
+      Center tile (the user's test), MPRIS on a real Linux desktop (only a private bus on macOS). Rollback:
+      `launchctl bootout gui/$UID/io.github.rofrol.rormpc.mpd-player-nowplaying`, delete its plist,
+      `mpd-now-playable install-launchagent`.
+- [ ] Installer: right after starting mpd-player-nowplaying, companions warned "mpd-player's Now Playing is
+      xpcproxy" (2026-10-11) although it was running a moment later: the check reads launchd's state while the job
+      is still spawning. Wait for the observable running state (a pid and `state = running`) or report a real
+      failure (the job exited), never a sleep (found while installing stage 2; installer only, one revert).
 - [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:"
       decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
       the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
@@ -1570,3 +1584,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Instant filtering: Keep `hits` warm beyond the cached library index?
       Options: Only if the end-to-end time after the cache is over 0.15 s | Build `hits serve` in step 6 anyway | Never
       Checked: plans/instant-filtering.md (2026-10-10).
+- [ ] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
+      Options: cancel the timer and stay paused | leave it, the timer resumes at its deadline (today) | the same as `pause cancel` in rormpc
+      Checked: rormpc-tools f4120da player/control.py `_pause` (2026-10-11).
