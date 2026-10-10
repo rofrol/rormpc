@@ -354,12 +354,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Shepherd as unsupported. Unverified package names are footnoted (rsgain on Arch/Guix, fpcalc in Guix's
       chromaprint); the coordinator doubts Guix's "mpclient" for mpc (Guix may call it mpd-mpc): check on the
       Guix machine. Not released.
-- [ ] Scrobble status follow-ups (decided 2026-10-10): the wording "62% counted · need 90% · in 1:24" (counted =
+- [x] Scrobble status follow-ups (decided 2026-10-10): the wording "62% counted · need 90% · in 1:24" (counted =
       since the last seek; with a max-seconds cap lower than the fraction show the effective share, e.g. "need
       80%/4:00"; impossible: "no scrobble: seek to 20%; need 90%"; "no scrobble: song too short"; "scrobbling off";
       "scrobbled ✓"; "scrobbler not running"; Sol's table in the consult round), a "Send to ListenBrainz now" item in
       the Queue menu for the playing song next to oL, and `(kind: Property(Status(Scrobble)))` next to the progress
       bar before the time in your theme (dotfiles ~/.config/rormpc/themes/roman.ron).
+      Done in rormpc 884b634, dotfiles 9c28609 (worker; cargo test 1021): the wording with conservative rounding
+      (counted down, required and countdown up), an unknown length shows times ("0:30 counted · need 1:00"); the
+      Queue menu item on the playing row; your theme has a 40-column status field between the progress bar and the
+      time (it takes that width even when empty) and loads with the installed rormpc. The menu item was not clicked
+      in a live TUI. Not released. The daemon reports no "too short" or "rule off" state today (it has neither
+      rule); rormpc shows those texts once it does.
 - [ ] ro-listenbrainz-mpd remembers a sent listen (manual or automatic) across its own restart in the middle of a
       song, in its SQLite database, so a later automatic listen of the same play is never sent twice (decided
       2026-10-10).
