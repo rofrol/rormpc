@@ -411,6 +411,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [x] (approved 2026-10-10 from Proposed) Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
       (older bug, found by the phase 2 worker 2026-10-10).
       Already fixed by phase 4; a test added in e01f0cd (worker).
+- [x] Guix package names in the rormpc-tools dependency table (asked 2026-10-10: "check it yourself with the
+      models"): verified in Guix's source (codeberg master): mpc is `mpd-mpc` (mpd.scm; Guix's `mpc` is the GNU MPC
+      library), `chromaprint` ships fpcalc (mp3.scm, -DBUILD_TOOLS=ON), `rsgain` exists (audio.scm). Sol had all
+      three right, MiMo was wrong on rsgain. Fixed in rormpc-tools c637b61 (worker, pushed); Arch's rsgain stays
+      unverified.
+- [ ] Deleted songs are not downloaded again (asked 2026-10-10: "important. when I delete a song from the library
+      and ListenBrainz, it has to be recorded among the deleted, so that it is not downloaded again. ask the
+      models"): a worker consults the models, checks what `musicdb delete` and the Deleted tab already record, and
+      makes every downloader (hits fetch, yt-mp3-mb, liveplaylist, Versions) skip a deleted song.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
