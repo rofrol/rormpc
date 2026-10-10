@@ -59,35 +59,56 @@ both sides (rormpc-tools `tests/test_rormpc_contract.py`, rormpc `delete_menu.rs
 
 ## Media keys
 
-On macOS the hardware media keys (play/pause, next, previous) and the system Now Playing widget come from
-[mpd-now-playable](https://git.00dani.me/00dani/mpd-now-playable), a separate daemon that talks to MPD directly, so
-they work with rormpc closed. It is independent of rormpc: `rormpc_install.sh` neither installs nor touches it.
+Media keys, Control Center, the lock screen, AirPods and the Linux desktops' keys all reach MPD through mpd-player
+(rormpc-tools), so they work with rormpc closed and act the same: Previous walks the weighted shuffle's trail (back
+through the songs that really played, no skip counted), Next and Previous from a pause play the song they move to
+(also inside the gap's silence or "Pause for…"), Play, Pause and Stop never toggle. Every path ends in the same
+transport commands of mpd-player's command socket (rormpc-tools README, "mpd-player's command socket" and "Now
+Playing (macOS) and MPRIS (Linux)"). Each command is logged in mpd-player's log with its source (`socket`,
+`nowplaying`, `mpris`) and the time from receipt to MPD's answer (`~/Library/Logs/mpd-player.log` on macOS,
+`journalctl --user -u rormpc-mpd-player` on Linux). Volume and mute are left alone. When mpd-player is down a key
+does nothing; launchd/systemd restarts it within 10 s.
 
-    uv tool install mpd-now-playable
-    mpd-now-playable install-launchagent      # ~/Library/LaunchAgents/me.00dani.mpd-now-playable.plist, started now
-    mpd-now-playable uninstall-launchagent    # stops and removes it
-    launchctl print gui/$UID/me.00dani.mpd-now-playable   # check: state = running
+### macOS: Now Playing
 
-The plist runs the uv tool venv's Python, so after `uv tool upgrade mpd-now-playable` or a reinstall rerun
-`mpd-now-playable install-launchagent --force`, or launchd keeps restarting a dead path.
+`rormpc_install.sh companions` starts `mpd-player nowplaying` as its own launchd agent
+(`io.github.rofrol.rormpc.mpd-player-nowplaying`, log `~/Library/Logs/mpd-player-nowplaying.log`). It shows the song
+in Now Playing (title, artist, album, cover, position) and sends every command it gets (play/pause, next,
+previous, the scrubber) to mpd-player's socket. It takes Now Playing only once MPD plays after it starts, so a
+paused MPD at login leaves the slot to a browser or Music; from then on it shows MPD's real state.
 
-mpd-now-playable sends MPD's own `next`/`previous`, so a key that reaches it skips the weighted shuffle's history and
-counts a skip. The bare keys can reach mpd-player directly instead, through its command socket (rormpc-tools README,
-"mpd-player's command socket"): one datagram per press, no process start, mpc or DNS lookup. `rormpc_install.sh
-companions` prints the socket's path and a Karabiner-Elements rule for F7/F8/F9 (`send_user_command`, Karabiner 16.0
-or newer) to add to `~/.config/karabiner/karabiner.json`; it never edits that file. `rormpc_install.sh status` shows
-whether the socket is bound. With the rule, F7 is Previous through mpd-player (back through the songs that really
-played, no skip counted), F8 play/pause, F9 Next; Next and Previous from a pause play, also inside the gap's silence
-or "Pause for…". It has to be Karabiner: its `fn_function_keys` turns F7/F8/F9 into consumer keys from its virtual
-keyboard, which go straight to the Now Playing app (a browser playing media takes it, and with it the keys), so an
-event tap (Hammerspoon's, until 2026-10-07) never sees them. Shift+F7/F8/F9 still send the media key to the Now
-Playing app; fn+F7/F8/F9 stay plain F-keys. When mpd-player is not running the keys do nothing (Karabiner logs
-`send_user_command: send_to failed` in its console user server log); launchd restarts it within 10 s. Each command
-is logged in `~/Library/Logs/mpd-player.log` with the time from receipt to MPD's answer. Volume and mute are left
-alone; AirPods/Bluetooth buttons and external keyboards' media keys still go to the Now Playing app
-(mpd-now-playable until mpd-player provides Now Playing itself, see TODO.md "Media keys through mpd-player").
+It replaces [mpd-now-playable](https://git.00dani.me/00dani/mpd-now-playable), which sent MPD's own
+`next`/`previous` (skipping the trail, counting a skip). Before starting the new provider, `companions` retires it
+with its own `mpd-now-playable uninstall-launchagent` (two providers would flap the info and both answer the keys)
+and checks that launchd no longer has `me.00dani.mpd-now-playable`; the program stays installed
+(`uv tool uninstall mpd-now-playable` removes it). If the rormpc-tools installed is too old to have
+`mpd-player nowplaying`, or PyObjC does not load (`mpd-player nowplaying --check`), mpd-now-playable is left as it
+is. `rormpc_install.sh status` shows the provider's state and whether mpd-now-playable is still loaded.
 
-On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-mpris or mpDris2; see TODO.md).
+Going back to mpd-now-playable:
+
+    launchctl bootout gui/$UID/io.github.rofrol.rormpc.mpd-player-nowplaying
+    rm ~/Library/LaunchAgents/io.github.rofrol.rormpc.mpd-player-nowplaying.plist
+    mpd-now-playable install-launchagent      # started now; a later `companions` retires it again
+
+The bare F7/F8/F9 go to mpd-player's socket directly with a Karabiner-Elements rule (`send_user_command`, Karabiner
+16.0 or newer), so they reach MPD even while a browser holds Now Playing: one datagram per press, no process start,
+mpc or DNS lookup. `companions` prints the socket's path and the rule to add to `~/.config/karabiner/karabiner.json`;
+it never edits that file. `status` shows whether the socket is bound. With the rule, F7 is Previous, F8 play/pause,
+F9 Next. It has to be Karabiner: its `fn_function_keys` turns F7/F8/F9 into consumer keys from its virtual keyboard,
+which go straight to the Now Playing app, so an event tap (Hammerspoon's, until 2026-10-07) never sees them.
+Shift+F7/F8/F9 send the media key to the Now Playing app (mpd-player's, while MPD holds it); fn+F7/F8/F9 stay plain
+F-keys. A failed send shows as `send_user_command: send_to failed` in Karabiner's console user server log.
+
+### Linux: MPRIS
+
+mpd-player itself is the MPRIS player `org.mpris.MediaPlayer2.mpd_player` on the session bus (no extra unit; its
+systemd unit is ordered after `dbus.socket`), on by default when a session bus is there (`mpd-player --no-mpris`
+turns it off; without a bus it logs once and runs without). GNOME and KDE send their media keys to the active MPRIS
+player; Hyprland/Omarchy bind them to `playerctl`. While a browser is the active player, bindings to
+`playerctl -p mpd_player next|previous|play-pause` (or `mpd-player send next|prev|toggle`) pin the keys to MPD.
+Run no other MPD MPRIS bridge (mpd-mpris, mpDris2, rmpcd) beside it: both would answer the keys. `companions` and
+mpd-player warn when they see one, and `status` shows whether the MPRIS name is owned.
 
 ## Music tab (the Play pane)
 
