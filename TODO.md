@@ -399,6 +399,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       installer 76104b2, companions and rormpc 76104b2 installed; dotfiles e7b9272: tabs Play, Up next, Search,
       Versions, Deleted, Lyrics; digits 1-3 for them, 4-9 and 0 left to the built-in keys (Browse groupings, Live
       overlay), gs and gl removed, "P": PlayReplace in the navigation map; the config loads. Restart rormpc.
+- [ ] (approved 2026-10-10 from Proposed) rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
+      phase 1 and 2 workers left it out of scope).
+- [ ] (approved 2026-10-10 from Proposed) AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
+      it (reported by the phase 1 worker 2026-10-10).
+- [ ] (approved 2026-10-10 from Proposed) The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
+      no unselectable header; phase 2 worker, 2026-10-10).
+- [ ] (approved 2026-10-10 from Proposed) Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
+      (older bug, found by the phase 2 worker 2026-10-10).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -886,15 +894,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
-- [ ] rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
-      phase 1 and 2 workers left it out of scope).
-- [ ] AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
-      it (reported by the phase 1 worker 2026-10-10).
-- [ ] The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
-      no unselectable header; phase 2 worker, 2026-10-10).
-- [ ] Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
-      (older bug, found by the phase 2 worker 2026-10-10).
-
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
@@ -1107,7 +1106,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       otherwise (MiMo) | always a generic line + a docs link to the per-manager table (Sol) | keep brew + apt
       Checked: consult round 2026-10-10 (see the "Install hints" item in Next); you run macOS, Omarchy (Arch) and
       Guix.
-- [ ] MPD (asked 2026-10-10: "do I have the impression that this MPD daemon, to which files have to be sent again
+- [x] MPD (asked 2026-10-10: "do I have the impression that this MPD daemon, to which files have to be sent again
       and again, is very limiting? ask the models to analyze, not change"): plan a change, or keep things as they are?
       Options: keep MPD as is; only fix the cheap self-inflicted parts later (e.g. the round draws from queue ∩
       source, so hand-appended songs count) | plan option (a): mpd-player owns what plays next, MPD keeps only the
@@ -1133,3 +1132,5 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       disconnect 20-30% (MiMo), conditional priority updates the strongest general case (Sol), an external sequencer
       ~0. Flip to a fork only if upstream refuses and a no-fork prototype still fails a real phone workflow.
       (MiMo also suggested polling `listclients`: dismissed, MPD has no such command.) Fourth option added below.
+      Decided by the user 2026-10-10: keep MPD, only cheap fixes (the main one, appended songs joining the round,
+      is done in phase 3b); no fork, no short-queue rebuild.
