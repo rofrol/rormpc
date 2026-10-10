@@ -548,6 +548,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       forecast always aims at 10 playable songs, those of the next round marked "next round" and nothing marked
       heard by planning; the reason shown when fewer ("4 ahead; 12 resting"); rest relaxed on a small source to the
       least recently played eligible song, shown as relaxed.
+- [ ] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
+      in mpd-player as the one control interface (next through the plan, previous through its history, toggle);
+      the user's Karabiner F7/F8/F9 call it with send_user_command (no shell, mpc or DNS lookup per press; the
+      dotfiles change goes in with the install, AGENTS.md "The user's config"); mpd-player registers as the macOS
+      Now Playing provider and the Linux MPRIS player with the same commands, installed and started by
+      rormpc_install.sh companions, replacing mpd-now-playable (its docs and the user's LaunchAgent removed after the
+      switch). A worker plans it first with the models (macOS Now Playing from Python: PyObjC MediaPlayer or a small
+      helper; MPRIS via D-Bus), open choices to "Needs a decision"; live key tests are the user's.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1297,10 +1305,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (Sol) | by hand as now, the forecast shows the next round's picks dimmed as provisional (MiMo)
       Checked: consult round 2026-10-10 (see "The forecast should always show 10 ahead" in Next).
       Decided by the user 2026-10-10: automatic, the next round starts when one ends (Sol).
-- [ ] Media key lag: which fix?
+- [x] Media key lag: which fix?
       Options: plan it whole: an mpd-player command socket, Karabiner send_user_command, and mpd-player as the Now
       Playing / MPRIS provider installed by rormpc_install.sh (replacing mpd-now-playable) | only the socket +
       Karabiner for this Mac | only 127.0.0.1 in ~/scripts/mpd-media-key now (a stopgap)
+      Decided by the user 2026-10-10: plan it whole (queued in Next).
       Checked: the media key worker's measurements 2026-10-10 (see "Media key Next lags" in Next); a live test with
       F9 and `log stream` is yours after the fix.
       Answered 2026-10-10: "what is going on here? and what if someone installs rormpc and has no Karabiner? ask the
