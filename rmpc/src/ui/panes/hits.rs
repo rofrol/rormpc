@@ -10,6 +10,7 @@
 //! downloaded; a preview plays outside MPD (the Versions pane's player) and stops before any decision.
 
 use std::{
+    collections::HashMap,
     path::PathBuf,
     process::{Command, Stdio},
     sync::{
@@ -51,8 +52,9 @@ use crate::{
         },
         rormpc_actions,
         rormpc_exceptions::{self, Kind, RowException},
-        rormpc_hits_rules::{self, RankBy, SETS, YearsOf},
+        rormpc_hits_rules::{self, NamedSet, RankBy, SETS, YearsOf},
         rormpc_preview::{self, Preview},
+        rormpc_sets::{self, SetPicker},
     },
 };
 
@@ -115,9 +117,12 @@ struct HitsArgs {
     source: Option<String>,
     #[serde(default)]
     sort: Option<String>,
-    /// the set chips, e.g. `["+billboard", "-likes"]`; absent in files before them
+    /// the set chips, e.g. `["+billboard", "-likes", "+tag:God"]`; absent in files before them
     #[serde(default)]
     sets: Option<Vec<String>>,
+    /// the named sets' names ("list:ID" -> "Smart 80s party"); absent before named sets
+    #[serde(default)]
+    set_names: Option<HashMap<String, String>>,
     #[serde(default)]
     rank: Option<String>,
     #[serde(default)]
@@ -448,6 +453,8 @@ pub struct HitsPane {
     /// artists of the last result's cohort, and the one picked in "+ artist…", taken on the next render
     cohort_artists: Vec<ArtistCount>,
     artist_input: Arc<Mutex<Option<String>>>,
+    /// "+ set…": the sets read in the background, and the one picked, taken on the next render
+    set_picker: Arc<Mutex<SetPicker>>,
     explorer: Arc<Mutex<Explorer>>,
     fetch: Vec<FetchItem>,
     fetch_mtime: Option<SystemTime>,
@@ -517,6 +524,7 @@ impl HitsPane {
             genre_input: Arc::new(Mutex::new(None)),
             cohort_artists: Vec::new(),
             artist_input: Arc::new(Mutex::new(None)),
+            set_picker: Arc::new(Mutex::new(SetPicker::default())),
             explorer: Arc::new(Mutex::new(Explorer::default())),
             fetch: Vec::new(),
             fetch_mtime: None,
@@ -990,6 +998,10 @@ impl HitsPane {
             }
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::AddArtist => {
                 self.pick_artist(ctx);
+                return true;
+            }
+            CommonAction::Confirm | CommonAction::Select if row == FilterRow::AddSet => {
+                rormpc_sets::load(&self.set_picker, &self.command, ctx.app_event_sender.clone());
                 return true;
             }
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Explore => {
@@ -1586,7 +1598,7 @@ impl HitsPane {
             artist: r.artist.clone(),
             title: r.title.clone(),
         };
-        let plus = self.filters.as_ref().map_or([0; 4], |f| f.sets.map(|s| s.max(0)));
+        let plus = self.filters.as_ref().map_or_else(Vec::new, |f| rormpc_hits_rules::plus_keys(f.sets, &f.named));
         let (command, done) = (self.command.clone(), self.rerun_done(ctx));
         move |ctx: &Ctx| rormpc_exceptions::open_scope_menu(ctx, command, kind, target, plus, Some(done))
     }
@@ -1598,6 +1610,7 @@ impl HitsPane {
         let flip = |s: &mut i8| *s = if *s == sign { 0 } else { sign };
         match row {
             FilterRow::Set(i) => flip(&mut filters.sets[i]),
+            FilterRow::Named(i) => flip(&mut filters.named[i].sign),
             FilterRow::Genre(i) => flip(&mut filters.genres[i].1),
             FilterRow::Artist(i) => flip(&mut filters.artists[i].1),
             _ => status_info!("+ / - set a set, genre or artist row here; on a song row they pin / exclude it"),
@@ -2090,6 +2103,17 @@ impl HitsPane {
         }
         if let Some(args) = self.job.lock().expect("hits job lock").ok_args.take() {
             self.applied_args = Some(args);
+        }
+        if let Some(sets) = rormpc_sets::take_ready(&self.set_picker) {
+            let added: Vec<String> = self.filters.as_ref().map(|f| f.named.iter().map(|n| n.key.clone()).collect()).unwrap_or_default();
+            let open = self.filters.as_ref().and_then(|f| f.open_list.as_ref().map(|(id, _)| id.clone()));
+            rormpc_sets::open_picker(ctx, &self.set_picker, sets, &added, open.as_deref());
+        }
+        if let (Some(c), Some(filters)) = (rormpc_sets::take_picked(&self.set_picker), self.filters.as_mut()) {
+            let i = filters.add_named(&c.key, &c.label(), 1);
+            let rows = filters.rows();
+            self.filter_sel = rows.iter().position(|r| *r == FilterRow::Named(i)).unwrap_or(self.filter_sel);
+            self.scroll_filters(0);
         }
         let picked = self.artist_input.lock().expect("artist input lock").take();
         if let (Some(name), Some(filters)) = (picked, self.filters.as_mut()) {
@@ -2616,6 +2640,12 @@ enum FilterRow {
     Downloads,
     /// a set chip (`rormpc_hits_rules::SETS`): + include / - exclude / off, like a genre
     Set(usize),
+    /// a set added through "+ set…" (a tag list, MPD playlist, Live playlist or smart list), tri-state like a chip
+    Named(usize),
+    /// "+ set…": the picker of tag lists, playlists, Live playlists and smart lists
+    AddSet,
+    /// every set chip off and the added sets dropped; dim while none is + or - and none was added
+    ClearSets,
     RankBy,
     /// the period's axis; shows the default that follows Rank by
     YearsOf,
@@ -2649,6 +2679,8 @@ enum FilterRow {
 struct Filters {
     /// the fixed set chips, in `SETS` order: -1 exclude, 0 off, 1 include
     sets: [i8; 4],
+    /// the sets added through "+ set…", in the order added
+    named: Vec<NamedSet>,
     rank: RankBy,
     /// None: follows Rank by (`RankBy::default_years`)
     years_of: Option<YearsOf>,
@@ -2671,7 +2703,7 @@ impl Default for Filters {
     fn default() -> Self {
         let mut decades = [false; 8];
         decades[3] = true; // 1980s
-        Self { sets: [1, 0, 0, 0], rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false, open_list: None }
+        Self { sets: [1, 0, 0, 0], named: Vec::new(), rank: RankBy::Billboard, years_of: None, by_range: false, decades, from: 1985, to: 1992, tops: [true, false, false], genres: pinned_genres().into_iter().map(|g| (g, 0)).collect(), artists: Vec::new(), owned: false, show_excluded: false, open_list: None }
     }
 }
 
@@ -2679,6 +2711,8 @@ impl Filters {
     fn rows(&self) -> Vec<FilterRow> {
         let mut rows = vec![FilterRow::Downloads, FilterRow::Heading("Sets")];
         rows.extend((0..SETS.len()).map(FilterRow::Set));
+        rows.extend((0..self.named.len()).map(FilterRow::Named));
+        rows.extend([FilterRow::AddSet, FilterRow::ClearSets]);
         rows.extend([FilterRow::RankBy, FilterRow::YearsOf]);
         if self.has_years() {
             rows.push(FilterRow::Mode);
@@ -2712,7 +2746,28 @@ impl Filters {
 
     /// Recommendations alone have no year to filter on: no period rows, no --years.
     fn has_years(&self) -> bool {
-        self.sets != [0, 0, 0, 1]
+        self.sets != [0, 0, 0, 1] || self.named.iter().any(|n| n.sign > 0)
+    }
+
+    /// Set a named set's sign, adding its row when it has none; returns its index.
+    fn add_named(&mut self, key: &str, name: &str, sign: i8) -> usize {
+        let i = self.named.iter().position(|n| n.key == key).unwrap_or_else(|| {
+            self.named.push(NamedSet { key: key.to_owned(), name: name.to_owned(), sign: 0 });
+            self.named.len() - 1
+        });
+        self.named[i].sign = sign;
+        i
+    }
+
+    /// `+` / `-` sets as `--set` values: the fixed ones in chip order, then the named ones in the order added.
+    fn set_values(&self) -> Vec<String> {
+        let sign = |s: i8| if s > 0 { '+' } else { '-' };
+        SETS.iter()
+            .zip(self.sets)
+            .filter(|(_, s)| *s != 0)
+            .map(|((key, _, _), s)| format!("{}{key}", sign(s)))
+            .chain(self.named.iter().filter(|n| n.sign != 0).map(|n| format!("{}{}", sign(n.sign), n.key)))
+            .collect()
     }
 
     /// The period as `--years`, or None for every year: the Billboard chart years need a period (a decade by
@@ -2736,6 +2791,7 @@ impl Filters {
     fn formula(&self) -> String {
         rormpc_hits_rules::formula(&rormpc_hits_rules::Rules {
             sets: self.sets,
+            named: &self.named,
             period: self.period(),
             top: self.top(),
             genres: &self.genres,
@@ -2844,13 +2900,9 @@ impl Filters {
 
     /// The rules alone as `hits` options: what `hits lists create|update` stores.
     fn rule_args(&self) -> Vec<String> {
-        let mut args: Vec<String> = SETS
-            .iter()
-            .zip(self.sets)
-            .filter(|(_, sign)| *sign != 0)
-            // one token: argparse takes a separate value starting with '-' ("-likes") for an option
-            .map(|((key, _, _), sign)| format!("--set={}{key}", if sign > 0 { '+' } else { '-' }))
-            .collect();
+        // one token each: argparse takes a separate value starting with '-' ("-likes") for an option; a named
+        // set's name may hold spaces, colons and commas ("--set=+tag:Road: trip, live" is that one set)
+        let mut args: Vec<String> = self.set_values().into_iter().map(|v| format!("--set={v}")).collect();
         args.extend(["--rank".to_owned(), self.rank.arg().to_owned()]);
         args.extend(["--years-of".to_owned(), self.effective_years_of().arg().to_owned()]);
         if let Some(period) = self.period() {
@@ -2889,12 +2941,9 @@ impl Filters {
             out.dedup();
             out
         };
-        let sets: Vec<String> = SETS
-            .iter()
-            .zip(self.sets)
-            .filter(|(_, sign)| *sign != 0)
-            .map(|((key, _, _), sign)| format!("{}{key}", if sign > 0 { '+' } else { '-' }))
-            .collect();
+        // the fixed sets in chip order, then the named ones sorted: the order they were added is no rule
+        let mut sets = self.set_values();
+        sets[SETS.iter().zip(self.sets).filter(|(_, s)| *s != 0).count()..].sort();
         let mut key = serde_json::json!({
             "v": 1,
             "sets": sets,
@@ -2966,6 +3015,7 @@ impl Filters {
         // files before the set chips name an old source, mapped as `hits --source` maps it
         let (sets, rank, years_of) = rormpc_hits_rules::from_source(args.source.as_deref(), args.sort.as_deref());
         f.sets = args.sets.as_deref().map_or(sets, rormpc_hits_rules::parse_sets);
+        f.named = args.sets.as_deref().map_or_else(Vec::new, |v| rormpc_hits_rules::parse_named(v, args.set_names.as_ref()));
         f.rank = args.rank.as_deref().and_then(RankBy::parse).filter(|_| args.sets.is_some()).unwrap_or(rank);
         let years_of = args.years_of.as_deref().and_then(YearsOf::parse).unwrap_or(years_of);
         // the default that follows Rank by stays "auto", so changing Rank by moves it along
@@ -2988,6 +3038,12 @@ impl Filters {
                 let mark = match self.sets[i] { 1 => "+", -1 => "-", _ => " " };
                 format!("  [{mark}] {}", SETS[i].1)
             }
+            FilterRow::Named(i) => {
+                let mark = match self.named[i].sign { 1 => "+", -1 => "-", _ => " " };
+                format!("  [{mark}] {}", self.named[i].name)
+            }
+            FilterRow::AddSet => "  + set…".to_owned(),
+            FilterRow::ClearSets => "  × clear sets".to_owned(),
             FilterRow::RankBy => format!("Rank by:  ‹{}›", self.rank.label()),
             // the default follows Rank by: shown as "auto" so it is never guessed
             FilterRow::YearsOf => match self.years_of {
@@ -3034,6 +3090,7 @@ impl Filters {
         match row {
             FilterRow::ClearGenres => self.genres.iter().any(|(_, s)| *s != 0),
             FilterRow::ClearArtists => self.artists.iter().any(|(_, s)| *s != 0),
+            FilterRow::ClearSets => self.sets.iter().any(|s| *s != 0) || !self.named.is_empty(),
             // Top % needs a rank
             FilterRow::Top(_) => self.rank != RankBy::None,
             _ => true,
@@ -3054,6 +3111,9 @@ impl Filters {
                     | FilterRow::AddArtist
                     | FilterRow::Decade(_)
                     | FilterRow::Set(_)
+                    | FilterRow::Named(_)
+                    | FilterRow::AddSet
+                    | FilterRow::ClearSets
                     | FilterRow::Top(_)
                     | FilterRow::Genre(_)
                     | FilterRow::Artist(_)
@@ -3067,6 +3127,12 @@ impl Filters {
     fn toggle(&mut self, row: FilterRow) {
         match row {
             FilterRow::Set(i) => self.sets[i] = rormpc_hits_rules::next_sign(self.sets[i]),
+            FilterRow::Named(i) => self.named[i].sign = rormpc_hits_rules::next_sign(self.named[i].sign),
+            FilterRow::ClearSets if self.enabled(row) => {
+                self.sets = [0; 4];
+                self.named.clear();
+            }
+            FilterRow::ClearSets => {}
             FilterRow::RankBy => self.rank = self.rank.next(1),
             FilterRow::YearsOf => self.years_of = YearsOf::next(self.years_of, 1),
             FilterRow::Mode => self.by_range = !self.by_range,
@@ -3080,7 +3146,7 @@ impl Filters {
             FilterRow::ClearArtists => {}
             FilterRow::Owned => self.owned = !self.owned,
             FilterRow::ShowExcluded => self.show_excluded = !self.show_excluded,
-            FilterRow::Heading(_) | FilterRow::Exceptions | FilterRow::Downloads | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::Apply => {}
+            FilterRow::Heading(_) | FilterRow::Exceptions | FilterRow::Downloads | FilterRow::From | FilterRow::To | FilterRow::AddGenre | FilterRow::Explore | FilterRow::AddArtist | FilterRow::AddSet | FilterRow::Apply => {}
         }
     }
 
@@ -3345,6 +3411,44 @@ mod tests {
         assert_eq!(f.line(FilterRow::YearsOf), "Years of: ‹release›");
         let back = Filters::from_args(&written_args(&f.args("x.json")));
         assert_eq!(back.years_of, Some(YearsOf::Release));
+    }
+
+    #[test]
+    fn named_sets_are_rows_under_the_fixed_ones_and_round_trip() {
+        let mut f = Filters::default();
+        assert!(!f.rows().contains(&FilterRow::Named(0)));
+        let god = f.add_named("tag:God", "Tag God", 1);
+        let road = f.add_named("playlist:Road: trip, live", "Playlist Road: trip, live", 1);
+        let rows = f.rows();
+        let at = rows.iter().position(|r| *r == FilterRow::Set(3)).unwrap();
+        assert_eq!(rows[at + 1..at + 5], [FilterRow::Named(god), FilterRow::Named(road), FilterRow::AddSet, FilterRow::ClearSets]);
+        assert_eq!((f.line(FilterRow::Named(god)), f.line(FilterRow::AddSet)), ("  [+] Tag God".to_owned(), "  + set…".to_owned()));
+        f.toggle(FilterRow::Named(road)); // + -> -
+        assert_eq!(f.line(FilterRow::Named(road)), "  [-] Playlist Road: trip, live");
+        let args = f.rule_args();
+        assert_eq!(args[..3], ["--set=+billboard", "--set=+tag:God", "--set=-playlist:Road: trip, live"]);
+        assert_eq!(f.formula(), "(Billboard ∪ Tag God) − Playlist Road: trip, live ∩ 1980-1989 ∩ Top 1-10%");
+        let names = HashMap::from([("playlist:Road: trip, live".to_owned(), "Playlist Road: trip, live".to_owned())]);
+        let back = Filters::from_args(&HitsArgs { set_names: Some(names), ..written_args(&f.args("x.json")) });
+        assert_eq!((back.sets, &back.named), (f.sets, &f.named));
+        assert_eq!(back.rules_key(), f.rules_key());
+        // the order the sets were added in is no rule
+        let mut swapped = f.clone();
+        swapped.named.reverse();
+        assert_eq!(swapped.rules_key(), f.rules_key());
+        assert_ne!(swapped.rule_args(), f.rule_args());
+        // an added set keeps its row while off; "× clear sets" drops it and turns the chips off
+        f.toggle(FilterRow::Named(road));
+        assert_eq!(f.named.len(), 2);
+        assert!(!f.rule_args().iter().any(|a| a.contains("Road")));
+        f.toggle(FilterRow::ClearSets);
+        assert_eq!((f.sets, f.named.len()), ([0; 4], 0));
+        assert!(!f.enabled(FilterRow::ClearSets) && !f.hoverable(FilterRow::ClearSets));
+        // recommended with a + named set has years again
+        f.sets = [0, 0, 0, 1];
+        assert!(!f.has_years());
+        f.add_named("tag:God", "Tag God", 1);
+        assert!(f.has_years());
     }
 
     #[test]
