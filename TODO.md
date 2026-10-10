@@ -1298,8 +1298,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: consult round 2026-10-10 (see "The forecast should always show 10 ahead" in Next).
       Decided by the user 2026-10-10: automatic, the next round starts when one ends (Sol).
 - [ ] Media key lag: which fix?
-      Options: Karabiner send_user_command to a socket mpd-player listens on, which sends next over its open MPD
-      connection (no process per press; a new socket in mpd-player) | only 127.0.0.1 instead of localhost in
-      ~/scripts/mpd-media-key (saves the DNS lookup, not the CPU wait) | both, the cheap one first
+      Options: plan it whole: an mpd-player command socket, Karabiner send_user_command, and mpd-player as the Now
+      Playing / MPRIS provider installed by rormpc_install.sh (replacing mpd-now-playable) | only the socket +
+      Karabiner for this Mac | only 127.0.0.1 in ~/scripts/mpd-media-key now (a stopgap)
       Checked: the media key worker's measurements 2026-10-10 (see "Media key Next lags" in Next); a live test with
       F9 and `log stream` is yours after the fix.
+      Answered 2026-10-10: "what is going on here? and what if someone installs rormpc and has no Karabiner? ask the
+      models". Consulted (Sol 81f389a3, MiMo c846b96d): rormpc's installer sets up no media keys at all; the
+      documented macOS default (mpd-now-playable) and a Linux MPRIS bridge must be installed by hand, and both send
+      plain MPD next/previous, which skips the weighted shuffle's plan and history; and the OS hands the keys to the
+      current Now Playing / MPRIS player, so a browser can take them either way (why this setup uses Karabiner).
+      Both recommend: mpd-player gets a command socket as the one control interface (next through the plan,
+      previous through its history), Karabiner calls it with send_user_command (no shell, no mpc, no DNS lookup);
+      for users without Karabiner, mpd-player registers as the Now Playing provider (macOS) / MPRIS player (Linux)
+      using the same commands, installed by rormpc_install.sh; 127.0.0.1 in the script is only a stopgap.
+      (MiMo's "prev sends both mpc prev and shuffle prev" was dismissed: the script sends one of them.)
