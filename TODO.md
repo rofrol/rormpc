@@ -376,13 +376,23 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the daemon was down can look like a replay; a stop and restart of the same song then looks like the same
       play; enable_cache = false remembers nothing; a kill between sending and writing the row loses it. Not
       released.
-- [ ] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
+- [x] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
       browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
       the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
       Album artists (separate), Albums, Folders, Lists; P plays replacing the queue with Apply's confirmation rule,
       t play next, a append (an appended song joins a Hits source's files and round, "+N added"); immediate
       playlist edits, confirmed delete; an unapplied preview stays and recomputes; Live inbox with multi-select and
       a pending badge; keys designed by the worker; the default config drops the six browsing tabs.
+      Done in rormpc 9c9c4c5, rormpc-tools b75bff7 (worker; cargo test 1028, pytest 346; UI on a scratch MPD with a copy of
+      your config, mouse on the switch, groupings, rows and the Live badge). Keys: B Filters | Browse, [ ] or 5-9
+      groupings, P play replacing the queue (turns weighted and random off; album/folder/list order), t Up next,
+      a/A append ("+N added" also with weighted off, so turning it on later still draws them), 0 / gl / a click on
+      "Live 3 · ↓ 2" opens the Live overlay (Space marks, accept/reject the marked). Default tabs: Play, Up next,
+      Search, Versions, Deleted, Lyrics. Your config needs `"P": PlayReplace` in the navigation map (your own "P":
+      SortByColumn(4) in the queue map hides the built-in P). Not checked live: an unapplied preview surviving a
+      Browse action (it writes ~/.cache/rormpc/hits/preview.json, the real one), Live multi-select with real items
+      (unit test only). Noted: P's confirmation names the first song's file, not its title; t in the old browser
+      tabs and in the queue now adds to Up next too. Not released.
 - [ ] After phase 3b: release and install, and change your config like the new default (Play, Up next, Search plus
       Versions, Deleted, Lyrics; decided 2026-10-10; the coordinator does it).
 
