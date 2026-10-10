@@ -11,7 +11,7 @@ usage="usage: rormpc_install.sh install|rollback|list|companions [--local] [--ga
               (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install at a pinned tag), musicdb
               update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
               playback daemon (silence between songs: --gap is the default until rormpc chooses one, 0 = none;
-              Up next), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: both from checkouts in
+              Up next; prints its command socket and a Karabiner rule for media keys), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: both from checkouts in
               \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). \$RORMPC_TOOLS_REF and \$RO_LB_REF
               (a tag or commit) replace the pinned tags, for CI to test a companion's commit. Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
@@ -145,6 +145,45 @@ service_state() {
   fi
 }
 
+# mpd_player_env MPD_PLAYER ARGS...: run mpd-player with the XDG variables its service gets, so a path it prints is
+# the service's: launchd agents get none, systemd user units the user manager's
+mpd_player_env() {
+  local unset=(-u XDG_STATE_HOME -u XDG_RUNTIME_DIR) set=() line
+  if [ "$(uname)" != Darwin ]; then
+    while IFS= read -r line; do
+      case "$line" in XDG_STATE_HOME=*|XDG_RUNTIME_DIR=*) set+=("$line") ;; esac
+    done < <(systemctl --user show-environment 2>/dev/null)
+  fi
+  env "${unset[@]}" ${set[@]+"${set[@]}"} "$@"
+}
+
+# the bare media keys straight to mpd-player's command socket (no process start, mpc or DNS lookup per press), also
+# while another app holds macOS's Now Playing; the installer never edits karabiner.json
+media_key_hint() {
+  local sock
+  sock="$(mpd_player_env "$1" socket-path 2>/dev/null)" || {
+    echo "mpd-player has no command socket (rormpc-tools older than this script expects)" >&2
+    return 0
+  }
+  echo "mpd-player's command socket: $sock (mpd-player send next|prev|toggle|play|pause|stop)"
+  [ "$(uname)" = Darwin ] || return 0
+  local key sep="" manipulators=""
+  for key in f7:prev f8:toggle f9:next; do
+    manipulators="$manipulators$sep
+        { \"type\": \"basic\", \"from\": { \"key_code\": \"${key%%:*}\" },
+          \"to\": [{ \"send_user_command\": { \"endpoint\": \"$sock\", \"payload\": { \"command\": \"${key#*:}\" } } }] }"
+    sep=","
+  done
+  cat <<HINT
+Media keys through Karabiner-Elements (16.0 or newer), if you want the bare F7/F8/F9 to reach MPD even while another
+app is the Now Playing app: add this rule to "complex_modifications" > "rules" in ~/.config/karabiner/karabiner.json
+(Shift+F7/F8/F9 still go to the Now Playing app):
+    { "description": "F7/F8/F9 control MPD through mpd-player's command socket",
+      "manipulators": [$manipulators
+      ] }
+HINT
+}
+
 companions() {
   local local_build="" gap=3
   while [ $# -gt 0 ]; do
@@ -215,6 +254,7 @@ companions() {
   # chosen in rormpc, which it remembers
   remove_service mpd-gap
   service mpd-player "" "$tools/mpd-player" --seconds "$gap"
+  media_key_hint "$tools/mpd-player"
 }
 
 status() {
@@ -225,6 +265,11 @@ status() {
   echo "Omarchy Radio daily check: $(service_state omarchy-radio)"
   echo "scrobbler service: $(service_state ro-listenbrainz-mpd)"
   echo "mpd-player service: $(service_state mpd-player)"
+  local player sock; player="$(uv tool dir --bin 2>/dev/null)/mpd-player"
+  if [ -x "$player" ]; then
+    sock="$(mpd_player_env "$player" socket-path --check 2>/dev/null)" || true
+    echo "mpd-player command socket: ${sock:-none (this mpd-player has no command socket)}"
+  fi
   grep -qE '^[[:space:]]*token(_file)?[[:space:]]*=' "$lb_config" 2>/dev/null && echo "ListenBrainz token: set" || echo "ListenBrainz token: missing in $lb_config"
   echo "listen rule: $(grep -E '^listen_' "$lb_config" 2>/dev/null | tr '\n' ' ')"
   local tool
