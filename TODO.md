@@ -510,6 +510,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       finds which change lost the hover highlight (the old Queue pane had it; Music / the plan projection may not
       pass hover state to the like column), consults the models on hover affordances for clickable cells in a TUI,
       and restores it in Music (both modes) and wherever else hearts are drawn.
+- [ ] The forecast should always show 10 ahead (asked 2026-10-10 with a screenshot: -2, -1, 0 ▶ Eye of the Tiger,
+      then nothing: "shouldn't there always be 10 ahead? ask the models"). Cause (checked): mpd-player's fill_plan
+      draws only songs not heard in the current round; at the round's end it reports "round done: all N heard
+      (shuffle newround starts another)" and plans nothing until a new round is started by hand (MPD's random keeps
+      playing without the plan); resting songs shrink it further on a small source (16 songs here). Consulted (Sol
+      2ba4d6cf, MiMo dc3cf48c): both want songs shown across the round boundary, marked "next round", without
+      marking anything heard, and the reason shown when fewer than 10 ("4 ahead; 12 resting"); rest needs an escape
+      on small sources (the least recently played eligible song, shown as relaxed). They differ on starting rounds:
+      Sol an automatic continuous mode (manual rounds kept as an option), MiMo keep manual rounds and show the next
+      round's picks dimmed as provisional. The choice is in "Needs a decision".
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1254,3 +1264,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: yes, now (the block only works once installed) | together with the weighted-mode change
       Checked: tests green; installed are tools 0.2.40 and rormpc 76104b2.
       Decided by the user 2026-10-10: after the weighted-mode change, one release (queued in Next).
+- [ ] Forecast across rounds: when a round ends, start the next one automatically, or keep starting rounds by hand?
+      Options: automatic: the next round starts when one ends, the forecast shows its songs marked "next round"
+      (Sol) | by hand as now, the forecast shows the next round's picks dimmed as provisional (MiMo)
+      Checked: consult round 2026-10-10 (see "The forecast should always show 10 ahead" in Next).
