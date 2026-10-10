@@ -743,6 +743,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (album_date_tags default [OriginalDate, Date]). Released with rormpc-tools v0.2.49 (stage A) and installed;
       dotfiles 22957db (gY, album_date_tags, the theme's Year column). Skipped-row messages go only to the status
       bar. Not seen on the full report yet (the dry run is still running).
+      Stage C done 2026-10-11: rormpc-tools 877205d (worker): resolve() swaps a video or DJ-mix match with no audio
+      alternative to the work's same-length audio recording (years.audio_for, the same cache, 1 req/s), evidence in
+      row["swap"] (from, to, rule, why), method ends ">work"; a failed lookup keeps the match. Not released. The
+      MBID picker (stage B2) waits for its two decisions.
+- [ ] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch
+      proposal, so a swapped download shows from → to and why (found by the stage C worker 2026-10-11; today only
+      the ">work" method suffix shows; logging only, one revert).
 - [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
       something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
@@ -1617,3 +1624,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       MusicBrainz recording tag (UFID, which the scrobbler sends as recording_mbid)?
       Options: yes, the picked recording is what the file is | no, only the year's source changes
       Checked: rormpc-tools b758320 `--mbid` changes only DATE_SOURCE (2026-10-11).
+- [ ] Release years: A video match whose work has same-length audio recordings, none on an official Album, Single
+      or EP: swap to the one first released earliest, or keep the video?
+      Options: swap (rule work-same-length-no-studio, as built) | keep the video match
+      Checked: rormpc-tools 877205d years.audio_for (2026-10-11).
