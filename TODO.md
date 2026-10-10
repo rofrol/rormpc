@@ -333,6 +333,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in rormpc-tools 682387b, rormpc 376ec64 (worker; a new test fails on the old score for release, chart and
       rediscover): my plays and rediscover count plays without the shuffle's own picks; the Plays column still
       counts every play; "not lately" (days since the last play) is unchanged. Not released.
+- [ ] Install hints (asked 2026-10-10: "a line with the brew or apt install command instead of a traceback - hmm.
+      odd, this hardcoding. And what about Arch, Guix, Windows? I don't know myself. Ask the models."): decide after
+      a consult round how rormpc-tools and the installer name a missing program (ffmpeg, yt-dlp, fpcalc, mpc) on
+      macOS, Debian/Ubuntu, Arch, Guix and Windows, then change it.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1031,3 +1035,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       0.2.38, rormpc fb6cb76). Play shows only with a Pane(Play()) tab in your config (choice 18).
       Decided by the user 2026-10-10: yes, now; and add Play to the config as the first tab, the other tabs stay for
       now, digits shifted by one (the coordinator does both).
+      Done 2026-10-10: rormpc-tools v0.2.39 and ro-listenbrainz-mpd v2.6.0-ro.5 tagged and pushed (tests green),
+      installer 12c4876 pins both, companions installed, rormpc 12c4876 installed and pushed; dotfiles b6720d3 adds
+      the Play tab first (1 Play, 2 Hits, 3 Queue, 4 Up next, 5 Shuffle, 6-9 browsers, 0 Playlists; Live playlists
+      by gl); the config loads. Restart running rormpc instances.
