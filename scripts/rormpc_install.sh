@@ -11,7 +11,8 @@ usage="usage: rormpc_install.sh install|rollback|list|companions [--local] [--ga
               (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install at a pinned tag), musicdb
               update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
               playback daemon (silence between songs: --gap is the default until rormpc chooses one, 0 = none;
-              Up next; prints its command socket and a Karabiner rule for media keys), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: both from checkouts in
+              Up next; prints its command socket and a Karabiner rule for media keys; MPD in Now Playing on macOS
+              through mpd-player nowplaying, which retires mpd-now-playable, and MPRIS on Linux), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: both from checkouts in
               \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). \$RORMPC_TOOLS_REF and \$RO_LB_REF
               (a tag or commit) replace the pinned tags, for CI to test a companion's commit. Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
@@ -107,7 +108,8 @@ PLIST
       printf '[Unit]\nDescription=rormpc companion %s, %s\n\n[Timer]\n%b\n\n[Install]\nWantedBy=timers.target\n' \
         "$name" "$when" "$schedule" > "$dir/$unit.timer.tmp" && mv "$dir/$unit.timer.tmp" "$dir/$unit.timer"
     else
-      printf '[Unit]\nDescription=rormpc companion %s\nAfter=network-online.target\n\n[Service]\nExecStart=%s\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n' \
+      # dbus.socket: mpd-player's MPRIS needs the session bus at start (ignored where the unit does not exist)
+      printf '[Unit]\nDescription=rormpc companion %s\nAfter=network-online.target dbus.socket\n\n[Service]\nExecStart=%s\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n' \
         "$name" "$*" > "$dir/$unit.service.tmp"
     fi
     mv "$dir/$unit.service.tmp" "$dir/$unit.service"
@@ -184,6 +186,67 @@ app is the Now Playing app: add this rule to "complex_modifications" > "rules" i
 HINT
 }
 
+NOW_PLAYABLE_LABEL=me.00dani.mpd-now-playable
+# other MPD MPRIS bridges: beside mpd-player's MPRIS both would answer the keys
+MPRIS_BRIDGES="mpd-mpris mpDris2 rmpcd"
+
+# macOS: mpd-player nowplaying becomes the Now Playing provider. mpd-now-playable, the provider before it, is retired
+# first with its own command (two providers flap the metadata and both answer the keys); the installer never edits
+# its plist and never brings it back on its own
+now_playing() {
+  local player="$1" target plist="$HOME/Library/LaunchAgents/$NOW_PLAYABLE_LABEL.plist" npp
+  target="gui/$(id -u)/$NOW_PLAYABLE_LABEL"
+  if ! "$player" nowplaying --check >/dev/null 2>&1; then
+    echo "warning: '$player nowplaying --check' fails (rormpc-tools older than this script expects, or PyObjC does" \
+      "not load); mpd-player's Now Playing is not started and mpd-now-playable is left as it is" >&2
+    return 0
+  fi
+  if launchctl print "$target" >/dev/null 2>&1 || [ -e "$plist" ]; then
+    npp="$(command -v mpd-now-playable || echo "$(uv tool dir --bin)/mpd-now-playable")"
+    if [ ! -x "$npp" ]; then
+      echo "warning: mpd-now-playable's LaunchAgent ($NOW_PLAYABLE_LABEL) is there but not its program; remove it" \
+        "('launchctl bootout $target', then delete $plist) and run this again. mpd-player's Now Playing is not" \
+        "started beside it." >&2
+      return 0
+    fi
+    "$npp" uninstall-launchagent
+    # bootout returns before launchd has removed the job: wait until it is gone
+    local _
+    for _ in $(seq 100); do
+      launchctl print "$target" >/dev/null 2>&1 || break
+      sleep 0.1  # delay: polling launchd, which has no event for a removed job; at most 10 s
+    done
+    if launchctl print "$target" >/dev/null 2>&1 || [ -e "$plist" ]; then
+      echo "warning: mpd-now-playable is still loaded or its plist is still there; mpd-player's Now Playing is not" \
+        "started beside it. Check with 'launchctl print $target'." >&2
+      return 0
+    fi
+    echo "retired mpd-now-playable (its LaunchAgent is removed; 'uv tool uninstall mpd-now-playable' removes the" \
+      "program; 'mpd-now-playable install-launchagent' brings it back)"
+  fi
+  service mpd-player-nowplaying "" "$player" nowplaying
+  local state; state="$(service_state mpd-player-nowplaying)"
+  if [ "$state" != running ]; then
+    echo "warning: mpd-player's Now Playing is $state, see ~/Library/Logs/mpd-player-nowplaying.log. To go back:" \
+      "'launchctl bootout gui/$(id -u)/io.github.rofrol.rormpc.mpd-player-nowplaying'," \
+      "then 'mpd-now-playable install-launchagent'" >&2
+  fi
+}
+
+# Linux: the bridges running now, one per line (mpDris2 is a Python script: matched in the command line, the others
+# by program name)
+mpris_bridges() {
+  local b
+  for b in $MPRIS_BRIDGES; do
+    if [ "$b" = mpDris2 ]; then
+      pgrep -u "$(id -u)" -f -- "/$b( |$)" >/dev/null 2>&1 && echo "$b"
+    else
+      pgrep -u "$(id -u)" -x -- "$b" >/dev/null 2>&1 && echo "$b"
+    fi
+  done
+  return 0
+}
+
 companions() {
   local local_build="" gap=3
   while [ $# -gt 0 ]; do
@@ -255,6 +318,14 @@ companions() {
   remove_service mpd-gap
   service mpd-player "" "$tools/mpd-player" --seconds "$gap"
   media_key_hint "$tools/mpd-player"
+  if [ "$(uname)" = Darwin ]; then
+    now_playing "$tools/mpd-player"
+  else
+    local b
+    for b in $(mpris_bridges); do
+      echo "warning: $b runs; with MPRIS on, it and mpd-player both answer the media keys: stop it" >&2
+    done
+  fi
 }
 
 status() {
@@ -269,6 +340,21 @@ status() {
   if [ -x "$player" ]; then
     sock="$(mpd_player_env "$player" socket-path --check 2>/dev/null)" || true
     echo "mpd-player command socket: ${sock:-none (this mpd-player has no command socket)}"
+  fi
+  if [ "$(uname)" = Darwin ]; then
+    echo "Now Playing (mpd-player nowplaying): $(service_state mpd-player-nowplaying)"
+    launchctl print "gui/$(id -u)/$NOW_PLAYABLE_LABEL" >/dev/null 2>&1 &&
+      echo "mpd-now-playable: loaded (a second Now Playing provider; companions retires it)"
+  else
+    local mpris="not owned"
+    if ! command -v busctl >/dev/null; then
+      mpris="unknown (no busctl)"
+    elif busctl --user status org.mpris.MediaPlayer2.mpd_player >/dev/null 2>&1; then
+      mpris="owned"
+    fi
+    echo "mpd-player MPRIS (org.mpris.MediaPlayer2.mpd_player): $mpris"
+    local b
+    for b in $(mpris_bridges); do echo "other MPD MPRIS bridge running: $b"; done
   fi
   grep -qE '^[[:space:]]*token(_file)?[[:space:]]*=' "$lb_config" 2>/dev/null && echo "ListenBrainz token: set" || echo "ListenBrainz token: missing in $lb_config"
   echo "listen rule: $(grep -E '^listen_' "$lb_config" 2>/dev/null | tr '\n' ' ')"

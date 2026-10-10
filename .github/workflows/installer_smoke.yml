@@ -244,6 +244,8 @@ jobs:
           grep -q '^timer active' status.txt
           grep -qx 'scrobbler service: active' status.txt
           grep -qx 'mpd-player service: active' status.txt
+          # whether the runner's user session has a bus decides owned or not; mpd-player runs either way (NRestarts)
+          grep -q '^mpd-player MPRIS (org.mpris.MediaPlayer2.mpd_player): ' status.txt
           grep -q '^Omarchy Radio daily check: ' status.txt
           grep -qx 'ListenBrainz token: set' status.txt
           grep -q '^listen rule: listen_fraction = 0.9 listen_max_seconds = 0 listen_uninterrupted = true' status.txt
