@@ -161,6 +161,8 @@ pub struct PlanView {
     area: Rect,
     scrollbar: Rect,
     like_cell: Option<Rect>,
+    /// the song ID whose like cell the mouse is over, from the last paint (underlined: it can be clicked)
+    hover_like: Option<u32>,
     rendered_rows: Vec<Option<(u32, String)>>,
     known_files: HashMap<u32, String>,
     invalidated_selection: bool,
@@ -192,6 +194,7 @@ impl PlanView {
             area: Rect::default(),
             scrollbar: Rect::default(),
             like_cell: None,
+            hover_like: None,
             rendered_rows: Vec::new(),
             known_files: HashMap::new(),
             invalidated_selection: false,
@@ -701,6 +704,18 @@ impl PlanView {
             .flatten();
         let on_header = self.area.contains(event.into())
             && self.rendered_header == Some(usize::from(event.y.saturating_sub(self.area.y)));
+        // a move only changes the like cell's hover; it renders when that changed
+        if matches!(event.kind, MouseEventKind::Moved) {
+            let hover = target
+                .as_ref()
+                .filter(|_| self.like_cell.is_some_and(|r| r.contains(event.into())))
+                .map(|(id, _)| *id);
+            if hover != self.hover_like {
+                self.hover_like = hover;
+                ctx.render()?;
+            }
+            return Ok(true);
+        }
         self.refresh(ctx, false);
         if on_header
             && matches!(
@@ -784,10 +799,12 @@ impl PlanView {
                 }
             }
             MouseEventKind::ScrollDown => {
+                self.hover_like = None; // another song is under the pointer now: the next move sets it again
                 self.state.scroll_down(ctx.config.scroll_amount, ctx.config.scrolloff);
                 self.remember_selection();
             }
             MouseEventKind::ScrollUp => {
+                self.hover_like = None;
                 self.state.scroll_up(ctx.config.scroll_amount, ctx.config.scrolloff);
                 self.remember_selection();
             }
@@ -834,10 +851,10 @@ impl PlanView {
             formats.iter().position(|f| !format!("{:?}", f.prop).contains("ShuffleNext"));
         let widths: Vec<_> = formats.iter().map(|f| f.width.into_constraint(0)).collect();
         let cells = Layout::horizontal(widths.clone()).spacing(1).split(table);
-        self.like_cell = formats
-            .iter()
-            .position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"))
-            .and_then(|i| cells.get(i).copied());
+        let like_idx =
+            formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
+        self.like_cell = like_idx.and_then(|i| cells.get(i).copied());
+        let hover_like = self.hover_like;
         let selected = self.selected_id;
         let by_id: HashMap<_, _> = ctx.queue.iter().map(|s| (s.id, s)).collect();
         let widget = VirtualizedTable::new(&self.rows).column_widths(widths).map_fn(|_, row| {
@@ -894,6 +911,9 @@ impl PlanView {
                     }
                     if self.is_stale && matches!(row.turn, Turn::Forecast(_)) && is_next {
                         line.style = line.style.add_modifier(Modifier::DIM);
+                    }
+                    if Some(i) == like_idx && hover_like == Some(song.id) {
+                        line = crate::ui::rormpc_actions::hovered_like(line);
                     }
                     line
                 })

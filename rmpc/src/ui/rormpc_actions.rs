@@ -5,6 +5,10 @@
 use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Result;
+use ratatui::{
+    style::{Modifier, Style},
+    text::{Line, Span},
+};
 use rmpc_mpd::{
     client::Client,
     commands::{Song, status::State},
@@ -58,6 +62,16 @@ pub fn set_like(ctx: &Ctx, file: String, value: &'static str) {
         client.set_sticker(&file, "like", value)?;
         Ok(())
     });
+}
+
+/// The like cell under the mouse, so it reads as clickable (consulted 2026-10-10, Sol and MiMo): the glyph it shows,
+/// underlined, bold for ♥ and ✗; an unrated song shows the liked glyph dimmed (same shape, so it reads "click to like";
+/// ♡ is narrower in some fonts). Underline, not reversed: a reversed hover vanishes on a reversed selected row.
+pub fn hovered_like(line: Line<'_>) -> Line<'_> {
+    if line.width() == 0 {
+        return Line::from(Span::styled("♥", Style::default().add_modifier(Modifier::DIM | Modifier::UNDERLINED)));
+    }
+    line.patch_style(Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
 }
 
 /// "Keep": the song is not a deletion candidate; `musicdb keep` logs it and `musicdb sync` drops it from the
@@ -225,7 +239,21 @@ pub fn remap_marks(old: &[Song], marked: &BTreeSet<usize>, new: &[Song]) -> BTre
 mod tests {
     use rmpc_mpd::commands::Song;
 
-    use super::{duplicate_ids, remap_marks};
+    use ratatui::{style::Modifier, text::Line};
+
+    use super::{duplicate_ids, hovered_like, remap_marks};
+
+    #[test]
+    fn a_hovered_like_cell_is_underlined_and_an_empty_one_shows_a_dim_heart() {
+        let liked = hovered_like(Line::from("♥"));
+        assert_eq!(liked.to_string(), "♥");
+        assert!(liked.style.add_modifier.contains(Modifier::BOLD | Modifier::UNDERLINED));
+        let unrated = hovered_like(Line::default());
+        assert_eq!(unrated.to_string(), "♥");
+        let style = unrated.spans[0].style;
+        assert!(style.add_modifier.contains(Modifier::DIM | Modifier::UNDERLINED));
+        assert!(!style.add_modifier.contains(Modifier::BOLD), "bold and dim share SGR 22: dim alone");
+    }
 
     fn song(id: u32, file: &str) -> Song {
         Song { id, file: file.to_owned(), ..Default::default() }

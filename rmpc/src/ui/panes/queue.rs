@@ -876,7 +876,7 @@ impl Pane for QueuePane {
         if formats.iter().any(|f| matches!(f.prop.kind, PropertyKindOrText::Property(SongProperty::Versions()))) {
             crate::ui::rormpc_versions::ensure_loaded(&ctx.app_event_sender);
         }
-        // rormpc: the column showing rmpc's like sticker gets a clickable heart (hover shows ♡ on an unrated song)
+        // rormpc: the column showing rmpc's like sticker gets a clickable heart (hover underlines it; an unrated song shows a dim ♥)
         let like_idx = formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
         let has_next_col = formats.iter().any(|f| format!("{:?}", f.prop).contains("ShuffleNext"));
         self.like_col = like_idx.and_then(|i| widths.get(i)).map(|r| (r.x, r.width.max(1)));
@@ -982,9 +982,8 @@ impl Pane for QueuePane {
                     if let (Some(badge), 0) = (&except_badge, i) {
                         line.spans.insert(usize::from(is_marked), Span::raw(badge.clone()));
                     }
-                    if Some(i) == like_idx && hover_like == Some(idx) && line.width() == 0 {
-                        // the liked glyph, dimmed: same shape, so it reads "click to like" (♡ is narrower in some fonts)
-                        line = Line::from(Span::styled("♥", Style::default().add_modifier(Modifier::DIM)));
+                    if Some(i) == like_idx && hover_like == Some(idx) {
+                        line = crate::ui::rormpc_actions::hovered_like(line);
                     }
 
                     line

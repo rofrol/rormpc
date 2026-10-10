@@ -750,7 +750,8 @@ is not subscribed to the channel, and rormpc says so instead of sending.
 ## Likes in Hits and Queue
 
 Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).
-In Hits and Queue, hovering the like cell of an unrated song shows a dimmed ♥; a click on the cell toggles like and nothing
+In Hits and Queue (Music in both modes, the weighted plan view included), the like cell under the mouse is underlined
+so it reads as clickable: ♥ and ✗ also turn bold, an unrated song shows a dimmed ♥. A click on the cell toggles like and nothing
 else (no selection, no playback). `r` in Hits toggles like for the selected row; dislike is in the menu. `/` in
 Hits searches artist and title (words in any order, diacritics folded) within the result, "23 shown / 410
 results"; Esc clears it. Mouse moves reach the active tab's panes (upstream drops them), without a render unless
