@@ -478,10 +478,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       together with the install of a rormpc that knows it (the coordinator installs, then commits the config), never
       ahead of it (2026-10-10: ShowPlay(Deleted) broke loading the config until the install).
       Done in 29d7250 (worker).
-- [ ] Media key Next lags (asked 2026-10-10: "the MacBook's Next media key works with some delay. ask the models"):
+- [x] Media key Next lags (asked 2026-10-10: "the MacBook's Next media key works with some delay. ask the models"):
       a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
       MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
       bug signal"); live tests with the media key on the user's MPD go to "Needs a decision" first.
+      Investigated 2026-10-10 (worker, consulted Sol + MiMo; no code changed): F9 goes Karabiner shell_command →
+      ~/scripts/mpd-media-key (zsh -f) → mpc next. On a scratch MPD the whole script takes 26 ms to MPD's answer and
+      47 ms to the new song (79 ms under background CPU policy); MPD restarting the CoreAudio output costs 60-125 ms
+      on every next; crossfade 0, mpd-player and gap not involved. Today's real presses (system log): zsh start → mpc
+      18-600 ms, mpc → MPD stop 20-30 ms, sometimes 90-430 ms: Karabiner's console user server has no launchd
+      ProcessType, so its children are throttled and wait for CPU while agents run; mpc resolves "localhost" through
+      mDNSResponder (up to 260 ms under load). Fix options in "Needs a decision".
 - [ ] Restore Bon Jovi "Livin' on a Prayer" and make a full restore possible (asked 2026-10-10, next: "I deleted
       Jon Bon Jovi - Livin' on a Prayer. Restore it. And give a way to restore, together with the ListenBrainz
       stats. Ask the models"). Checked: deletion 20261010-162151-140--Bon_Jovi--Bon_Jovi_-_Livin__On_A_Prayer--
@@ -1290,3 +1297,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (Sol) | by hand as now, the forecast shows the next round's picks dimmed as provisional (MiMo)
       Checked: consult round 2026-10-10 (see "The forecast should always show 10 ahead" in Next).
       Decided by the user 2026-10-10: automatic, the next round starts when one ends (Sol).
+- [ ] Media key lag: which fix?
+      Options: Karabiner send_user_command to a socket mpd-player listens on, which sends next over its open MPD
+      connection (no process per press; a new socket in mpd-player) | only 127.0.0.1 instead of localhost in
+      ~/scripts/mpd-media-key (saves the DNS lookup, not the CPU wait) | both, the cheap one first
+      Checked: the media key worker's measurements 2026-10-10 (see "Media key Next lags" in Next); a live test with
+      F9 and `log stream` is yours after the fix.
