@@ -82,6 +82,7 @@ pub mod rormpc_pause;
 pub mod rormpc_player;
 pub mod rormpc_preview;
 pub mod rormpc_queue_plan;
+pub mod rormpc_scrobble;
 pub mod rormpc_process;
 pub mod rormpc_genres;
 pub mod rormpc_exceptions;
@@ -580,6 +581,7 @@ impl<'ui> Ui<'ui> {
                 GlobalAction::ShowGapMenu => crate::ui::rormpc_player::open_gap_menu(ctx),
                 GlobalAction::ShowPauseMenu => crate::ui::rormpc_pause::open_pause_menu(ctx),
                 GlobalAction::ToggleWeightedShuffle => crate::ui::rormpc_player::toggle_shuffle(ctx),
+                GlobalAction::ScrobbleNow => crate::ui::rormpc_scrobble::send_now(ctx),
                 GlobalAction::HeardEnough => match ctx.current_song() {
                     Some(song) => {
                         let title = song.metadata.get("title").map_or(song.file.as_str(), |t| t.last()).to_owned();

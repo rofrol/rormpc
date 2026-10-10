@@ -113,6 +113,10 @@ fn main_task<B: Backend + std::io::Write>(
     let _upnext_watcher = crate::ui::rormpc_upnext::watch(ctx.app_event_sender.clone())
         .map_err(|err| log::warn!(error:? = err; "Cannot watch Up next state"))
         .ok();
+    // rormpc: the scrobbler's status (countdown, sent, a manual send's answer) redraws even while paused.
+    let _scrobble_watcher = crate::ui::rormpc_scrobble::watch(ctx.app_event_sender.clone())
+        .map_err(|err| log::warn!(error:? = err; "Cannot watch the scrobbler status"))
+        .ok();
 
     // Listen to changes to lyrics when enabled
     let mut lyrics_watcher = if ctx.config.enable_lyrics_hot_reload

@@ -50,6 +50,7 @@
             "z":          ToggleRepeat,
             "x":          ToggleRandom,
             "w":          ToggleWeightedShuffle, // rormpc: mpd-player draws the next song; Play shows its plan
+            "oL":         ScrobbleNow, // rormpc: send the playing song to ListenBrainz now (asks when the rule is not met)
             "c":          ToggleConsume,
             "v":          ToggleSingle,
             "p":          TogglePause,

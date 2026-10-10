@@ -615,6 +615,30 @@ atomic-file notifications refresh the view even while paused, and one deadline r
 polling. A missing patch reply uses
 the existing 2-second external acknowledgement deadline and re-reads state before reporting failure; no retry.
 
+## Scrobble status
+
+`Status(Scrobble)` shows what the scrobbler (ro-listenbrainz-mpd) will do with the playing song:
+`scrobble in 1:23 · 62% of 50%` (the time left, how far the listen is toward the rule, and what the rule asks:
+the fraction of the song, or the playtime when its maximum is less), `no scrobble: seeked to 20% (needs 50%
+uninterrupted)` when too little of the song is left after a seek, `no scrobble: unknown length`, `scrobbled ✓`,
+`sending to ListenBrainz…` while a manual send waits for its answer, and `scrobbler not running` when its process
+ended. Nothing without a scrobbler status file, while stopped, or before the scrobbler has seen the playing song.
+For example next to the progress bar:
+
+    (kind: Property(Status(Scrobble)), style: (fg: "#7aa0cd")),
+
+The rule is never computed here: the scrobbler writes `status.json` next to its `listens.jsonl` (macOS
+`~/Library/Application Support/listenbrainz-mpd/`, Linux `$XDG_DATA_HOME/listenbrainz-mpd/`) on each change, atomic
+replacement, never on a timer; rormpc watches the directory and adds MPD's elapsed time since the file's
+`position_s`. Liveness is the scrobbler's process (its `pid`), as for mpd-player.
+
+`oL` (`ScrobbleNow`) sends the playing song's listen to ListenBrainz now, through the scrobbler: once, with the
+listen's start as its time, logged in `listens.jsonl` with `"manual": true`, and the automatic listen of that play
+is then not sent. When the rule is not met yet it asks first. It is `submit <instance> <play>` on the MPD channel
+`listenbrainz_listen` (a request for an earlier play or scrobbler run is refused, never sent for another song);
+the status line says "Sent to ListenBrainz" or why not once `status.json` answers. A scrobbler older than this
+is not subscribed to the channel, and rormpc says so instead of sending.
+
 ## Likes in Hits and Queue
 
 Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).

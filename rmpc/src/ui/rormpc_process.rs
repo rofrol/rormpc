@@ -1,10 +1,11 @@
-//! Local mpd-player liveness. MPD's `UnsubscribeAll` on disconnect does NOT
+//! Local daemon liveness (mpd-player, the scrobbler). MPD's `UnsubscribeAll` on disconnect does NOT
 //! emit Subscription (0.24.15), so a cached channels response cannot detect a
 //! crash. One native process-exit wait per daemon session; no polling, sleep or
 //! extra freshness timeout. Failure to establish observation is deliberately
 //! stale.
 
 use std::{
+    collections::HashMap,
     io,
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
     sync::{
@@ -24,19 +25,33 @@ struct ProcessWatch {
     session: String,
     alive: Arc<AtomicBool>,
 }
-static WATCH: OnceLock<Mutex<Option<ProcessWatch>>> = OnceLock::new();
+/// One watch per daemon, by name.
+static WATCH: OnceLock<Mutex<HashMap<&'static str, ProcessWatch>>> = OnceLock::new();
 
+/// mpd-player's process, by the pid and plan version (`<session>:...`) from its
+/// shuffle.json.
 pub fn alive(pid: u32, version: &str, tx: &Sender<AppEvent>) -> bool {
     let Some((session, _)) = version.split_once(':') else { return false };
+    daemon_alive("mpd-player", pid, session, tx)
+}
+
+/// A daemon's process, by the pid and session (one per daemon run) from its
+/// state file.
+pub fn daemon_alive(name: &'static str, pid: u32, session: &str, tx: &Sender<AppEvent>) -> bool {
     if pid == 0 || pid > i32::MAX as u32 {
         return false;
     }
-    let Ok(mut slot) = WATCH.get_or_init(|| Mutex::new(None)).lock() else { return false };
-    if !slot.as_ref().is_some_and(|w| w.pid == pid && w.session == session) {
-        *slot =
-            Some(ProcessWatch { pid, session: session.to_owned(), alive: start(pid, tx.clone()) });
+    let Ok(mut watches) = WATCH.get_or_init(|| Mutex::new(HashMap::new())).lock() else {
+        return false;
+    };
+    if !watches.get(name).is_some_and(|w| w.pid == pid && w.session == session) {
+        watches.insert(name, ProcessWatch {
+            pid,
+            session: session.to_owned(),
+            alive: start(pid, tx.clone()),
+        });
     }
-    slot.as_ref().is_some_and(|w| w.alive.load(Ordering::Relaxed))
+    watches.get(name).is_some_and(|w| w.alive.load(Ordering::Relaxed))
 }
 
 fn start(pid: u32, tx: Sender<AppEvent>) -> Arc<AtomicBool> {
@@ -44,20 +59,20 @@ fn start(pid: u32, tx: Sender<AppEvent>) -> Arc<AtomicBool> {
     let fd = match open(pid) {
         Ok(fd) => fd,
         Err(err) => {
-            log::debug!(pid, err:?; "Cannot observe mpd-player; forecast is stale");
+            log::debug!(pid, err:?; "Cannot observe the daemon; its state is stale");
             return alive;
         }
     };
     alive.store(true, Ordering::Relaxed);
     let flag = Arc::clone(&alive);
-    if let Err(err) = std::thread::Builder::new().name("mpd-player-exit".into()).spawn(move || {
+    if let Err(err) = std::thread::Builder::new().name("daemon-exit".into()).spawn(move || {
         if let Err(err) = wait(&fd) {
             log::debug!(err:?; "Process-exit observation failed; forecast is stale");
         }
         flag.store(false, Ordering::Relaxed);
         let _ = tx.send(AppEvent::RequestRender);
     }) {
-        log::warn!(err:?; "Cannot start mpd-player exit observer");
+        log::warn!(err:?; "Cannot start the daemon exit observer");
         alive.store(false, Ordering::Relaxed);
     }
     alive

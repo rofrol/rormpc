@@ -646,6 +646,10 @@ impl Property<PropertyKind> {
                 StatusProperty::BuildRevision => {
                     Some(Either::Left(Span::styled(crate::build_revision(), style)))
                 }
+                StatusProperty::Scrobble => match crate::ui::rormpc_scrobble::line(ctx) {
+                    Some(line) => Some(Either::Left(Span::styled(line, style))),
+                    None => self.default_as_span(song, ctx, tag_separator, strategy),
+                },
                 StatusProperty::WeightedShuffle { on_label, off_label, on_style, waiting_style, off_style } => {
                     let sh = crate::ui::rormpc_player::shuffle_state();
                     Some(Either::Left(match (sh.enabled, sh.active) {
