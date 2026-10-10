@@ -648,8 +648,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       an open-ended period.
       Done: rormpc fa87993, rormpc-tools c00c20f (worker); released v0.2.45 and installed 2026-10-10 (UI not
       checked live by the worker).
-- [ ] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
+- [x] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
       rename or --name, the playlist file moved, the subscription updated).
+      Done in rormpc-tools af44539 (worker): `liveplaylist rename ID NAME` moves the .m3u and records the name
+      (refuses a taken name, undoes the move if the save fails); new radio subscriptions default to
+      "radio.omarchy.org". Not released. The live rename of the user's subscription was blocked by the auto-mode
+      classifier (see "Needs a decision").
 - [ ] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant,
       without apply. Work out with the models how to do it."): a worker studies how a filter change in the Music view
       reaches the table, the preview and the MPD queue today (Apply, preview.json, the weighted plan, the 3b
@@ -1515,3 +1519,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in? Decided by the user 2026-10-10: on by default, warn when another MPD MPRIS bridge runs.
       Options: on by default, warn when another MPD MPRIS bridge runs | opt-in with `mpd-player --mpris`
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
+- [ ] Radio rename: the worker's `uv run liveplaylist rename omarchy-radio radio.omarchy.org` on your library was
+      blocked by the auto-mode classifier; will you run it yourself after the next release?
+      Options: you run `liveplaylist rename omarchy-radio radio.omarchy.org` after the release | allow the coordinator to run it after the release
+      Checked: rormpc-tools af44539 (2026-10-10); nothing else names the old playlist (config, sets, smart lists).
