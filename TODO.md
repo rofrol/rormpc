@@ -1023,3 +1023,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Scrobble status: Add Status(Scrobble) to your theme in dotfiles?
       Options: next to the progress bar, before the time | in the header | no
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
+- [ ] Release now: rormpc-tools v0.2.39 (smart lists, named sets, api_url, missing-program errors, my plays rank,
+      Play's round key), a ro-listenbrainz-mpd tag (scrobble status), bump both tags in the installer, run
+      `companions`, install rormpc (Play, smart lists, scrobble status)?
+      Options: yes, now | after phase 3b | not yet
+      Checked 2026-10-10: all of it is in the mains with tests green; nothing of it is installed (installed: tools
+      0.2.38, rormpc fb6cb76). Play shows only with a Pane(Play()) tab in your config (choice 18).
