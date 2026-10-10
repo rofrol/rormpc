@@ -32,7 +32,7 @@ fn live(ctx: &mut Ctx) {
 }
 
 #[test]
-fn sections_include_all_ten_slots_and_physical_order_tail() {
+fn sections_include_all_ten_slots_and_a_pool_tail_in_queue_order() {
     let mut sh = shuffle(&(8..=17).collect::<Vec<_>>());
     sh.history =
         serde_json::from_value(json!([{"id":2,"file":"s2"},{"id":3,"file":"s3"}])).unwrap();
@@ -42,7 +42,7 @@ fn sections_include_all_ten_slots_and_physical_order_tail() {
         added: false,
     }];
     let rows = project(&songs(), Some(4), &requests, &sh);
-    assert_eq!(rows.len(), 19);
+    assert_eq!(rows.len(), 18);
     assert_eq!(rows[..5].iter().map(|r| r.turn).collect::<Vec<_>>(), vec![
         Turn::Past(-2),
         Turn::Past(-1),
@@ -54,8 +54,9 @@ fn sections_include_all_ten_slots_and_physical_order_tail() {
         rows[5..15].iter().map(|r| r.turn).collect::<Vec<_>>(),
         (1..=10).map(Turn::Forecast).collect::<Vec<_>>()
     );
-    assert_eq!(rows[15].turn, Turn::Divider);
-    assert_eq!(rows[16..].iter().map(|r| r.id.unwrap()).collect::<Vec<_>>(), vec![1, 7, 18]);
+    // the pool trails in queue order; `refresh` keeps it only for `/` matches
+    assert!(rows[15..].iter().all(|r| r.turn == Turn::Pool));
+    assert_eq!(rows[15..].iter().map(|r| r.id.unwrap()).collect::<Vec<_>>(), vec![1, 7, 18]);
 }
 
 #[test]
@@ -69,7 +70,7 @@ fn id_reuse_and_duplicate_roles_never_duplicate_rows() {
     assert_eq!(rows.iter().filter(|r| r.id == Some(2)).count(), 1);
     assert_eq!(rows.iter().find(|r| r.id == Some(2)).unwrap().turn, Turn::Request(1));
     assert_eq!(rows.iter().find(|r| r.id == Some(3)).unwrap().turn, Turn::Current);
-    assert_eq!(rows.iter().find(|r| r.id == Some(1)).unwrap().turn, Turn::Unplanned);
+    assert_eq!(rows.iter().find(|r| r.id == Some(1)).unwrap().turn, Turn::Pool);
 }
 
 #[test]
@@ -127,34 +128,35 @@ fn filtering_keeps_original_turn_number_and_escape_restores_id(mut ctx: Ctx) {
 }
 
 #[rstest]
-fn divider_never_selected_by_top_arrows_marks_or_click(mut ctx: Ctx) {
+fn pool_songs_show_only_as_filter_matches_with_their_row_actions(mut ctx: Ctx) {
     live(&mut ctx);
-    publish(ShuffleState::default());
+    publish(shuffle(&(8..=17).collect::<Vec<_>>()));
+    let (tx, rx) = crossbeam::channel::unbounded();
+    ctx.client_request_sender = tx;
     let mut view = PlanView::new();
     view.area = Rect::new(0, 0, 80, 20);
     view.refresh(&ctx, false);
-    view.action(&mut common(CommonAction::Top), &mut ctx).unwrap();
-    assert_eq!(view.selected_id, Some(1));
-    view.action(&mut common(CommonAction::Up), &mut ctx).unwrap();
-    assert!(view.selected_id.is_some());
+    assert_eq!(view.rows.len(), 10);
+    assert!(view.rows.iter().all(|r| r.turn != Turn::Pool));
     view.action(&mut common(CommonAction::InvertSelection), &mut ctx).unwrap();
-    assert_eq!(view.marked.len(), 18);
-    let selected = view.selected_id;
-    for kind in [
-        MouseEventKind::LeftClick,
-        MouseEventKind::DoubleClick,
-        MouseEventKind::RightClick,
-        MouseEventKind::MiddleClick,
-    ] {
-        view.mouse(MouseEvent { x: 0, y: 0, kind }, &ctx).unwrap();
-        assert_eq!(view.selected_id, selected);
-    }
+    assert_eq!(view.marked.len(), 10); // marks never reach the hidden pool
+    view.marked.clear();
+    view.search(&ctx);
+    view.query = "s18".into();
+    view.refresh(&ctx, true);
+    assert_eq!(view.rows, vec![PlanRow { id: Some(18), turn: Turn::Pool }]);
+    let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
+    terminal.draw(|frame| view.render(frame, frame.area(), &ctx)).unwrap();
+    let text = terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect::<String>();
+    assert!(text.contains("1 · in the pool, not in the forecast"));
+    view.action(&mut queue(QueueActions::Play), &mut ctx).unwrap();
+    assert!(rx.try_recv().is_ok()); // the matched pool song plays by its ID
 }
 
 #[rstest]
-fn marking_moves_down_but_skips_the_divider(mut ctx: Ctx) {
+fn marking_moves_down(mut ctx: Ctx) {
     live(&mut ctx);
-    publish(shuffle(&[1]));
+    publish(shuffle(&[1, 2]));
     let mut view = PlanView::new();
     view.area = Rect::new(0, 0, 80, 20);
     view.select_id(Some(1));
@@ -250,10 +252,13 @@ fn stale_and_section_boundaries_never_submit_swaps(mut ctx: Ctx) {
     view.refresh(&ctx, false);
     view.move_selected(1, &ctx);
     assert!(view.pending.is_none());
+    view.query = "s3".into(); // a pool song, reachable only as a match
     view.select_id(Some(3));
     view.refresh(&ctx, false);
+    assert_eq!(view.selected_turn(), Some(Turn::Pool));
     view.move_selected(-1, &ctx);
     assert!(view.pending.is_none());
+    view.query.clear();
     ctx.player_present.store(false, std::sync::atomic::Ordering::Relaxed);
     view.select_id(Some(1));
     view.refresh(&ctx, false);
@@ -294,7 +299,7 @@ fn renderer_shows_plan_title_and_dimmed_stale_forecast(mut ctx: Ctx) {
         .unwrap();
     let text = terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect::<String>();
     assert!(text.contains("Queue · plan (o: queue) · stale"));
-    assert!(text.contains("unplanned · queue order"));
+    assert!(!text.contains("unplanned"));
     assert!(
         terminal.backend().buffer().content().iter().any(|c| c.modifier.contains(Modifier::DIM))
     );

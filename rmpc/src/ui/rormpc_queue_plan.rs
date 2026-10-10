@@ -44,8 +44,8 @@ pub enum Turn {
     Current,
     Request(usize),
     Forecast(usize),
-    Unplanned,
-    Divider,
+    /// a queued song outside the forecast; shown only as a `/` match
+    Pool,
 }
 
 impl Turn {
@@ -55,8 +55,7 @@ impl Turn {
             Self::Current => (1, 0),
             Self::Request(n) => (2, n.cast_signed() as i64),
             Self::Forecast(n) => (3, n.cast_signed() as i64),
-            Self::Unplanned => (4, 0),
-            Self::Divider => (4, -1),
+            Self::Pool => (4, 0),
         }
     }
 
@@ -66,7 +65,7 @@ impl Turn {
             Self::Current => "0 ▶".to_owned(),
             Self::Request(n) => format!("↑{n}"),
             Self::Forecast(n) => n.to_string(),
-            _ => String::new(),
+            Self::Pool => "·".to_owned(),
         }
     }
 }
@@ -115,16 +114,12 @@ pub fn project(
         .map(|(pos, s)| {
             (pos, PlanRow {
                 id: Some(s.id),
-                turn: turns.get(&s.id).copied().unwrap_or(Turn::Unplanned),
+                turn: turns.get(&s.id).copied().unwrap_or(Turn::Pool),
             })
         })
         .collect();
     rows.sort_by_key(|(pos, row)| (row.turn.key(), *pos));
-    let mut rows: Vec<_> = rows.into_iter().map(|(_, row)| row).collect();
-    if let Some(i) = rows.iter().position(|r| r.turn == Turn::Unplanned) {
-        rows.insert(i, PlanRow { id: None, turn: Turn::Divider });
-    }
-    rows
+    rows.into_iter().map(|(_, row)| row).collect()
 }
 
 pub fn stale(sh: &ShuffleState, present: bool, now: f64) -> bool {
@@ -266,17 +261,14 @@ impl PlanView {
                 || requests.iter().any(|r| r.id == e.id && r.file == e.file)
         });
         let mut rows = project(&ctx.queue, ctx.status.songid, &requests, &self.snapshot);
-        if !self.query.is_empty() {
+        if self.query.is_empty() {
+            rows.retain(|r| r.turn != Turn::Pool);
+        } else {
             let found = crate::ui::panes::queue::find_matches(&ctx.queue, &self.query);
             let matches: BTreeSet<_> = found.rows.iter().map(|i| ctx.queue[*i].id).collect();
-            rows.retain(|r| {
-                r.id.is_some_and(|id| matches.contains(&id)) || r.turn == Turn::Divider
-            });
-            // A divider is useful only if there are unplanned matches on its
-            // right.
-            if !rows.iter().any(|r| r.turn == Turn::Unplanned) {
-                rows.retain(|r| r.turn != Turn::Divider);
-            }
+            // Pool songs (outside the forecast) appear only as matches, after
+            // the forecast, so their row actions stay reachable.
+            rows.retain(|r| r.id.is_some_and(|id| matches.contains(&id)));
         }
         let files: HashMap<_, _> = ctx.queue.iter().map(|s| (s.id, s.file.as_str())).collect();
         if let Some(id) = self.selected_id
@@ -335,33 +327,6 @@ impl PlanView {
     fn remember_selection(&mut self) {
         self.selected_id =
             self.state.get_selected().and_then(|i| self.rows.get(i)).and_then(|r| r.id);
-    }
-
-    fn skip_divider(&mut self, forward: bool, ctx: &Ctx) {
-        if let Some(i) = self.state.get_selected()
-            && self.rows.get(i).is_some_and(|r| r.id.is_none())
-        {
-            let previous = self
-                .rows
-                .iter()
-                .enumerate()
-                .take(i)
-                .rev()
-                .find(|(_, r)| r.id.is_some())
-                .map(|(n, _)| n);
-            let next = self
-                .rows
-                .iter()
-                .enumerate()
-                .skip(i + 1)
-                .find(|(_, r)| r.id.is_some())
-                .map(|(n, _)| n);
-            self.state.select(
-                if forward { next.or(previous) } else { previous.or(next) },
-                ctx.config.scrolloff,
-            );
-        }
-        self.remember_selection();
     }
 
     pub fn select_id(&mut self, id: Option<u32>) {
@@ -428,7 +393,7 @@ impl PlanView {
         } else {
             self.state.prev(ctx.config.scrolloff, ctx.config.wrap_navigation);
         }
-        self.skip_divider(down, ctx);
+        self.remember_selection();
         self.invalidated_selection = false;
         Ok(ctx.render()?)
     }
@@ -627,16 +592,7 @@ impl PlanView {
                 return Ok(false);
             }
         }
-        let forward = matches!(
-            action,
-            CommonAction::Down
-                | CommonAction::DownHalf
-                | CommonAction::PageDown
-                | CommonAction::Bottom
-                | CommonAction::NextResult
-                | CommonAction::Select
-        );
-        self.skip_divider(forward, ctx);
+        self.remember_selection();
         if matches!(
             action,
             CommonAction::Up
@@ -687,7 +643,7 @@ impl PlanView {
         {
             if let Some(p) = calculate_scrollbar_position(event, self.scrollbar) {
                 self.state.scroll_to(p, ctx.config.scrolloff);
-                self.skip_divider(true, ctx);
+                self.remember_selection();
             }
             ctx.render()?;
             return Ok(true);
@@ -753,11 +709,11 @@ impl PlanView {
             }
             MouseEventKind::ScrollDown => {
                 self.state.scroll_down(ctx.config.scroll_amount, ctx.config.scrolloff);
-                self.skip_divider(true, ctx);
+                self.remember_selection();
             }
             MouseEventKind::ScrollUp => {
                 self.state.scroll_up(ctx.config.scroll_amount, ctx.config.scrolloff);
-                self.skip_divider(false, ctx);
+                self.remember_selection();
             }
             _ => return Ok(true),
         }
@@ -879,16 +835,6 @@ impl PlanView {
             Row::new(columns).style(style)
         });
         frame.render_stateful_widget(widget, table, &mut self.state);
-        if let Some(i) = self.rows.iter().position(|r| r.turn == Turn::Divider)
-            && i >= self.state.offset()
-            && i < self.state.offset() + usize::from(table.height)
-        {
-            frame.render_widget(
-                Line::from("── unplanned · queue order ──")
-                    .style(Style::default().add_modifier(Modifier::DIM)),
-                Rect::new(table.x, table.y + (i - self.state.offset()) as u16, table.width, 1),
-            );
-        }
         if let Some(widget) = ctx.config.as_styled_scrollbar() {
             frame.render_stateful_widget(widget, scrollbar, self.state.as_scrollbar_state_ref());
         }
@@ -896,10 +842,14 @@ impl PlanView {
         if search.height > 0 {
             frame.render_widget(
                 Line::from(format!(
-                    "FILTER / {}{} · {} shown",
+                    "FILTER / {}{} · {} shown{}",
                     self.query,
                     if self.typing { "▏" } else { "" },
-                    self.rows.iter().filter(|r| r.id.is_some()).count()
+                    self.rows.iter().filter(|r| r.id.is_some()).count(),
+                    match self.rows.iter().filter(|r| r.turn == Turn::Pool).count() {
+                        0 => String::new(),
+                        n => format!(" · {n} · in the pool, not in the forecast"),
+                    }
                 )),
                 search,
             );

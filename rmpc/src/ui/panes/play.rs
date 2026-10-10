@@ -3,8 +3,8 @@
 //!
 //! - Normal mode (weighted off): MPD's queue in its order; the Hits filter column is collapsed to one line naming
 //!   the source, `h` or a click opens it.
-//! - Weighted mode (`w`): the plan projection (past plays, `0 ▶`, Up next, the forecast, then the unplanned
-//!   rest) with the filter column open. Turning weighted off keeps the queue as it is.
+//! - Weighted mode (`w`): the plan projection (past plays, `0 ▶`, Up next and the forecast; a pool song shows
+//!   only as a `/` match) with the filter column open. Turning weighted off keeps the queue as it is.
 //! - A filter change prepares a preview (`hits` into its own file, MPD untouched): the table shows it under a
 //!   banner with its counts; `a` (or Apply) plays it, Esc drops it and shows the playing source again. See
 //!   `rormpc_play` for Apply's confirmation and race rules.

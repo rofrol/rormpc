@@ -22,7 +22,7 @@ Four tabs and a daemon do the work this view combines:
 | Piece | Where | What it does |
 |---|---|---|
 | Queue | `rmpc/src/ui/panes/queue.rs` | MPD's queue in physical order; `/` filter (`rormpc_filter.rs`); context menu with Play next, Sources…, Tags…, Add to playlist… |
-| Queue plan view | `rmpc/src/ui/rormpc_queue_plan.rs` (`o`, `TogglePlanView`) | A projection: `-2`,`-1` past plays, `0 ▶`, `↑n` Up next, forecast `1`..`10`, "unplanned · queue order"; J/K patch the forecast through mpd-player with a plan version |
+| Queue plan view | `rmpc/src/ui/rormpc_queue_plan.rs` (`o`, `TogglePlanView`) | A projection: `-2`,`-1` past plays, `0 ▶`, `↑n` Up next, forecast `1`..`10`, nothing after it (pool songs only as `/` matches); J/K patch the forecast through mpd-player with a plan version |
 | Hits | `rmpc/src/ui/panes/hits.rs` | Filter column (`Filters`, `Source` enum: Billboard / my charts / whole library / my playlists / my likes / recommended; Period; Top %; genres and artists tri-state; owned; show hidden; Downloads) and a ranked table. Apply runs `hits ... --json ~/.cache/rormpc/hits/current.json` in a thread (`HitsPane::apply`) |
 | Hits → queue | `rmpc/src/ui/rormpc_upnext.rs` `play_hits_source` → `confirm_replace_with` | "Play these N songs (as the source)…": after a confirmation deletes everything but the playing song, adds the owned rows, drops the playing song's duplicate, writes `$XDG_STATE_HOME/rormpc/source.json` `{kind: "hits", name, len, files}`. Moving a filter later never changes it ("browsing other results") |
 | Sources… | same file, `open_sources` | The whole library or a stored MPD playlist replaces the queue the same way |
@@ -52,7 +52,8 @@ filter-driven table).
   column is empty, never stale. The filter column is collapsed to one line naming the source
   (`Source: 1980s · +rock · Top 10%`) and opens with `h` or a click.
 - **Weighted mode** (`w`): the table is today's plan view: past plays, `0 ▶`, `↑n` requests, forecast `1`..`10`
-  with the lane, then "unplanned · source order". The filter column is open. A header line under the tab title
+  with the lane, and nothing after it (decided by the user 2026-10-10: the rest of the pool is reached through `/`
+  and Browse). The filter column is open. A header line under the tab title
   always says what is on screen and why (MiMo):
   `▶ Playing: 1980s +rock Top 10% · weighted · round 12/84 · rest 2 · skip 1`.
 - Turning weighted off (`w`) only sends `shuffle off` and switches the table to normal mode. **The queue stays the
@@ -222,15 +223,16 @@ to SelectAlbum in the Queue; Play is a different pane, so it does not clash, but
  Rank by  Billboard      │   4   redis  Cutting Crew       (I Just) Died in Your…   played 2 y ago
  Years of chart year     │   5   new    Level 42           Lessons in Love          never heard
  Period  1985 – 1992  ‹› │   …
- Top %  [x]1-10 [ ]11-20 │ ┄┄ unplanned · source order ┄┄
- Genres                  │       ✚      Kombi              Black and White          pinned · library
-  + rock   - country     │       ⊘      Phil Collins       Another Day in Paradise  excluded · Billboard
+ Top %  [x]1-10 [ ]11-20 │  10   fam    Kombi              Black and White          plays 12 · ✚ pinned
+ Genres                  │
+  + rock   - country     │
  (Billboard) − Christmas │
    ∩ rock · 287 of 8,312 │
  [ Apply ] • changed     │
 ```
 
-The ghost row `⊘` shows only with "show excluded"; the rule summary under the genres is the printed formula.
+Nothing follows the forecast: a song outside it shows only as a `/` match (turn `·`), with its row actions. The
+rule summary under the genres is the printed formula.
 
 ### 3. Save as smart list (`S`)
 
