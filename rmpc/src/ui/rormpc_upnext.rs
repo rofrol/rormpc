@@ -20,6 +20,7 @@ use crossbeam::channel::Sender;
 use notify_debouncer_full::notify::{self, RecommendedWatcher, RecursiveMode, Watcher};
 use rmpc_mpd::{
     commands::status::OnOffOneshot,
+    errors::MpdError,
     mpd_client::MpdClient,
     proto_client::ProtoClient,
     queue_position::QueuePosition,
@@ -509,13 +510,44 @@ impl Replace {
             return Ok(());
         }
         let current = status.songid;
-        // everything but the playing song leaves (two range deletes around it); Up next follows its files
+        let old_len = status.playlistlength as usize;
+        // the new songs go after the old queue first: MPD's database decides which files still exist (a stale
+        // preview can name deleted songs), and nothing old leaves unless something new came in
+        let (files, start, gone) = match kind.as_str() {
+            "library" => {
+                client.add("/", None)?;
+                (files, start, 0)
+            }
+            _ if !files.is_empty() => {
+                let total = files.len();
+                let added = match add_known(files, start, |f| client.add(f, None)) {
+                    Ok(added) => added,
+                    Err(err) => {
+                        // not a missing file: take back what came in (best effort, the add's error is the
+                        // one to report), the queue stays as it was
+                        if client.get_status().is_ok_and(|s| s.playlistlength as usize > old_len) {
+                            let _ = client.execute(&format!("delete {old_len}:")).and_then(|()| client.read_ok());
+                        }
+                        return Err(err.into());
+                    }
+                };
+                if added.files.is_empty() {
+                    status_warn!("None of the {total} songs is in the library any more: the queue stays as it was");
+                    return Ok(());
+                }
+                (added.files, added.start, added.gone)
+            }
+            _ => {
+                client.load_playlist(&name, None)?;
+                (files, start, 0)
+            }
+        };
+        // everything old but the playing song leaves (two range deletes around it); Up next follows its files
         // (mpd-player re-finds the requests in the new queue)
         match status.song {
             Some(pos) if current.is_some() => {
-                let len = client.playlist_info()?.map_or(0, |q| q.len());
-                if pos + 1 < len {
-                    client.execute(&format!("delete {}:", pos + 1))?;
+                if pos + 1 < old_len {
+                    client.execute(&format!("delete {}:{old_len}", pos + 1))?;
                     client.read_ok()?;
                 }
                 if pos > 0 {
@@ -523,16 +555,11 @@ impl Replace {
                     client.read_ok()?;
                 }
             }
-            _ => client.clear()?,
-        }
-        match kind.as_str() {
-            "library" => client.add("/", None)?,
-            _ if !files.is_empty() => {
-                for f in &files {
-                    client.add(f, None)?;
-                }
+            _ if old_len > 0 => {
+                client.execute(&format!("delete 0:{old_len}"))?;
+                client.read_ok()?;
             }
-            _ => client.load_playlist(&name, None)?,
+            _ => {}
         }
         let queue = client.playlist_info()?.unwrap_or_default();
         if let Some(at) = start {
@@ -571,7 +598,7 @@ impl Replace {
             client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
         }
         status_info!(
-            "Playing from {} · {len} songs{}, prepared in {:.1} s",
+            "Playing from {} · {len} songs{}{}, prepared in {:.1} s",
             match st.source.as_ref().map(|s| s.kind.as_str()) {
                 Some("library") => "the whole library",
                 Some("hits") => "the Hits result",
@@ -579,9 +606,55 @@ impl Replace {
                 _ => "the playlist",
             },
             if start.is_some() { " in their order" } else { "" },
+            left_out_note(gone),
             started.elapsed().as_secs_f64()
         );
         Ok(())
+    }
+}
+
+/// What a replacement put in the queue: the files MPD took, the start index among them, and how many it did
+/// not know.
+#[derive(Debug, PartialEq, Eq)]
+struct Added {
+    files: Vec<String>,
+    start: Option<usize>,
+    gone: usize,
+}
+
+/// Add `files` in order with `add`; a file MPD's database no longer has (ACK "No such directory") is left out
+/// and counted, any other error stops. `start` (an index in `files`) moves to the same song among the added
+/// ones, or to the next added one when its own song is gone.
+fn add_known(
+    files: Vec<String>,
+    start: Option<usize>,
+    mut add: impl FnMut(&str) -> Result<(), MpdError>,
+) -> Result<Added, MpdError> {
+    let mut kept = Vec::with_capacity(files.len());
+    let (mut new_start, mut gone) = (None, 0);
+    for (i, f) in files.into_iter().enumerate() {
+        match add(&f) {
+            Ok(()) => {
+                if start.is_some_and(|s| i >= s) && new_start.is_none() {
+                    new_start = Some(kept.len());
+                }
+                kept.push(f);
+            }
+            Err(MpdError::Mpd(e)) if e.is_no_exist() => gone += 1,
+            Err(err) => return Err(err),
+        }
+    }
+    // every song from the start on is gone: start at the last one MPD took
+    let start = start.map(|_| new_start.unwrap_or(kept.len().saturating_sub(1)));
+    Ok(Added { files: kept, start, gone })
+}
+
+/// " · 7 songs no longer in the library were left out" after the song count of a replacement's status.
+fn left_out_note(gone: usize) -> String {
+    match gone {
+        0 => String::new(),
+        1 => " · 1 song no longer in the library was left out".to_owned(),
+        n => format!(" · {n} songs no longer in the library were left out"),
     }
 }
 
@@ -690,6 +763,72 @@ mod tests {
         assert_eq!(album.append(&appended), 0);
         assert!(album.added.is_empty() && album.len == 4);
         assert!(serde_json::to_value(&album).expect("source.json").get("added").is_none());
+    }
+
+    /// An `add` as MPD answers it: files in `missing` are not in its database.
+    fn mpd_add<'a>(missing: &'a [&str], log: &'a mut Vec<String>) -> impl FnMut(&str) -> Result<(), MpdError> + 'a {
+        move |f| {
+            log.push(f.to_owned());
+            if missing.contains(&f) {
+                return Err(MpdError::Mpd(rmpc_mpd::errors::MpdFailureResponse {
+                    code: rmpc_mpd::errors::ErrorCode::NoExist,
+                    command_list_index: 0,
+                    command: "add".to_owned(),
+                    message: "No such directory".to_owned(),
+                }));
+            }
+            Ok(())
+        }
+    }
+
+    fn strings(files: &[&str]) -> Vec<String> {
+        files.iter().map(|f| (*f).to_owned()).collect()
+    }
+
+    #[test]
+    fn files_mpd_no_longer_has_are_left_out_and_counted() {
+        let mut log = Vec::new();
+        let added = add_known(strings(&["a", "gone1", "b", "gone2", "c"]), None, mpd_add(&["gone1", "gone2"], &mut log))
+            .expect("missing files are no error");
+        // every file was tried, in order; source.json's members are only the ones MPD took
+        assert_eq!(log, strings(&["a", "gone1", "b", "gone2", "c"]));
+        assert_eq!(added, Added { files: strings(&["a", "b", "c"]), start: None, gone: 2 });
+        assert_eq!(left_out_note(added.gone), " · 2 songs no longer in the library were left out");
+        assert_eq!(left_out_note(1), " · 1 song no longer in the library was left out");
+        assert_eq!(left_out_note(0), "");
+    }
+
+    #[test]
+    fn nothing_known_adds_nothing() {
+        let mut log = Vec::new();
+        let added = add_known(strings(&["x", "y"]), None, mpd_add(&["x", "y"], &mut log)).expect("no error");
+        // Replace refuses before deleting anything when nothing came in
+        assert!(added.files.is_empty());
+        assert_eq!(added.gone, 2);
+    }
+
+    #[test]
+    fn another_add_error_stops_the_replacement() {
+        let mut calls = 0;
+        let err = add_known(strings(&["a", "b", "c"]), None, |_| {
+            calls += 1;
+            if calls == 2 { Err(MpdError::Generic("broken pipe".to_owned())) } else { Ok(()) }
+        });
+        assert!(matches!(err, Err(MpdError::Generic(_))));
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn the_start_follows_its_song_or_the_next_one_mpd_took() {
+        let files = &["a", "gone", "b", "c"];
+        let at = |start: usize, missing: &[&str]| {
+            let mut log = Vec::new();
+            add_known(strings(files), Some(start), mpd_add(missing, &mut log)).expect("no error").start
+        };
+        assert_eq!(at(2, &["gone"]), Some(1)); // "b" moved up one place
+        assert_eq!(at(1, &["gone"]), Some(1)); // its own song is gone: "b" starts
+        assert_eq!(at(0, &["gone"]), Some(0));
+        assert_eq!(at(2, &["gone", "b", "c"]), Some(0)); // nothing from the start on: the last one MPD took
     }
 
     #[test]

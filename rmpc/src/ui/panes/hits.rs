@@ -897,6 +897,16 @@ impl HitsPane {
         }
     }
 
+    /// Play: run `hits` again for the filters on screen (Apply found the preview older than the library).
+    pub(crate) fn recompute(&mut self, ctx: &Ctx) {
+        self.apply(ctx);
+    }
+
+    /// When the result on screen was written (the file's mtime as last read).
+    pub(crate) fn result_mtime(&self) -> Option<SystemTime> {
+        self.loaded_mtime
+    }
+
     /// Play: Apply was pressed in the column or the row menu since the last call.
     pub(crate) fn take_commit(&self) -> bool {
         self.commit.swap(false, Ordering::Relaxed)

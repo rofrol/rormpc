@@ -11,8 +11,21 @@
 //! - Browse's `P` (phase 3b) replaces the queue with an album, folder, artist or list in its order under the same
 //!   confirmation rule, and starts it at once.
 //! - `ShowPlay` (5-9, 0, gl) leaves the view it asks for here; Play takes it on its next render.
+//! - A preview older than the library's last change (MPD's database update, the deletion journal's newest
+//!   entry) is recomputed before Apply plays it; the banner says "Preview outdated, recomputing" meanwhile. The
+//!   replace itself leaves out files MPD no longer has and never deletes the old queue before the new songs are in.
 
-use std::{collections::HashSet, sync::Mutex};
+use std::{
+    collections::HashSet,
+    sync::Mutex,
+    time::{Duration, SystemTime},
+};
+
+use rmpc_mpd::{
+    errors::MpdError,
+    from_mpd::{FromMpd, LineHandled},
+    proto_client::ProtoClient,
+};
 
 use crate::{
     config::tabs::PlayView,
@@ -104,8 +117,45 @@ pub fn confirm_reason_for(
     (gone * 4 > rest.len()).then(|| format!("{gone} of the {} songs in the queue would go.", rest.len()))
 }
 
-/// The banner over a preview and whether its Apply would play anything.
-pub fn banner(info: &PreviewInfo, playing_file: Option<&str>) -> (String, bool) {
+/// MPD's `stats`, of which only the database's last update counts here.
+#[derive(Debug, Default)]
+struct DbStats {
+    db_update: Option<u64>,
+}
+
+impl FromMpd for DbStats {
+    fn next_internal(&mut self, key: &str, value: String) -> Result<LineHandled, MpdError> {
+        if key == "db_update" {
+            self.db_update = Some(value.parse().map_err(|_| MpdError::Parse(format!("db_update: {value}")))?);
+        }
+        Ok(LineHandled::Yes)
+    }
+}
+
+/// When MPD's database last changed (`stats` `db_update`), None when it never did or MPD cannot say.
+pub fn db_updated_at(ctx: &Ctx) -> Option<SystemTime> {
+    let stats = ctx.query_sync(|client| {
+        client.execute("stats")?;
+        Ok(client.read_response::<DbStats>()?)
+    });
+    stats.ok()?.db_update.map(|secs| SystemTime::UNIX_EPOCH + Duration::from_secs(secs))
+}
+
+/// Whether a preview written at `preview` is older than the library's last change (MPD's database update, the
+/// deletion journal's newest entry). MPD counts whole seconds: a change in the preview's own second counts as
+/// newer, so a preview is never trusted over a deletion it may not have seen.
+pub fn preview_outdated(preview: Option<SystemTime>, changes: &[Option<SystemTime>]) -> bool {
+    let secs = |t: SystemTime| t.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let Some(preview) = preview.map(secs) else { return false };
+    changes.iter().flatten().any(|&t| secs(t) >= preview)
+}
+
+/// The banner over a preview and whether its Apply would play anything. `recomputing`: Apply found the preview
+/// older than the library and runs `hits` again before it plays.
+pub fn banner(info: &PreviewInfo, playing_file: Option<&str>, recomputing: bool) -> (String, bool) {
+    if info.running && recomputing {
+        return ("Preview outdated, recomputing… (Apply plays it when the counts are in)".to_owned(), false);
+    }
     if info.running {
         return ("Preview · running hits… (Apply waits for it)".to_owned(), false);
     }
@@ -286,18 +336,45 @@ mod tests {
 
     #[test]
     fn the_banner_counts_and_disables_apply_without_owned_songs() {
-        let (text, on) = banner(&info(&["a", "b"], 3), Some("x"));
+        let (text, on) = banner(&info(&["a", "b"], 3), Some("x"), false);
         assert_eq!(text, "Preview · 1980s · 3 matched · 2 owned · 1 missing · playing song: outside (plays on, not in the round)");
         assert!(on);
-        let (text, on) = banner(&info(&["a"], 1), Some("a"));
+        let (text, on) = banner(&info(&["a"], 1), Some("a"), false);
         assert!(text.ends_with("playing song: in it"), "{text}");
         assert!(on);
-        let (text, on) = banner(&info(&[], 4), None);
+        let (text, on) = banner(&info(&[], 4), None, false);
         assert!(text.contains("0 owned · 4 missing · nothing to play"), "{text}");
         assert!(!on);
         let running = PreviewInfo { running: true, ..info(&["a"], 1) };
-        assert!(!banner(&running, None).1);
+        assert!(!banner(&running, None, false).1);
         let stale = PreviewInfo { ready: false, ..info(&["a"], 1) };
-        assert!(!banner(&stale, None).1);
+        assert!(!banner(&stale, None, false).1);
+        let (text, on) = banner(&running, None, true);
+        assert!(text.starts_with("Preview outdated, recomputing"), "{text}");
+        assert!(!on);
+    }
+
+    #[test]
+    fn a_preview_older_than_the_library_is_outdated() {
+        let at = |secs: u64, nanos: u32| Some(SystemTime::UNIX_EPOCH + Duration::new(secs, nanos));
+        // made at 15:30, a song deleted at 16:31 (the reported case): recomputed
+        assert!(preview_outdated(at(1_000, 0), &[at(4_660, 0), None]));
+        // the journal alone is enough
+        assert!(preview_outdated(at(1_000, 0), &[None, at(1_001, 0)]));
+        // MPD counts whole seconds: a change in the preview's own second is not trusted
+        assert!(preview_outdated(at(1_000, 900_000_000), &[at(1_000, 0)]));
+        // made after every change, or nothing known: played as it is
+        assert!(!preview_outdated(at(1_001, 0), &[at(1_000, 0), at(999, 0)]));
+        assert!(!preview_outdated(at(1_000, 0), &[None, None]));
+        assert!(!preview_outdated(None, &[at(1_000, 0)]));
+    }
+
+    #[test]
+    fn db_update_is_read_from_mpd_stats() {
+        let mut stats = DbStats::default();
+        for line in ["artists: 3", "uptime: 10", "db_update: 1760104260", "playtime: 0"] {
+            stats.next(line.to_owned()).expect("a stats line");
+        }
+        assert_eq!(stats.db_update, Some(1_760_104_260));
     }
 }
