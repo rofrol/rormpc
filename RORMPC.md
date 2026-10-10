@@ -35,11 +35,12 @@ rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and 
   ShowDecoders upstream, so the pause menu keeps the `o m` slot of the "Mute for…" it replaced; an old config's
   ShowMuteMenu opens it too.)
 
-The companions need ffmpeg (`musicdb update` hashes the audio with it; `brew install ffmpeg` or
-`sudo apt install ffmpeg`): `companions` stops without it. On Linux, building the scrobbler needs a C toolchain,
-OpenSSL and SQLite headers (Debian/Ubuntu: `sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev`),
-and the services need a systemd user session: log in normally, or on a machine nobody logs into run
-`sudo loginctl enable-linger $USER` once.
+The companions need ffmpeg (`musicdb update` hashes the audio with it): `companions` stops without it. On Linux,
+building the scrobbler needs a C toolchain, `pkg-config`, OpenSSL and SQLite headers. The packages for Homebrew,
+Debian/Ubuntu, Arch and Guix are in rormpc-tools' [dependency table](https://github.com/rofrol/rormpc-tools#dependencies);
+Windows is not supported. The services are launchd agents or systemd user units only: on Linux `companions` stops
+before installing anything without a systemd user session (Guix System's Shepherd is not supported); log in
+normally, or on a machine nobody logs into run `sudo loginctl enable-linger $USER` once.
 
 They run as launchd agents `io.github.rofrol.rormpc.*` (logs in `~/Library/Logs/`) on macOS, systemd user units
 `rormpc-*.service` (musicdb with a `.timer`) on Linux; the installer writes them, so edits there are overwritten.

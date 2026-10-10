@@ -44,6 +44,7 @@ RO_LB_TAG=v2.6.0-ro.5
 RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
 RORMPC_TOOLS_REPO=https://github.com/rofrol/rormpc-tools
 RORMPC_TOOLS_TAG=v0.2.39
+deps_url=$RORMPC_TOOLS_REPO#dependencies  # one table: program, what needs it, package per manager
 RORMPC_TOOLS_DIR="${RORMPC_TOOLS_DIR:-$HOME/personal_projects/rormpc-tools}"
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
@@ -150,9 +151,18 @@ companions() {
     esac
     shift
   done
+  # before installing anything: the services are launchd agents or systemd user units, nothing else
+  if [ "$(uname)" != Darwin ] && ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo "companions: supports launchd (macOS) and systemd user units (Linux) only, and finds no systemd user session" \
+      "here (Guix System's Shepherd is not supported). With systemd: log in normally, or run" \
+      "'sudo loginctl enable-linger \$USER' once on a machine nobody logs into." >&2
+    exit 1
+  fi
   command -v uv >/dev/null || { echo "needs uv: https://docs.astral.sh/uv/" >&2; exit 1; }
-  # musicdb update hashes the audio with it, yt-mp3-mb converts with it
-  command -v ffmpeg >/dev/null || { echo "needs ffmpeg: brew install ffmpeg (macOS) or sudo apt install ffmpeg (Debian/Ubuntu)" >&2; exit 1; }
+  command -v ffmpeg >/dev/null || {
+    echo "companions: ffmpeg not found on PATH; musicdb update hashes the audio with it, yt-mp3-mb converts with it. Install: $deps_url" >&2
+    exit 1
+  }
   if [ -n "$local_build" ]; then
     uv tool install --force --editable "$RORMPC_TOOLS_DIR"
   else
@@ -165,7 +175,10 @@ companions() {
     cargo install --locked --git "$RO_LB_REPO" --rev "$RO_LB_REF"
   else
     cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
-  fi || { echo "building ro-listenbrainz-mpd failed; on Debian/Ubuntu the companions need: sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev ffmpeg" >&2; exit 1; }
+  fi || {
+    echo "companions: building ro-listenbrainz-mpd failed; on Linux it needs a C compiler, pkg-config, OpenSSL and SQLite headers. Install: $deps_url" >&2
+    exit 1
+  }
   local tools; tools="$(uv tool dir --bin)"
   service musicdb 3600 "$tools/musicdb" update
   [ -f "$lb_config" ] || "$HOME/.cargo/bin/ro-listenbrainz-mpd" --create-default-config
