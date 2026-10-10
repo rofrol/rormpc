@@ -70,6 +70,9 @@ pub enum GlobalAction {
     PreviousTab,
     #[strum(to_string = "SwitchToTab({0})")]
     SwitchToTab(TabName),
+    /// rormpc: the Play tab with Browse on a grouping, the Live inbox, or the queue
+    #[strum(to_string = "ShowPlay({0})")]
+    ShowPlay(crate::config::tabs::PlayView),
     Command {
         command: String,
         description: Option<String>,
@@ -133,6 +136,9 @@ pub enum GlobalActionFile {
     NextTab,
     PreviousTab,
     SwitchToTab(String),
+    /// rormpc: the Play tab with Browse on a grouping (`ShowPlay(Browse(Albums))`), the Live inbox
+    /// (`ShowPlay(Live)`) or the queue (`ShowPlay(Queue)`)
+    ShowPlay(crate::config::tabs::PlayView),
     QueueTab,
     DirectoriesTab,
     ArtistsTab,
@@ -186,6 +192,7 @@ impl From<GlobalActionFile> for GlobalAction {
             GlobalActionFile::NextTab => GlobalAction::NextTab,
             GlobalActionFile::ToggleConsume => GlobalAction::ToggleConsume,
             GlobalActionFile::SwitchToTab(name) => GlobalAction::SwitchToTab(name.into()),
+            GlobalActionFile::ShowPlay(view) => GlobalAction::ShowPlay(view),
             GlobalActionFile::QueueTab => GlobalAction::SwitchToTab("Queue".into()),
             GlobalActionFile::DirectoriesTab => GlobalAction::SwitchToTab("Directories".into()),
             GlobalActionFile::ArtistsTab => GlobalAction::SwitchToTab("Artists".into()),
@@ -251,6 +258,7 @@ impl ToDescription for GlobalAction {
             GlobalAction::NextTab => "Switch to next tab".into(),
             GlobalAction::PreviousTab => "Switch to previous tab".into(),
             GlobalAction::SwitchToTab(name) => Cow::Owned(format!("Switch directly to {name} tab")),
+            GlobalAction::ShowPlay(view) => Cow::Owned(format!("Play tab: {}", view.describe())),
             GlobalAction::ShowHelp => "Show keybinds".into(),
             GlobalAction::CommandMode => "Enter command mode".into(),
             GlobalAction::Command { description: None, .. } => "Execute a command".into(),
@@ -389,6 +397,11 @@ pub enum QueueActionsFile {
     SaveSmartList,
     /// rormpc: Play's list picker (smart lists, previous sources, playlists)
     SmartLists,
+    /// rormpc: Play's left column switches Filters | Browse
+    ToggleBrowse,
+    /// rormpc: Play's Browse: the previous / next grouping (Artists, Album artists, Albums, Folders, Lists)
+    PreviousGrouping,
+    NextGrouping,
     Delete,
     DeleteAll,
     Play,
@@ -417,6 +430,9 @@ pub enum QueueActions {
     ExcludeSong,
     SaveSmartList,
     SmartLists,
+    ToggleBrowse,
+    PreviousGrouping,
+    NextGrouping,
     Delete,
     DeleteAll,
     Play,
@@ -440,6 +456,9 @@ impl TryFrom<QueueActionsFile> for QueueActions {
             QueueActionsFile::ExcludeSong => Ok(QueueActions::ExcludeSong),
             QueueActionsFile::SaveSmartList => Ok(QueueActions::SaveSmartList),
             QueueActionsFile::SmartLists => Ok(QueueActions::SmartLists),
+            QueueActionsFile::ToggleBrowse => Ok(QueueActions::ToggleBrowse),
+            QueueActionsFile::PreviousGrouping => Ok(QueueActions::PreviousGrouping),
+            QueueActionsFile::NextGrouping => Ok(QueueActions::NextGrouping),
             QueueActionsFile::Delete => Ok(QueueActions::Delete),
             QueueActionsFile::DeleteAll => Ok(QueueActions::DeleteAll),
             QueueActionsFile::Play => Ok(QueueActions::Play),
@@ -487,6 +506,9 @@ impl ToDescription for QueueActions {
             QueueActions::ExcludeSong => "Exclude the song from Hits results (asks the scope; Queue and Hits)".into(),
             QueueActions::SaveSmartList => "Save Play's filters as a smart list (Play)".into(),
             QueueActions::SmartLists => "Smart lists, previous sources and playlists (Play)".into(),
+            QueueActions::ToggleBrowse => "Play's left column: Filters or Browse (Play)".into(),
+            QueueActions::PreviousGrouping => "Browse: the previous grouping (Play)".into(),
+            QueueActions::NextGrouping => "Browse: the next grouping (Play)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),
             QueueActions::Play => "Play song under cursor".into(),
@@ -1070,6 +1092,11 @@ pub enum CommonActionFile {
         #[serde(default)]
         kind: DeleteKind,
     },
+    /// rormpc: Play's Browse plays the selection, replacing the queue (an album in disc/track order, a folder in
+    /// filename order, a list in its order)
+    PlayReplace,
+    /// rormpc: Play's Browse puts the selection into Up next
+    PlayNext,
 }
 
 #[derive(Debug, Display, Clone, EnumDiscriminants, PartialEq)]
@@ -1126,6 +1153,8 @@ pub enum CommonAction {
     DeleteFromPlaylist {
         kind: DeleteKind,
     },
+    PlayReplace,
+    PlayNext,
 }
 
 impl ToDescription for CommonAction {
@@ -1174,6 +1203,10 @@ impl ToDescription for CommonAction {
                 "Focuses textbox if any is on the screen and is not focused".into()
             }
             CommonAction::PaneDown => "Focus the pane below the current one".into(),
+            CommonAction::PlayReplace => {
+                "Play the selection now, replacing the queue in album/folder/list order (Play's Browse)".into()
+            }
+            CommonAction::PlayNext => "Put the selection into Up next (Play)".into(),
             CommonAction::PaneUp => "Focus the pane above the current one".into(),
             CommonAction::PaneRight => "Focus the pane to the right of the current one".into(),
             CommonAction::PaneLeft => "Focus the pane to the left of the current one".into(),
@@ -1407,6 +1440,8 @@ impl TryFrom<CommonActionFile> for CommonAction {
             CommonActionFile::ShowInfo => CommonAction::ShowInfo,
             CommonActionFile::AddOptions { kind } => CommonAction::AddOptions { kind },
             CommonActionFile::ContextMenu {} => CommonAction::ContextMenu,
+            CommonActionFile::PlayReplace => CommonAction::PlayReplace,
+            CommonActionFile::PlayNext => CommonAction::PlayNext,
             CommonActionFile::Rate { kind, current, min_rating, max_rating } => {
                 match &kind {
                     RateKind::Modal { values, custom, like } => {

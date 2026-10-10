@@ -88,6 +88,7 @@ pub mod rormpc_genres;
 pub mod rormpc_exceptions;
 pub mod rormpc_hits_rules;
 pub mod rormpc_play;
+pub mod rormpc_browse;
 pub mod rormpc_playlists;
 pub mod rormpc_sets;
 pub mod rormpc_smartlists;
@@ -707,6 +708,21 @@ impl<'ui> Ui<'ui> {
                     self.change_tab(ctx.config.prev_screen(&ctx.active_tab), ctx)?;
                     ctx.render()?;
                 }
+                GlobalAction::ShowPlay(view) => {
+                    let tabs = &ctx.config.tabs;
+                    let tab = tabs.names.iter().find(|name| {
+                        tabs.tabs.get(*name).is_some_and(|t| t.panes.panes_iter().any(|p| p.pane == PaneType::Play))
+                    }).cloned();
+                    if let Some(name) = tab {
+                        crate::ui::rormpc_play::request_view(*view);
+                        if ctx.active_tab != name {
+                            self.change_tab(name, ctx)?;
+                        }
+                        ctx.render()?;
+                    } else {
+                        status_error!("No tab has Pane(Play()): add one to the config to use {view}");
+                    }
+                }
                 GlobalAction::SwitchToTab(name) => {
                     if ctx.config.tabs.names.contains(name) {
                         self.change_tab(name.clone(), ctx)?;
@@ -1141,10 +1157,12 @@ impl<'ui> Ui<'ui> {
     ) -> Result<()> {
         match pane {
             Some(pane_type) => {
+                // rormpc: a Browse grouping of Play is visible with its Play pane
+                let shown = if matches!(pane_type, PaneType::PlayBrowse(_)) { PaneType::Play } else { pane_type.clone() };
                 let visible =
                     self.tabs.get(&ctx.active_tab).is_some_and(|tab| {
-                        tab.panes.panes_iter().any(|pane| pane.pane == pane_type)
-                    }) || self.layout.panes_iter().any(|pane| pane.pane == pane_type);
+                        tab.panes.panes_iter().any(|pane| pane.pane == shown)
+                    }) || self.layout.panes_iter().any(|pane| pane.pane == shown);
 
                 match self.panes.get_mut(&pane_type, ctx)? {
                     #[cfg(debug_assertions)]
@@ -1162,7 +1180,7 @@ impl<'ui> Ui<'ui> {
                     Panes::ProgressBar(p) => p.on_query_finished(id, data, visible, ctx),
                     Panes::Header(p) => p.on_query_finished(id, data, visible, ctx),
                     Panes::Tabs(p) => p.on_query_finished(id, data, visible, ctx),
-                    Panes::Others(p) => p.on_query_finished(id, data, visible, ctx),
+                    Panes::Others(p) => p.on_target_query_finished(&pane_type, id, data, visible, ctx),
                     #[cfg(debug_assertions)]
                     Panes::FrameCount(p) => p.on_query_finished(id, data, visible, ctx),
                     Panes::Cava(p) => p.on_query_finished(id, data, visible, ctx),

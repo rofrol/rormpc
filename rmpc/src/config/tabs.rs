@@ -231,6 +231,69 @@ pub enum PaneTypeFile {
     Play(),
 }
 
+/// rormpc: the groupings of Play's Browse (plans/combined-view.md, "Play absorbs the browsing tabs").
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize, strum::Display, strum::VariantArray)]
+pub enum PlayGrouping {
+    Artists,
+    AlbumArtists,
+    Albums,
+    Folders,
+    Lists,
+}
+
+impl PlayGrouping {
+    /// The chip label in Play's Browse.
+    pub fn label(self) -> &'static str {
+        match self {
+            PlayGrouping::Artists => "Artists",
+            PlayGrouping::AlbumArtists => "Album artists",
+            PlayGrouping::Albums => "Albums",
+            PlayGrouping::Folders => "Folders",
+            PlayGrouping::Lists => "Lists",
+        }
+    }
+
+    /// The next grouping (`forward`) or the previous one, wrapping around.
+    pub fn step(self, forward: bool) -> Self {
+        use strum::VariantArray as _;
+        let all = Self::VARIANTS;
+        let i = all.iter().position(|g| *g == self).unwrap_or(0);
+        let n = all.len();
+        all[if forward { (i + 1) % n } else { (i + n - 1) % n }]
+    }
+}
+
+/// rormpc: what `ShowPlay` opens in the Play tab.
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub enum PlayView {
+    /// the queue (or the plan) with the filter column
+    Queue,
+    /// the left column on Browse, on this grouping
+    Browse(PlayGrouping),
+    /// the Live playlists inbox (an overlay)
+    Live,
+}
+
+impl PlayView {
+    pub fn describe(self) -> String {
+        match self {
+            PlayView::Queue => "the queue".to_owned(),
+            PlayView::Browse(g) => format!("Browse › {}", g.label()),
+            PlayView::Live => "the Live playlists inbox".to_owned(),
+        }
+    }
+}
+
+impl std::fmt::Display for PlayView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlayView::Queue => write!(f, "Queue"),
+            PlayView::Browse(g) => write!(f, "Browse({g})"),
+            PlayView::Live => write!(f, "Live"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, strum::Display, strum::EnumDiscriminants)]
 #[strum_discriminants(derive(strum::Display, Hash))]
 pub enum PaneType {
@@ -281,6 +344,9 @@ pub enum PaneType {
     Shuffle,
     LivePlaylists,
     Play,
+    /// rormpc: the query target of one Browse grouping inside the Play pane (internal, never in a config): each
+    /// grouping gets its own, so a reply that arrives after a switch still lands in its own list
+    PlayBrowse(PlayGrouping),
 }
 
 pub const PANES_ALLOWED_IN_BOTH_TAB_AND_LAYOUT: [PaneTypeDiscriminants; 2] =
@@ -1022,7 +1088,8 @@ impl Default for TabsFile {
     fn default() -> Self {
         Self(vec![
             // rormpc: Play replaces the Hits, Queue and Shuffle tabs in the default (plans/combined-view.md,
-            // phase 3); those panes still load from an explicit config
+            // phase 3) and the browsing tabs (Directories, Artists, Album Artists, Albums, Playlists, Live
+            // playlists: phase 3b, Play's Browse and Live inbox); those panes still load from an explicit config
             TabFile {
                 name: "Play".to_string(),
                 border_type: BorderTypeFile::None,
@@ -1076,106 +1143,6 @@ impl Default for TabsFile {
                 },
             },
             TabFile {
-                name: "Directories".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    borders: BordersFile::NONE,
-                    direction: DirectionFile::Vertical,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        background_color: None,
-                        borders: BordersFile::ALL,
-                        border_style: None,
-                        border_active_style: None,
-                        border_title: Vec::new(),
-                        border_title_position: BorderTitlePosition::Top,
-                        border_title_alignment: Alignment::Left,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Directories),
-                    }],
-                },
-            },
-            TabFile {
-                name: "Artists".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    borders: BordersFile::NONE,
-                    direction: DirectionFile::Vertical,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        background_color: None,
-                        borders: BordersFile::ALL,
-                        border_style: None,
-                        border_active_style: None,
-                        border_title: Vec::new(),
-                        border_title_position: BorderTitlePosition::Top,
-                        border_title_alignment: Alignment::Left,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Artists),
-                    }],
-                },
-            },
-            TabFile {
-                name: "Album Artists".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    borders: BordersFile::NONE,
-                    direction: DirectionFile::Vertical,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        background_color: None,
-                        borders: BordersFile::ALL,
-                        border_style: None,
-                        border_active_style: None,
-                        border_title: Vec::new(),
-                        border_title_position: BorderTitlePosition::Top,
-                        border_title_alignment: Alignment::Left,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::AlbumArtists),
-                    }],
-                },
-            },
-            TabFile {
-                name: "Albums".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    borders: BordersFile::NONE,
-                    direction: DirectionFile::Vertical,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        background_color: None,
-                        borders: BordersFile::ALL,
-                        border_style: None,
-                        border_active_style: None,
-                        border_title: Vec::new(),
-                        border_title_position: BorderTitlePosition::Top,
-                        border_title_alignment: Alignment::Left,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Albums),
-                    }],
-                },
-            },
-            TabFile {
-                name: "Playlists".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    borders: BordersFile::NONE,
-                    direction: DirectionFile::Vertical,
-                    panes: vec![SubPaneFile {
-                        size: "100%".to_string(),
-                        background_color: None,
-                        borders: BordersFile::ALL,
-                        border_style: None,
-                        border_active_style: None,
-                        border_title: Vec::new(),
-                        border_title_position: BorderTitlePosition::Top,
-                        border_title_alignment: Alignment::Left,
-                        border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Playlists),
-                    }],
-                },
-            },
-            TabFile {
                 name: "Search".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
@@ -1192,6 +1159,51 @@ impl Default for TabsFile {
                         border_title_alignment: Alignment::Left,
                         border_symbols: BorderSymbolsFile::Rounded,
                         pane: PaneOrSplitFile::Pane(PaneTypeFile::Search),
+                    }],
+                },
+            },
+            TabFile {
+                name: "Versions".to_string(),
+                border_type: BorderTypeFile::None,
+                pane: PaneOrSplitFile::Split {
+                    direction: DirectionFile::Vertical,
+                    borders: BordersFile::NONE,
+                    panes: vec![SubPaneFile {
+                        size: "100%".to_string(),
+                        borders: BordersFile::ALL,
+                        border_symbols: BorderSymbolsFile::Rounded,
+                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Versions()),
+                        ..Default::default()
+                    }],
+                },
+            },
+            TabFile {
+                name: "Deleted".to_string(),
+                border_type: BorderTypeFile::None,
+                pane: PaneOrSplitFile::Split {
+                    direction: DirectionFile::Vertical,
+                    borders: BordersFile::NONE,
+                    panes: vec![SubPaneFile {
+                        size: "100%".to_string(),
+                        borders: BordersFile::ALL,
+                        border_symbols: BorderSymbolsFile::Rounded,
+                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Deleted()),
+                        ..Default::default()
+                    }],
+                },
+            },
+            TabFile {
+                name: "Lyrics".to_string(),
+                border_type: BorderTypeFile::None,
+                pane: PaneOrSplitFile::Split {
+                    direction: DirectionFile::Vertical,
+                    borders: BordersFile::NONE,
+                    panes: vec![SubPaneFile {
+                        size: "100%".to_string(),
+                        borders: BordersFile::ALL,
+                        border_symbols: BorderSymbolsFile::Rounded,
+                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Lyrics),
+                        ..Default::default()
                     }],
                 },
             },

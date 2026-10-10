@@ -788,6 +788,16 @@ where
                 let modal = create_delete_modal(song_paths, confirmation, ctx)?;
                 modal!(ctx, modal);
             }
+            // rormpc: t puts the selection (songs, or every song of a directory/artist/album/playlist) into Up next
+            CommonAction::PlayNext => {
+                let list_songs = self.list_songs_in_items(false);
+                let files = ctx.query_sync(move |client| Ok(list_songs(client)?.into_iter().map(|s| s.file).collect()))?;
+                crate::ui::rormpc_upnext::play_next(ctx, files);
+            }
+            // rormpc: P plays a collection in its order in Play's Browse, which handles it before this pane
+            CommonAction::PlayReplace => {
+                status_info!("P (play, replacing the queue) works in Play's Browse: 5-9 open it");
+            }
         }
 
         Ok(())

@@ -115,6 +115,65 @@ config; Up next stays its own tab. A header line always says what plays and how:
   rules being played; queue and plan rows (in the Queue pane too) show `✚` / `⊘` for a file an exception names
   (`hits exceptions --json`, read in the background and again after `+` / `-` or the Exceptions list).
 
+### Browse, the playlist editor and the Live inbox
+
+Play also took over the browsing tabs (plans/combined-view.md, phase 3b, with the user's layout of 2026-10-10):
+Directories, Artists, Album Artists, Albums, Playlists and Live playlists are no longer default tabs; their panes
+still load from an explicit config.
+
+- **The left column switches Filters | Browse**: `B` (ToggleBrowse), or a click on `Filters` / `Browse` at its top.
+  Browse is about half of Play's width (the three-column browser needs it); the queue or plan stays on the right.
+- **Groupings**: Artists · Album artists · Albums · Folders · Lists, in a chip row (click), `[` / `]`
+  (PreviousGrouping / NextGrouping), or from anywhere with the digits below. Each grouping is the old tab's pane
+  (navigation, `/` search, Space marks, the context menu), created on first use and kept, so it remembers its path,
+  cursor and marks; each gets its own MPD query target (`PaneType::PlayBrowse`), so a reply that arrives after a
+  switch lands in its own list. Lists are the stored MPD playlists, the smart lists' "Smart NAME" exports and the
+  Live playlists' `.m3u` among them.
+- **Actions on any row**: Enter plays a song now (the queue stays) or opens a container; `P` (PlayReplace) plays
+  the selection replacing the queue and starts it at once, in its order (an album in disc/track order, an artist by
+  album date then disc/track, a folder in filename order, a list in its order; on a song, its album/folder/list
+  from that song), with weighted shuffle and random off; it asks first under Apply's rule (another source kind, or
+  more than a quarter of the queue would go) and refuses when the queue changed meanwhile. `source.json` gets the
+  kind (`album`, `artist`, `directory`, `playlist`, `selection`), a name and the files. `t` (PlayNext) puts the
+  selection into Up next; `a` / `A` append. Never Apply: in Browse `a` appends, elsewhere in Play it applies (the
+  header says `Browse › Albums (a appends)` while Browse has the keys).
+- **Appending to a Hits source**: songs appended with `a` / `A` while the queue holds a Hits result join its files:
+  `source.json` lists them in `added` (the rules hash stays), the source line says `+N added`, and mpd-player
+  (rormpc-tools newer than 0.2.39) draws them in the same round (a round already done opens again for them). The
+  next Apply drops them like any hand edit. It is recorded with weighted off too, so turning it on later still
+  draws them.
+- **An unapplied preview stays** when a Browse action changes the queue: the banner keeps its counts (they do not
+  depend on the queue) and Apply judges its confirmation against the queue as it is when `a` is pressed.
+- **The playlist editor** opens as a panel over Play when a playlist is entered in Lists (`l` on it):
+  `Editing "melancholic" · changes are saved at once`. J/K move the song (marked songs together), `D` removes it,
+  Ctrl-r renames (at the Lists level); every edit is an immediate MPD command, as before. `D` at the Lists level
+  deletes whole playlists only after a confirmation naming them. Generated playlists ("Tag …", "Smart …", the
+  `hits` exports such as "Hits …", "Not finished", "Skipped", "Folder …", and the Live playlists' MPD playlists)
+  are read-only here: D, J/K and Ctrl-r say who writes them. `P`, `t`, `a` work in the panel; Esc (with nothing
+  marked) or a click outside closes it.
+- **The Live inbox** is the Live playlists pane as a panel over Play: `0` or `gl` (ShowPlay(Live)), or a click on
+  the `Live` badge at the right of Play's header, which shows `Live 3` while items wait for a decision and `↓ 2`
+  while a download runs. Space marks items; `a`, `D` and the menu's "Accept marked" / "Reject marked" act on the
+  marked items (else the item under the cursor). Esc clears the marks, then closes the panel.
+- **Keys** (built-in and `assets/example_config.ron`; `ShowPlay(...)` opens the Play tab from anywhere):
+
+  | Key | Map | Action |
+  |---|---|---|
+  | `1` / `2` / `3` | global | Play / Up next / Search tabs; `gu` Up next, `gv` Versions, `gd` Deleted, `gy` Lyrics |
+  | `5` `6` `7` `8` `9` | global | `ShowPlay(Browse(Folders))`, `(Artists)`, `(AlbumArtists)`, `(Albums)`, `(Lists)` |
+  | `0`, `gl` | global | `ShowPlay(Live)`: the Live inbox (`ShowPlay(Queue)` brings the filters back) |
+  | `B` | queue | ToggleBrowse: the left column, Filters or Browse |
+  | `[` / `]` | queue | PreviousGrouping / NextGrouping in Browse |
+  | `P` | navigation | PlayReplace: play the selection replacing the queue (Browse) |
+  | `t` | navigation | PlayNext: the selection into Up next (Browse, the browser tabs, the Queue) |
+  | `a` / `A` | navigation | append (Browse); Apply elsewhere in Play |
+  | Esc | navigation | Browse: marks first, then the editor panel, then back to the filters |
+
+  A config that binds `P` in its queue map (e.g. `"P": SortByColumn(4)`) drops the built-in navigation `P`: a key
+  the user binds replaces the built-in binding in every map. Add `"P": PlayReplace` to its `navigation` map; both
+  then reach Play, the queue claims its sort and Browse its PlayReplace. Configs with their own digits keep them;
+  bind `ShowPlay(...)` to reach Browse and Live by key (`B` and the badge work without it).
+
 ### Smart lists
 
 A smart list is Play's filters saved under a name (plans/combined-view.md, phase 4), kept by `hits lists` in the
@@ -170,9 +229,9 @@ if the playing song's file is in the visible table, it selects that row and focu
 centres it. A search that hides the song stays intact, and a missing match changes neither selection nor
 playback. Queue-only actions such as removing or reordering queue entries are not applied to chart rows.
 
-The default and example configurations put Play first (it replaced their Hits and Queue tabs, see Play pane)
-and one top-level Up next tab after it. `1` opens Play, `3`-`8` the library/search tabs (`2`, which opened Queue,
-is unbound until phase 3b renumbers the tabs); `gu` opens Up next from any pane. Existing explicit configurations
+The default and example configurations have the tabs Play, Up next, Search, Versions, Deleted and Lyrics (Play
+replaced their Hits, Queue and browsing tabs, see Play pane). `1` opens Play, `2` Up next, `3` Search, `5`-`9` and
+`0` Play's Browse groupings and Live inbox; `gu` opens Up next from any pane. Existing explicit configurations
 are not rewritten; the Hits pane works there as before. The last active tab is still restored on startup.
 
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "Sets" are

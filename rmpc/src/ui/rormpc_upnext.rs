@@ -60,6 +60,30 @@ struct Source {
     rules: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     rules_hash: Option<String>,
+    /// songs appended by hand to a Hits source (Play's Browse `a`): they join its round in mpd-player and the
+    /// source line says "+N added"; the next Apply drops them like any hand edit
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    added: Vec<String>,
+}
+
+impl Source {
+    /// Count `appended` (just added to the end of the queue) into the source: its length follows them so the
+    /// header does not call it modified, and on a Hits source the files it does not hold join it (`added`).
+    /// Returns how many files joined.
+    fn append(&mut self, appended: &[String]) -> usize {
+        self.len += appended.len();
+        if self.kind != "hits" {
+            return 0;
+        }
+        let mut joined = 0;
+        for f in appended {
+            if !self.files.contains(f) && !self.added.contains(f) {
+                self.added.push(f.clone());
+                joined += 1;
+            }
+        }
+        joined
+    }
 }
 
 /// The source being played: (kind, name, snapshot files for a Hits source).
@@ -89,7 +113,8 @@ pub struct HitsSource {
 /// changes and the status bar says so: no retry, no delay.
 pub fn apply_hits_source(ctx: &Ctx, src: HitsSource, version: Option<u32>) {
     let HitsSource { name, files, rules, rules_hash } = src;
-    let replace = Replace { kind: "hits".to_owned(), name, files, rules: Some(rules), rules_hash: Some(rules_hash) };
+    let replace =
+        Replace { kind: "hits".to_owned(), name, files, rules: Some(rules), rules_hash: Some(rules_hash), start: None };
     ctx.command(move |_, client| replace.run(client, version));
 }
 
@@ -217,9 +242,11 @@ pub fn header(ctx: &Ctx) -> Option<String> {
         let name = match src.kind.as_str() {
             "library" => "Whole library".to_owned(),
             "hits" => format!("Hits · {}", src.name),
+            "album" | "artist" | "directory" | "selection" => format!("{} {}", kind_label(&src.kind), src.name),
             _ => src.name.clone(),
         };
-        format!("Playing from: {name}{}", if modified { " (modified)" } else { "" })
+        let added = if src.added.is_empty() { String::new() } else { format!(" +{} added", src.added.len()) };
+        format!("Playing from: {name}{added}{}", if modified { " (modified)" } else { "" })
     });
     match (src, n) {
         (None, 0) => None,
@@ -227,6 +254,35 @@ pub fn header(ctx: &Ctx) -> Option<String> {
         (Some(src), 0) => Some(format!(" {src} ")),
         (Some(src), n) => Some(format!(" {src} · Up next {n} ")),
     }
+}
+
+/// How a source kind is named in the header and the confirmations.
+pub fn kind_label(kind: &str) -> &'static str {
+    match kind {
+        "library" => "the whole library",
+        "hits" => "Hits",
+        "playlist" => "playlist",
+        "album" => "album",
+        "artist" => "artist",
+        "directory" => "folder",
+        "selection" => "selection",
+        _ => "source",
+    }
+}
+
+/// Songs just appended to the end of the queue by hand (Play's Browse `a`/`A`): source.json counts them, and a
+/// Hits source takes them into its files and round ("+N added"). Returns how many joined a Hits source.
+pub fn note_appended(files: &[String]) -> usize {
+    if files.is_empty() {
+        return 0;
+    }
+    let Ok(mut g) = state().lock() else { return 0 };
+    let Some(src) = g.source.as_mut() else { return 0 };
+    let joined = src.append(files);
+    let st = g.clone();
+    drop(g);
+    save(&st);
+    joined
 }
 
 /// Send Up next commands to mpd-player, in order; say so when it is not running.
@@ -362,12 +418,15 @@ struct Replace {
     files: Vec<String>,
     rules: Option<serde_json::Value>,
     rules_hash: Option<String>,
+    /// Play's Browse `P`: start the new source at once from this file index (the playing song leaves the queue),
+    /// with the weighted shuffle and random off so MPD plays it in its order. None: the playing song goes on.
+    start: Option<usize>,
 }
 
 impl Replace {
     /// `expect_version`: refuse unless MPD's queue is still at that `playlist` version.
     fn run(self, client: &mut rmpc_mpd::client::Client<'_>, expect_version: Option<u32>) -> Result<()> {
-        let Replace { kind, name, files, rules, rules_hash } = self;
+        let Replace { kind, name, files, rules, rules_hash, start } = self;
         let started = std::time::Instant::now();
         let status = client.get_status()?;
         if let Some(want) = expect_version
@@ -395,16 +454,32 @@ impl Replace {
         }
         match kind.as_str() {
             "library" => client.add("/", None)?,
-            "hits" => {
+            _ if !files.is_empty() => {
                 for f in &files {
                     client.add(f, None)?;
                 }
             }
             _ => client.load_playlist(&name, None)?,
         }
-        // the playing song was kept: its copy from the new source would make it play twice
         let queue = client.playlist_info()?.unwrap_or_default();
-        if let Some(cur) = current.and_then(|id| queue.iter().find(|s| s.id == id)).map(|s| s.file.clone()) {
+        if let Some(at) = start {
+            // P: the collection starts now in its order; the song that played leaves (it is not part of it)
+            if rormpc_player::shuffle_state().enabled
+                && client.channels()?.0.iter().any(|c| c == rormpc_player::CHANNEL)
+            {
+                client.send_message(rormpc_player::CHANNEL, "shuffle off")?;
+            }
+            client.random(false)?;
+            let old = current.and_then(|id| queue.iter().position(|s| s.id == id));
+            let first_new = usize::from(old == Some(0));
+            if let Some(song) = queue.get(first_new + at) {
+                client.play_id(song.id)?;
+            }
+            if let Some(id) = current {
+                client.delete_id(id)?;
+            }
+        } else if let Some(cur) = current.and_then(|id| queue.iter().find(|s| s.id == id)).map(|s| s.file.clone()) {
+            // the playing song was kept: its copy from the new source would make it play twice
             for s in queue.iter().filter(|s| s.file == cur && Some(s.id) != current) {
                 client.delete_id(s.id)?;
             }
@@ -414,25 +489,46 @@ impl Replace {
         if let (Some(r), Some(h)) = (&rules, &rules_hash) {
             crate::ui::rormpc_smartlists::after_apply(&name, r, h);
         }
-        let st = State { source: Some(Source { kind, name, len, files, rules, rules_hash }) };
+        let st = State { source: Some(Source { kind, name, len, files, rules, rules_hash, added: Vec::new() }) };
         if let Ok(mut g) = state().lock() {
             *g = st.clone();
         }
         save(&st);
-        if current.is_none() {
+        if current.is_none() && start.is_none() {
             client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
         }
         status_info!(
-            "Playing from {} · {len} songs, prepared in {:.1} s",
+            "Playing from {} · {len} songs{}, prepared in {:.1} s",
             match st.source.as_ref().map(|s| s.kind.as_str()) {
                 Some("library") => "the whole library",
                 Some("hits") => "the Hits result",
+                Some(kind @ ("album" | "artist" | "directory" | "selection")) => kind_label(kind),
                 _ => "the playlist",
             },
+            if start.is_some() { " in their order" } else { "" },
             started.elapsed().as_secs_f64()
         );
         Ok(())
     }
+}
+
+/// What Play's Browse `P` replaces the queue with: a collection in its own order, started at once.
+#[derive(Debug, Clone)]
+pub struct Collection {
+    /// "album", "artist", "directory", "playlist" or "selection"
+    pub kind: String,
+    pub name: String,
+    pub files: Vec<String>,
+    /// the index in `files` to start from
+    pub start: usize,
+}
+
+/// Browse `P`: the queue becomes `col` and plays it from `col.start` now, in its order (weighted shuffle and
+/// random off). The queue must still be at `version` (the one the confirmation was judged on).
+pub fn play_collection(ctx: &Ctx, col: Collection, version: Option<u32>) {
+    let Collection { kind, name, files, start } = col;
+    let replace = Replace { kind, name, files, rules: None, rules_hash: None, start: Some(start) };
+    ctx.command(move |_, client| replace.run(client, version));
 }
 
 /// A stored playlist played as the source (Play's list picker), after the same confirmation as "Sources…".
@@ -457,7 +553,14 @@ fn confirm_replace_with(ctx: &Ctx, kind: String, name: String, files: Vec<String
         if up > 0 { format!("\nUp next ({up}) is kept and plays first.") } else { String::new() }
     )];
     let go = move |ctx: &Ctx| -> anyhow::Result<()> {
-        let replace = Replace { kind: kind.clone(), name: name.clone(), files: files.clone(), rules: None, rules_hash: None };
+        let replace = Replace {
+            kind: kind.clone(),
+            name: name.clone(),
+            files: files.clone(),
+            rules: None,
+            rules_hash: None,
+            start: None,
+        };
         ctx.command(move |_, client| replace.run(client, None));
         Ok(())
     };
@@ -485,6 +588,35 @@ mod tests {
         assert!(state.error.unwrap().contains("Cannot play song.flac"));
         let old: UpNextFile = serde_json::from_str(r#"{"entries": [], "playing": null}"#).unwrap();
         assert!(old.error.is_none());
+    }
+
+    fn source(kind: &str, files: &[&str]) -> Source {
+        Source {
+            kind: kind.to_owned(),
+            name: "n".to_owned(),
+            len: files.len(),
+            files: files.iter().map(|f| (*f).to_owned()).collect(),
+            rules: None,
+            rules_hash: Some("h".to_owned()),
+            added: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn songs_appended_to_a_hits_source_join_it_once_and_keep_its_length_right() {
+        let mut src = source("hits", &["a", "b"]);
+        let appended = vec!["c".to_owned(), "a".to_owned(), "c".to_owned()];
+        // "a" is a member already and "c" joins once; the length counts every queue entry added
+        assert_eq!(src.append(&appended), 1);
+        assert_eq!((src.added.clone(), src.len), (vec!["c".to_owned()], 5));
+        let json = serde_json::to_value(&src).expect("source.json");
+        assert_eq!(json["added"], serde_json::json!(["c"]));
+        assert_eq!(json["rules_hash"], "h"); // the round key stays: mpd-player keeps the round
+        // another source kind only counts them (it plays the whole queue anyway)
+        let mut album = source("album", &["a"]);
+        assert_eq!(album.append(&appended), 0);
+        assert!(album.added.is_empty() && album.len == 4);
+        assert!(serde_json::to_value(&album).expect("source.json").get("added").is_none());
     }
 
     #[test]

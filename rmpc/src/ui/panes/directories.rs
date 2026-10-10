@@ -30,14 +30,21 @@ pub struct DirectoriesPane {
     stack: DirStack<DirOrSong, ListState>,
     browser: Browser<DirOrSong>,
     initialized: bool,
+    /// rormpc: where MPD replies go (`PaneType::Directories`, or Play's Browse grouping)
+    target: PaneType,
 }
 
 const INIT: &str = "init";
 const FETCH_DATA: &str = "fetch_data";
 
 impl DirectoriesPane {
-    pub fn new(_ctx: &Ctx) -> Self {
-        Self { stack: DirStack::default(), browser: Browser::new(), initialized: false }
+    pub fn new(ctx: &Ctx) -> Self {
+        Self::with_target(PaneType::Directories, ctx)
+    }
+
+    /// rormpc: the same pane answering to another query target (Play's Browse owns one of its own).
+    pub fn with_target(target: PaneType, _ctx: &Ctx) -> Self {
+        Self { stack: DirStack::default(), browser: Browser::new(), initialized: false, target }
     }
 }
 
@@ -53,7 +60,7 @@ impl Pane for DirectoriesPane {
             let sort = ctx.config.directories_sort.clone();
             let playlist_display_mode = ctx.config.show_playlists_in_browser;
             let hidden_dirs = ctx.config.directories_hidden_dirs.clone();
-            ctx.query().id(INIT).replace_id(INIT).target(PaneType::Directories).query(
+            ctx.query().id(INIT).replace_id(INIT).target(self.target.clone()).query(
                 move |client| {
                     let result = client
                         .lsinfo(None)?
@@ -77,7 +84,7 @@ impl Pane for DirectoriesPane {
                 let sort = ctx.config.directories_sort.clone();
                 let playlist_display_mode = ctx.config.show_playlists_in_browser;
                 let hidden_dirs = ctx.config.directories_hidden_dirs.clone();
-                ctx.query().id(INIT).replace_id(INIT).target(PaneType::Directories).query(
+                ctx.query().id(INIT).replace_id(INIT).target(self.target.clone()).query(
                     move |client| {
                         let result = client
                             .lsinfo(None)?
@@ -195,7 +202,7 @@ impl BrowserPane<DirOrSong> for DirectoriesPane {
                 ctx.query()
                     .id(FETCH_DATA)
                     .replace_id("directories_data")
-                    .target(PaneType::Directories)
+                    .target(self.target.clone())
                     .query(move |client| {
                         let data: Vec<_> = if is_playlist {
                             client

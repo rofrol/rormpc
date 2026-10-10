@@ -1380,6 +1380,10 @@ impl Pane for QueuePane {
                     ctx.render()?;
                 }
                 QueueActions::Unused => {}
+                // rormpc: Play's own keys (its left column), nothing in a plain queue
+                QueueActions::ToggleBrowse | QueueActions::PreviousGrouping | QueueActions::NextGrouping => {
+                    event.abandon();
+                }
             }
         } else if let Some(action) = event.claim_common().map(|v| v.to_owned()) {
             match action {
@@ -1711,6 +1715,15 @@ impl Pane for QueuePane {
                 CommonAction::Rename => {}
                 CommonAction::Close => {}
                 CommonAction::FocusInput => {}
+                // rormpc: t puts the marked songs (else the cursor row) into Up next; P is Browse's
+                CommonAction::PlayNext => {
+                    let files: Vec<String> = self.enqueue_items(false).0.into_iter().filter_map(|e| match e {
+                        Enqueue::File { path } => Some(path),
+                        _ => None,
+                    }).collect();
+                    crate::ui::rormpc_upnext::play_next(ctx, files);
+                }
+                CommonAction::PlayReplace => event.abandon(),
                 CommonAction::Confirm => {} // queue has its own binding for
                 // play
                 CommonAction::PaneDown => {}

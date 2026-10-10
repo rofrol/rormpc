@@ -473,6 +473,8 @@ impl SearchPane {
                 CommonAction::PaneUp => {}
                 CommonAction::PaneRight => {}
                 CommonAction::PaneLeft => {}
+                // rormpc: Play's Browse keys
+                CommonAction::PlayNext | CommonAction::PlayReplace => event.abandon(),
                 CommonAction::ShowInfo => {}
                 CommonAction::ContextMenu => {}
                 CommonAction::Rate { kind: _, min_rating: _, max_rating: _, current: true } => {
@@ -768,6 +770,8 @@ impl SearchPane {
                 CommonAction::PaneUp => {}
                 CommonAction::PaneRight => {}
                 CommonAction::PaneLeft => {}
+                // rormpc: Play's Browse keys
+                CommonAction::PlayNext | CommonAction::PlayReplace => event.abandon(),
                 CommonAction::ShowInfo => {}
                 CommonAction::ContextMenu => {
                     self.open_result_phase_context_menu(ctx);

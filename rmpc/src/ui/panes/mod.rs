@@ -159,7 +159,9 @@ pub struct PaneContainer<'panes> {
 }
 
 impl<'panes> PaneContainer<'panes> {
-    pub fn new(ctx: &Ctx) -> Result<Self> {
+    /// rormpc: the tag levels of the Albums, Artists and Album Artists browsers, in that order (Play's Browse
+    /// builds the same groupings).
+    pub fn tag_browser_levels(ctx: &Ctx) -> [Vec<BrowserTagConfig>; 3] {
         let display_mode = ctx.config.artists.album_display_mode;
         let sort_by = ctx.config.artists.album_sort_by;
         let date_tags_file = ctx
@@ -199,24 +201,14 @@ impl<'panes> PaneContainer<'panes> {
             })),
         });
 
-        Ok(Self {
-            queue: QueuePane::new(ctx),
-            queue_header: QueueHeaderPane::new(ctx),
-            #[cfg(debug_assertions)]
-            logs: LogsPane::new(),
-            directories: DirectoriesPane::new(ctx),
-            albums: TagBrowserPane::new(
-                vec![BrowserTagConfig {
+        [
+            vec![BrowserTagConfig {
                     group_by: vec![vec![SongProperty::Album]],
                     sort_by: None,
                     format: vec![],
                     skip: CollapseLevel::default(),
                 }],
-                PaneType::Albums,
-                ctx,
-            ),
-            artists: TagBrowserPane::new(
-                vec![
+            vec![
                     BrowserTagConfig {
                         group_by: vec![vec![SongProperty::Artist]],
                         sort_by: None,
@@ -242,11 +234,7 @@ impl<'panes> PaneContainer<'panes> {
                         skip: CollapseLevel::default(),
                     },
                 ],
-                PaneType::Artists,
-                ctx,
-            ),
-            album_artists: TagBrowserPane::new(
-                vec![
+            vec![
                     BrowserTagConfig {
                         group_by: vec![vec![SongProperty::Other("albumartist".to_string())]],
                         sort_by: None,
@@ -272,9 +260,20 @@ impl<'panes> PaneContainer<'panes> {
                         skip: CollapseLevel::default(),
                     },
                 ],
-                PaneType::AlbumArtists,
-                ctx,
-            ),
+        ]
+    }
+
+    pub fn new(ctx: &Ctx) -> Result<Self> {
+        let [albums, artists, album_artists] = Self::tag_browser_levels(ctx);
+        Ok(Self {
+            queue: QueuePane::new(ctx),
+            queue_header: QueueHeaderPane::new(ctx),
+            #[cfg(debug_assertions)]
+            logs: LogsPane::new(),
+            directories: DirectoriesPane::new(ctx),
+            albums: TagBrowserPane::new(albums, PaneType::Albums, ctx),
+            artists: TagBrowserPane::new(artists, PaneType::Artists, ctx),
+            album_artists: TagBrowserPane::new(album_artists, PaneType::AlbumArtists, ctx),
             playlists: PlaylistsPane::new(ctx),
             search: SearchPane::new(ctx),
             album_art: AlbumArtPane::new(ctx),
@@ -386,6 +385,10 @@ impl<'panes> PaneContainer<'panes> {
                     .get_mut(pane)
                     .with_context(|| format!("expected pane to be defined {p:?}"))?,
             )),
+            // rormpc: a Browse grouping's replies go to the Play pane that owns it
+            PaneType::PlayBrowse(_) => Ok(Panes::Others(
+                self.others.get_mut(&PaneType::Play).context("Play's Browse needs a Pane(Play()) in the config")?,
+            )),
             p @ (PaneType::Hits { .. } | PaneType::Deleted | PaneType::Versions | PaneType::UpNext | PaneType::Shuffle | PaneType::LivePlaylists | PaneType::Play) => Ok(Panes::Others(
                 self.others
                     .get_mut(pane)
@@ -469,6 +472,20 @@ pub(crate) trait Pane {
         ctx: &Ctx,
     ) -> Result<()> {
         Ok(())
+    }
+
+    /// rormpc: a reply addressed to `target`; a pane that owns other panes (Play's Browse) hands it to the one
+    /// that asked, whether it is shown or not.
+    fn on_target_query_finished(
+        &mut self,
+        target: &PaneType,
+        id: &'static str,
+        data: MpdQueryResult,
+        is_visible: bool,
+        ctx: &Ctx,
+    ) -> Result<()> {
+        let _ = target;
+        self.on_query_finished(id, data, is_visible, ctx)
     }
 
     fn calculate_areas(&mut self, area: Rect, ctx: &Ctx) -> Result<()> {
