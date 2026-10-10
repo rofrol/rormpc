@@ -483,6 +483,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       release, what rormpc and hits read), measures how many library songs show a compilation or reissue year
       instead of the first release, consults the models, and writes a repair plan (which year field each view uses,
       how tags are corrected, dry run, review, undo) into "Needs a decision" before any file is changed.
+      Second example (2026-10-10): "Physical (Olivia Newton-John) released 1981. We show 2004. Ask the models where
+      these errors come from."
 - [ ] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view:
       "on hover the hearts don't light up like they used to, to show they can be clicked. ask the models"): a worker
       finds which change lost the hover highlight (the old Queue pane had it; Music / the plan projection may not
