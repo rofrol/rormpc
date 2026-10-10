@@ -2,6 +2,8 @@
 //! permanent, history kept or deleted), what happened to their ListenBrainz listens and YouTube playlist entries,
 //! and failed steps. Enter or the context menu restores a song still in the Trash (`musicdb undo --id`) or
 //! retries failed steps. Nothing here deletes: the irreversible actions stay in the Ctrl-x menu.
+//! A deleted song is never downloaded again (rormpc-tools `deleted.py`): the Download column says "blocked", and the
+//! menu allows a re-download (`musicdb deletions allow ID`) or blocks it again.
 
 use std::{
     process::Command,
@@ -61,6 +63,28 @@ struct Deleted {
     ops: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     error: Option<String>,
+    /// how the deletion gates the downloaders; missing from an older musicdb
+    #[serde(default)]
+    download: Option<Download>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Download {
+    /// "blocked" or "allowed"
+    state: String,
+    /// what it matches: the video, the recording, the chart song (main artist|title)
+    #[serde(default)]
+    ytid: Option<String>,
+    #[serde(default)]
+    mbid: Option<String>,
+    #[serde(default)]
+    chart_key: Option<String>,
+}
+
+impl Deleted {
+    fn blocked(&self) -> Option<bool> {
+        self.download.as_ref().map(|d| d.state == "blocked")
+    }
 }
 
 /// State shared with the background `musicdb` runs.
@@ -156,12 +180,25 @@ impl DeletedPane {
         let job = Arc::clone(&self.job);
         let restore = r.restorable.then(|| r.id.clone());
         let retry = r.error.is_some();
+        let gate = r.blocked().map(|blocked| (blocked, r.id.clone()));
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
                 if let Some(id) = restore {
                     let job = Arc::clone(&job);
                     section.add_item("Restore to the library", move |ctx| {
                         run_then_reload(ctx, job, vec!["undo".into(), "--id".into(), id], "Restored");
+                        Ok(())
+                    });
+                }
+                if let Some((blocked, id)) = gate {
+                    let job = Arc::clone(&job);
+                    let (label, verb) = if blocked {
+                        ("Allow downloading it again", "allow")
+                    } else {
+                        ("Block downloading it again", "block")
+                    };
+                    section.add_item(label, move |ctx| {
+                        run_then_reload(ctx, job, vec!["deletions".into(), verb.into(), id], "Changed");
                         Ok(())
                     });
                 }
@@ -211,16 +248,34 @@ impl DeletedPane {
                 lines.push(field(step, outcome.clone()));
             }
         }
+        if let Some(d) = &r.download {
+            let what: Vec<String> = [
+                d.ytid.as_ref().map(|y| format!("video {y}")),
+                d.mbid.as_ref().map(|m| format!("recording {m}")),
+                d.chart_key.as_ref().map(|k| format!("chart song {k}")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            let gate = if d.state == "blocked" { "never downloaded again" } else { "allowed to be downloaded again" };
+            lines.push(Line::default());
+            lines.push(field("Download", gate.to_owned()));
+            lines.push(Line::from(Span::styled(
+                if what.is_empty() { "matches nothing (no video id, recording or artist known)".to_owned() } else { what.join(" · ") },
+                dim,
+            )));
+        }
         if let Some(err) = &r.error {
             lines.push(Line::default());
             lines.push(Line::from(Span::styled(format!("Failed: {err}"), Style::default().add_modifier(Modifier::BOLD))));
         }
         lines.push(Line::default());
-        let hint = match (r.restorable, r.error.is_some()) {
-            (true, true) => "Enter: restore or retry",
-            (true, false) => "Enter: restore to the library",
-            (false, true) => "Enter: retry failed steps",
-            (false, false) => "",
+        let hint = match (r.restorable, r.error.is_some(), r.download.is_some()) {
+            (true, true, _) => "Enter: restore or retry",
+            (true, false, _) => "Enter: restore to the library",
+            (false, true, _) => "Enter: retry failed steps",
+            (false, false, true) => "Enter: allow or block downloading it again",
+            (false, false, false) => "",
         };
         lines.push(Line::from(Span::styled(hint, dim)));
         lines
@@ -286,16 +341,23 @@ impl Pane for DeletedPane {
                 Cell::from(r.deleted_at.get(..16).unwrap_or(&r.deleted_at).replace('T', " ")),
                 Cell::from(how),
                 Cell::from(history),
+                Cell::from(match r.blocked() {
+                    Some(true) => "blocked",
+                    Some(false) => "allowed",
+                    None => "",
+                }),
                 Cell::from(if r.error.is_some() { "!" } else { "" }),
                 Cell::from(if r.artist.is_empty() { r.title.clone() } else { format!("{} - {}", r.artist, r.title) }),
             ])
             .style(if r.restorable || r.error.is_some() { Style::default() } else { dim })
         });
-        let header = Row::new(["Deleted", "File", "History", "", "Song"]).style(ctx.config.theme.preview_label_style);
+        let header =
+            Row::new(["Deleted", "File", "History", "Download", "", "Song"]).style(ctx.config.theme.preview_label_style);
         let table = Table::new(rows, [
             Constraint::Length(16),
             Constraint::Length(7),
             Constraint::Length(7),
+            Constraint::Length(8),
             Constraint::Length(1),
             Constraint::Min(10),
         ])
@@ -377,5 +439,24 @@ impl Pane for DeletedPane {
         }
         ctx.render()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Deleted;
+
+    #[test]
+    fn journal_row_with_and_without_the_download_gate() {
+        let row = r#"{"id": "i", "file": "a.mp3", "mode": "permanent", "history": "delete",
+            "deleted_at": "2026-10-10T14:40:06", "download": {"state": "blocked", "ytid": "vid", "mbid": null,
+            "chart_key": "artist|song"}}"#;
+        let r: Deleted = serde_json::from_str(row).expect("a journal row");
+        assert_eq!(r.blocked(), Some(true));
+        assert_eq!(r.download.as_ref().and_then(|d| d.chart_key.as_deref()), Some("artist|song"));
+        // an older musicdb writes no gate: nothing to allow or block
+        let old: Deleted = serde_json::from_str(r#"{"id": "i", "file": "a.mp3", "mode": "trash", "history": "keep",
+            "deleted_at": "2026-10-03T12:00:00"}"#).expect("an older journal row");
+        assert_eq!(old.blocked(), None);
     }
 }
