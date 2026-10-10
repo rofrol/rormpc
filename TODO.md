@@ -348,6 +348,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Decided by the user 2026-10-10: always a generic line ("<program> not found on PATH; <what stops working>")
       plus a link to one per-manager table in the docs (brew, apt, pacman, guix incl. the home.scm line; Windows
       unsupported); no OS detection; the installer says Shepherd is not supported.
+- [ ] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
+      browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
+      the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
+      Album artists (separate), Albums, Folders, Lists; P plays replacing the queue with Apply's confirmation rule,
+      t play next, a append (an appended song joins a Hits source's files and round, "+N added"); immediate
+      playlist edits, confirmed delete; an unapplied preview stays and recomputes; Live inbox with multi-select and
+      a pending badge; keys designed by the worker; the default config drops the six browsing tabs.
+- [ ] After phase 3b: release and install, and change your config like the new default (Play, Up next, Search plus
+      Versions, Deleted, Lyrics; decided 2026-10-10; the coordinator does it).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1005,16 +1014,16 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Combined view: A song appended (`a`) to a queue holding a Hits source while weighted is on: what happens to it? Decided by the user 2026-10-10: it joins the source's files and the round, the source shows "+N added".
       Options: it joins the source's files and the round, the source shows "+N added" | it becomes an Up next request | it stays outside the round (today: never drawn)
       Checked: plans/combined-view.md "Open choices" (15); the first option is the plan's recommendation.
-- [ ] Combined view: Stored playlist editor: immediate edits or a save buffer?
+- [x] Combined view: Stored playlist editor: immediate edits or a save buffer? Decided by the user 2026-10-10: immediate MPD edits as today, a confirmation before deleting a whole playlist.
       Options: immediate MPD edits as today, a confirmation before deleting a whole playlist | edit a copy, explicit Save and Discard
       Checked: plans/combined-view.md "Open choices" (16); the first option is the plan's recommendation.
-- [ ] Combined view: Keys for Browse?
+- [x] Combined view: Keys for Browse? Decided by the user 2026-10-10: the worker designs them for the left-column layout after the plan's pattern (P play, t play next, a append), checked against your config.
       Options: B body, [ ] grouping, P play replacing the queue, t play next, digits 5..9 groupings and 0/gl Live | the same without the digits | other keys
       Checked: plans/combined-view.md "Open choices" (17); the first option is the plan's recommendation.
-- [ ] Combined view: Change your own ~/.config/rormpc/config.ron (explicit tabs and digits) when phase 3b ships?
+- [x] Combined view: Change your own ~/.config/rormpc/config.ron (explicit tabs and digits) when phase 3b ships? Decided by the user 2026-10-10: yes, the coordinator mirrors the new default (Play, Up next, Search plus Versions, Deleted, Lyrics).
       Options: yes, the coordinator mirrors the new default (Play, Up next, Search plus Versions, Deleted, Lyrics; digits to ShowPlay) | keep your tabs | remove only the six tabs, keep your digits
       Checked: plans/combined-view.md "Open choices" (18); the first option is the plan's recommendation.
-- [ ] Combined view: An unapplied preview when a Browse action changes the queue?
+- [x] Combined view: An unapplied preview when a Browse action changes the queue? Decided by the user 2026-10-10: the preview stays, its counts are recomputed, Apply judges the confirmation then.
       Options: the preview stays, its counts are recomputed, Apply judges the confirmation then (Sol) | the preview is dropped with a note (MiMo)
       Checked: plans/combined-view.md "Open choices" (19); the first option is the plan's recommendation.
 - [x] Combined view: Artists and Album artists in Browse? Decided by the user 2026-10-10: two separate groupings.
