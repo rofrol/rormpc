@@ -1441,16 +1441,16 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Radio: Detect an MP3 replaced under the same file name on the station? Decided by the user 2026-10-10: no, accept the limitation.
       Options: no, accept the limitation (rare) | a HEAD per accepted track on check, comparing its ETag
       Checked: the radio worker 2026-10-10: the playlist.json ETag does not change when only an MP3 is replaced.
-- [ ] Release years: Which year do the views show?
+- [x] Release years: Which year do the views show? Decided by the user 2026-10-10: TDOR (original release), TDRC kept per recording.
       Options: TDOR (original release), TDRC kept per recording | TDRC = TDOR = the original release, as today | TDOR, and TDRC only for versions
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): every view reads TDRC today; MPD exposes TDOR as `originaldate`.
-- [ ] Release years: May high-confidence rows be applied without row-by-row review?
+- [x] Release years: May high-confidence rows be applied without row-by-row review? Decided by the user 2026-10-10: no, review every row.
       Options: yes, earlier-only same-length rows with a matching release-group year | no, review every row | yes, every earlier proposal
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 12 of 15 high rows right in the sample, the other 3 off by one year; earlier-only proposals 25 of 28 right or closer.
-- [ ] Release years: Where is the review done?
+- [x] Release years: Where is the review done? Decided by the user 2026-10-10: a rormpc "Years to review" view.
       Options: the Markdown report with --accept/--reject ids | a rormpc "Years to review" view | both, the view later
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): an earlier review of undated files used the report-and-ids flow.
-- [ ] Release years: Should a video match with no audio alternative be swapped to the audio recording through the work on download?
+- [x] Release years: Should a video match with no audio alternative be swapped to the audio recording through the work on download? Decided by the user 2026-10-10: yes, look the work up and swap to the same-length audio recording.
       Options: yes, look the work up and swap to the same-length audio recording | send it to review instead | keep the video recording and fix only the year
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): at least 24 of 60 earlier video matches had an audio alternative; the rest need a work lookup.
 - [ ] Release years: What happens to files without any MusicBrainz work link?
