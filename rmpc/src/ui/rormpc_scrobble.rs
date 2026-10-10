@@ -19,6 +19,7 @@ use rmpc_mpd::{commands::State, mpd_client::MpdClient};
 use serde::Deserialize;
 
 use crate::{
+    config::keys::GlobalAction,
     ctx::Ctx,
     shared::{
         events::AppEvent,
@@ -52,8 +53,6 @@ pub struct Rule {
     pub fraction: f64,
     #[serde(default)]
     pub max_s: Option<f64>,
-    #[serde(default)]
-    pub uninterrupted: bool,
 }
 
 /// The answer to the last manual send.
@@ -177,14 +176,29 @@ fn clock(seconds: f64) -> String {
     format!("{}:{:02}", s / 60, s % 60)
 }
 
-/// What the listen needs: "50%" of the song, or the playtime when the maximum
-/// is less than the fraction (or the duration is unknown).
-fn needs(st: &ScrobbleStatus, required: f64) -> String {
-    match st.duration_s {
-        Some(d) if d > 0.0 && st.rule.max_s.is_none_or(|m| m >= st.rule.fraction * d) => {
-            format!("{:.0}%", st.rule.fraction * 100.0)
+/// A share of the song, rounded down: progress never shows more than was
+/// counted (the epsilon keeps 0.9 * 100 from becoming 89).
+fn share_down(part: f64, duration: f64) -> u64 {
+    (part / duration * 100.0 + 1e-9).floor().max(0.0) as u64
+}
+
+/// A share of the song, rounded up: what the listen needs is never shown as
+/// less than it is.
+fn share_up(part: f64, duration: f64) -> u64 {
+    (part / duration * 100.0 - 1e-9).ceil().max(0.0) as u64
+}
+
+/// What the listen needs: "90%" of the song; "80%/4:00" when a maximum below
+/// the fraction governs (the effective share and the maximum); the playtime
+/// when the duration is unknown.
+fn needs(st: &ScrobbleStatus, required: f64, with_cap: bool) -> String {
+    match st.duration_s.filter(|d| *d > 0.0) {
+        Some(d) if st.rule.max_s.is_some_and(|m| m < st.rule.fraction * d) => {
+            let share = share_up(required, d);
+            if with_cap { format!("{share}%/{}", clock(required)) } else { format!("{share}%") }
         }
-        _ => clock(required),
+        Some(_) => format!("{}%", share_up(st.rule.fraction * 100.0, 100.0)),
+        None => clock(required),
     }
 }
 
@@ -203,28 +217,33 @@ pub fn describe(
     if pending_play().is_some_and(|(instance, play)| instance == st.instance && play == st.play) {
         return Some("sending to ListenBrainz…".to_owned());
     }
+    let duration = st.duration_s.filter(|d| *d > 0.0);
     match st.listen.as_str() {
         "sent" => Some("scrobbled ✓".to_owned()),
         "never" => Some("no scrobble: unknown length".to_owned()),
+        // not written by the scrobbler yet: a minimum length, the rule turned off
+        "too_short" => Some("no scrobble: song too short".to_owned()),
+        "off" => Some("scrobbling off".to_owned()),
         "impossible" => {
             let required = st.required_s?;
-            let at = st.duration_s.filter(|d| *d > 0.0).map_or_else(
+            let at = duration.map_or_else(
                 || clock(st.segment_start_s),
                 |d| format!("{:.0}%", st.segment_start_s / d * 100.0),
             );
-            let how = if st.rule.uninterrupted { " uninterrupted" } else { "" };
-            Some(format!("no scrobble: seeked to {at} (needs {}{how})", needs(st, required)))
+            Some(format!("no scrobble: seek to {at}; need {}", needs(st, required, false)))
         }
         "counting" => {
             let required = st.required_s?;
+            // MPD's elapsed time since the status was written; it stands still
+            // while paused, so the countdown does too
             let counted =
                 (st.counted_s + (elapsed.as_secs_f64() - st.position_s).max(0.0)).min(required);
-            let progress = if required > 0.0 { counted / required * 100.0 } else { 100.0 };
+            let counted_text = duration
+                .map_or_else(|| clock(counted.floor()), |d| format!("{}%", share_down(counted, d)));
             Some(format!(
-                "scrobble in {} · {:.0}% of {}",
-                clock(required - counted),
-                progress.floor(),
-                needs(st, required)
+                "{counted_text} counted · need {} · in {}",
+                needs(st, required, true),
+                clock(required - counted)
             ))
         }
         _ => None,
@@ -252,6 +271,14 @@ pub fn line(ctx: &Ctx) -> Option<String> {
     describe(&st, ctx.status.songid, ctx.status.state, ctx.status.elapsed)
 }
 
+/// "  (oL)": the global key bound to "Send to `ListenBrainz` now".
+pub fn key_hint(ctx: &Ctx) -> String {
+    let key = ctx.config.keybinds.global.iter().find_map(|(key, action)| {
+        matches!(action, GlobalAction::ScrobbleNow).then(|| key.to_string())
+    });
+    key.map(|k| format!("  ({k})")).unwrap_or_default()
+}
+
 /// "Send to `ListenBrainz` now": the playing song's listen goes out now, once;
 /// asks first when the rule is not met.
 pub fn send_now(ctx: &Ctx) {
@@ -275,7 +302,7 @@ pub fn send_now(ctx: &Ctx) {
     let request = (st.instance.clone(), st.play, st.manual.as_ref().map_or(0, |a| a.n));
     match st.listen.as_str() {
         "sent" => status_info!("Already scrobbled"),
-        "counting" | "impossible" | "never" => {
+        "counting" | "impossible" | "never" | "too_short" | "off" => {
             let go = move |ctx: &Ctx| {
                 send(ctx, request.clone());
                 Ok(())
@@ -337,25 +364,58 @@ mod tests {
     }
 
     #[test]
-    fn countdown_and_progress_toward_the_rule() {
+    fn counted_share_need_and_countdown() {
         let st = counting();
-        assert_eq!(at(&st, 30).as_deref(), Some("scrobble in 1:10 · 30% of 50%"));
+        assert_eq!(at(&st, 30).as_deref(), Some("15% counted · need 50% · in 1:10"));
         // MPD's elapsed moves on between status writes
-        assert_eq!(at(&st, 92).as_deref(), Some("scrobble in 0:08 · 92% of 50%"));
-        assert_eq!(at(&st, 150).as_deref(), Some("scrobble in 0:00 · 100% of 50%"));
+        assert_eq!(at(&st, 92).as_deref(), Some("46% counted · need 50% · in 0:08"));
+        assert_eq!(at(&st, 150).as_deref(), Some("50% counted · need 50% · in 0:00"));
         // an elapsed behind the status (a seek the scrobbler has not reported
         // yet) never counts backwards
-        assert_eq!(at(&st, 10).as_deref(), Some("scrobble in 1:10 · 30% of 50%"));
+        assert_eq!(at(&st, 10).as_deref(), Some("15% counted · need 50% · in 1:10"));
     }
 
     #[test]
-    fn a_maximum_below_the_fraction_shows_the_playtime() {
+    fn rounding_never_claims_the_listen_early() {
+        // 300 s song, 90% = 270 s; 269.5 s counted is 89.8%: shown as 89%, need
+        // 90%, half a second left shown as 0:01
         let mut st = counting();
+        st.duration_s = Some(300.0);
+        st.rule.fraction = 0.9;
+        st.required_s = Some(270.0);
+        st.counted_s = 269.5;
+        st.position_s = 269.5;
+        assert_eq!(at(&st, 269).as_deref(), Some("89% counted · need 90% · in 0:01"));
+        // a cap of 3:59.1 on a 5:00 song is 79.7%: need 80%
+        st.rule.max_s = Some(239.1);
+        st.required_s = Some(239.1);
+        st.counted_s = 0.0;
+        st.position_s = 0.0;
+        assert_eq!(at(&st, 0).as_deref(), Some("0% counted · need 80%/4:00 · in 4:00"));
+    }
+
+    #[test]
+    fn a_maximum_below_the_fraction_shows_the_effective_share_and_the_cap() {
+        // Sol's example: 5:00 song, 90% capped at 4:00 = 80%
+        let mut st = counting();
+        st.duration_s = Some(300.0);
+        st.rule.fraction = 0.9;
+        st.rule.max_s = Some(240.0);
+        st.required_s = Some(240.0);
+        st.counted_s = 186.0;
+        st.position_s = 186.0;
+        assert_eq!(at(&st, 186).as_deref(), Some("62% counted · need 80%/4:00 · in 0:54"));
+        // a maximum above the fraction does not govern
+        st.rule.max_s = Some(280.0);
+        st.required_s = Some(270.0);
+        assert_eq!(at(&st, 186).as_deref(), Some("62% counted · need 90% · in 1:24"));
+        // unknown duration: the maximum's playtime
+        st.duration_s = None;
         st.rule.max_s = Some(60.0);
         st.required_s = Some(60.0);
-        assert_eq!(at(&st, 30).as_deref(), Some("scrobble in 0:30 · 50% of 1:00"));
-        st.duration_s = None;
-        assert_eq!(at(&st, 30).as_deref(), Some("scrobble in 0:30 · 50% of 1:00"));
+        st.counted_s = 30.0;
+        st.position_s = 30.0;
+        assert_eq!(at(&st, 30).as_deref(), Some("0:30 counted · need 1:00 · in 0:30"));
     }
 
     #[test]
@@ -363,12 +423,14 @@ mod tests {
         let mut st = counting();
         st.listen = "impossible".to_owned();
         st.segment_start_s = 140.0;
-        assert_eq!(
-            at(&st, 141).as_deref(),
-            Some("no scrobble: seeked to 70% (needs 50% uninterrupted)")
-        );
-        st.rule.uninterrupted = false;
-        assert_eq!(at(&st, 141).as_deref(), Some("no scrobble: seeked to 70% (needs 50%)"));
+        assert_eq!(at(&st, 141).as_deref(), Some("no scrobble: seek to 70%; need 50%"));
+        // with a cap: the effective share only
+        st.duration_s = Some(300.0);
+        st.rule.fraction = 0.9;
+        st.rule.max_s = Some(240.0);
+        st.required_s = Some(240.0);
+        st.segment_start_s = 90.0;
+        assert_eq!(at(&st, 91).as_deref(), Some("no scrobble: seek to 30%; need 80%"));
     }
 
     #[test]
@@ -378,6 +440,10 @@ mod tests {
         assert_eq!(at(&st, 120).as_deref(), Some("scrobbled ✓"));
         st.listen = "never".to_owned();
         assert_eq!(at(&st, 1).as_deref(), Some("no scrobble: unknown length"));
+        st.listen = "too_short".to_owned();
+        assert_eq!(at(&st, 1).as_deref(), Some("no scrobble: song too short"));
+        st.listen = "off".to_owned();
+        assert_eq!(at(&st, 1).as_deref(), Some("scrobbling off"));
         // the scrobbler has not seen the new song yet, MPD is stopped, or the
         // file is of another format
         assert_eq!(describe(&st, Some(8), State::Play, Duration::ZERO), None);

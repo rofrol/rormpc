@@ -620,11 +620,15 @@ the existing 2-second external acknowledgement deadline and re-reads state befor
 ## Scrobble status
 
 `Status(Scrobble)` shows what the scrobbler (ro-listenbrainz-mpd) will do with the playing song:
-`scrobble in 1:23 · 62% of 50%` (the time left, how far the listen is toward the rule, and what the rule asks:
-the fraction of the song, or the playtime when its maximum is less), `no scrobble: seeked to 20% (needs 50%
-uninterrupted)` when too little of the song is left after a seek, `no scrobble: unknown length`, `scrobbled ✓`,
-`sending to ListenBrainz…` while a manual send waits for its answer, and `scrobbler not running` when its process
-ended. Nothing without a scrobbler status file, while stopped, or before the scrobbler has seen the playing song.
+`62% counted · need 90% · in 1:24` ("counted" is the share of the song the listen has so far: under the
+uninterrupted rule only the playback since the last seek; a pause freezes it and the countdown), `62% counted ·
+need 80%/4:00 · in 0:54` when the rule's maximum playtime is less than its fraction (the effective share and the
+maximum), `no scrobble: seek to 20%; need 90%` when too little of the song is left after a seek, `no scrobble:
+unknown length`, `no scrobble: song too short`, `scrobbling off` (the last two only once the scrobbler reports
+them), `scrobbled ✓`, `sending to ListenBrainz…` while a manual send waits for its answer, and `scrobbler not
+running` when its process ended. The counted share rounds down, the needed share and the countdown up, so the line
+never claims the listen early. Nothing without a scrobbler status file, while stopped, or before the scrobbler has
+seen the playing song.
 For example next to the progress bar:
 
     (kind: Property(Status(Scrobble)), style: (fg: "#7aa0cd")),
@@ -636,7 +640,8 @@ replacement, never on a timer; rormpc watches the directory and adds MPD's elaps
 
 `oL` (`ScrobbleNow`) sends the playing song's listen to ListenBrainz now, through the scrobbler: once, with the
 listen's start as its time, logged in `listens.jsonl` with `"manual": true`, and the automatic listen of that play
-is then not sent. When the rule is not met yet it asks first. It is `submit <instance> <play>` on the MPD channel
+is then not sent. When the rule is not met yet it asks first. The Queue menu has the same action, "Send to
+ListenBrainz now", on the playing song's row. It is `submit <instance> <play>` on the MPD channel
 `listenbrainz_listen` (a request for an earlier play or scrobbler run is refused, never sent for another song);
 the status line says "Sent to ListenBrainz" or why not once `status.json` answers. A scrobbler older than this
 is not subscribed to the channel, and rormpc says so instead of sending.
