@@ -431,12 +431,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       `yt-mp3-mb --allow-deleted`. Today's deletion, Beyoncé "Irreplaceable" (14:40, permanent, with history), is
       blocked by its video, recording and chart key. One old deletion (Bugi, Bugi (Dance RMX).mp3) has no id at all
       and blocks nothing. Not released.
-- [ ] Weighted mode without the "unplanned" rows (asked 2026-10-10 with a screenshot: "what is the point of showing
+- [x] Weighted mode without the "unplanned" rows (asked 2026-10-10 with a screenshot: "what is the point of showing
       unplanned? ask the models"). Consulted (Sol 75b2c1f0, MiMo 8d2faf34): the rows give access to the pool, but
       "queue order" misleads (the shuffle never plays it) and a big source buries the forecast; both proposed a
       collapsed line. Decided by the user 2026-10-10: remove them entirely; the pool stays reachable through `/`
       search and Browse. In Play's weighted mode and the Queue plan view: past plays, 0 ▶, Up next, the forecast,
       nothing after it; check what `/` and the row actions need when the matching song is outside the forecast.
+      Done in 40f1bdc (worker; cargo test 1032; looked at read-only on the real MPD): the weighted view and the Queue plan
+      view end at the forecast; a `/` match outside it shows after the forecast as a "·" row ("N · in the pool, not
+      in the forecast") with Play now / Play next, pin/exclude and delete; J/K do not move it. `/` in the TUI was
+      checked by a unit test only.
 - [ ] Release rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab download
       column, Hits ⌫ rows, scope-menu cursor, weighted view without unplanned rows) after the weighted-mode change
       (decided 2026-10-10; the coordinator does it).
