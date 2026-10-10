@@ -399,11 +399,16 @@ the screen behind a modal is dimmed with the terminal's faint attribute (as herd
 Songs deleted with Ctrl-x, newest first, from `musicdb deletions --json --all` (rormpc-tools): when, whether the
 file went to the Trash or was deleted permanently, whether its history was kept or deleted, and failed steps
 (`!`). The details show the ListenBrainz listens deleted, the YouTube playlists the video was removed from and
-each step's outcome. Enter (or the context menu) restores a song still in the Trash (`musicdb undo --id`) or
-retries failed steps; nothing in this pane deletes. It reloads when shown and when the MPD database changes.
+each step's outcome. Enter (or the context menu) retries failed steps or offers "Restore…" for any deletion,
+Trash or permanent: `musicdb restore ID --json` plans it without changing anything (the file from the Trash or
+downloaded again from its video and checked, its song id, stickers, plays, the ListenBrainz listens the deletion
+deleted with their original time, the YouTube playlist entries), the confirmation lists each step (`+` will be
+done, `✓` done, `…` waits and is retried hourly, `✗` cannot), and Restore runs `musicdb restore ID --yes` in the
+background. A restored row says `restored` in the File column; one with a step still waiting offers "Restore…
+(continue)". Nothing in this pane deletes. It reloads when shown and when the MPD database changes.
 The Download column says whether the downloaders skip the song (`blocked`: Hits, `hits fetch`, `yt-mp3-mb`,
 Live playlists never download it again; the details list what it matches: video, recording, chart song) or
-`allowed`; the menu switches it (`musicdb deletions allow|block ID`). Restoring a trashed song lifts the block.
+`allowed`; the menu switches it (`musicdb deletions allow|block ID`). Restoring a song lifts the block.
 Music shows the pane as a panel (`gd`, or the `Deleted ! N` badge while steps failed or are unresolved); the
 default tabs no longer have a Deleted tab, but an explicit config can still put the pane in one:
 
