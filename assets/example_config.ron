@@ -49,6 +49,7 @@
             "oP":         Partition(),
             "z":          ToggleRepeat,
             "x":          ToggleRandom,
+            "w":          ToggleWeightedShuffle, // rormpc: mpd-player draws the next song; Play shows its plan
             "c":          ToggleConsume,
             "v":          ToggleSingle,
             "p":          TogglePause,
@@ -63,9 +64,8 @@
             "gt":         NextTab,
             "<S-Tab>":    PreviousTab,
             "gT":         PreviousTab,
-            "1":          SwitchToTab("Hits"),
+            "1":          SwitchToTab("Play"),
             "gu":         SwitchToTab("Up next"),
-            "2":          SwitchToTab("Queue"),
             "3":          SwitchToTab("Directories"),
             "4":          SwitchToTab("Artists"),
             "5":          SwitchToTab("Album Artists"),
@@ -166,84 +166,10 @@
     ),
     tabs: [
         (
-            name: "Hits",
+            name: "Play",
             pane: Split(
                 direction: Vertical,
-                panes: [(pane: Pane(Hits()), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            ),
-        ),
-        (
-            name: "Queue",
-            pane: Split(
-                direction: Horizontal,
-                panes: [
-                    (
-                        size: "35%",
-                        pane: Split(
-                            direction: Vertical,
-                            panes: [
-                                (
-                                    size: "100%",
-                                    borders: "LEFT | RIGHT | TOP",
-                                    border_symbols: Rounded,
-                                    pane: Pane(AlbumArt)
-                                ),
-                                (
-                                    size: "7",
-                                    borders: "ALL",
-                                    border_symbols: Inherited(parent: Rounded, top_left: "├", top_right: "┤",),
-                                    border_title: [(kind: Text(" Lyrics "))],
-                                    border_title_alignment: Right,
-                                    pane: Pane(Lyrics)
-                                ),
-                            ],
-                        ),
-                    ), 
-                    (
-                        size: "65%",
-                        pane: Split(
-                            direction: Vertical,
-                            panes: [
-                                (
-                                    size: "3",
-                                    borders: "ALL",
-                                    border_symbols: Inherited(parent: Rounded, bottom_left: "├", bottom_right: "┤",),
-                                    pane: Split(
-                                        direction: Horizontal,
-                                        panes: [
-                                            (
-                                                size: "1",
-                                                pane: Pane(Empty())
-                                            ),
-                                            (
-                                                size: "100%",
-                                                pane: Pane(QueueHeader())
-                                            ),
-                                        ]
-                                    )
-                                ),
-                                (
-                                    size: "100%",
-                                    borders: "LEFT | RIGHT | BOTTOM",
-                                    border_symbols: Rounded,
-                                    pane: Split(
-                                        direction: Horizontal,
-                                        panes: [
-                                            (
-                                                size: "1",
-                                                pane: Pane(Empty())
-                                            ),
-                                            (
-                                                size: "100%",
-                                                pane: Pane(Queue)
-                                            ),
-                                        ]
-                                    )
-                                ),
-                            ],
-                        )
-                    ),
-                ],
+                panes: [(pane: Pane(Play()), size: "100%", borders: "ALL", border_symbols: Rounded)],
             ),
         ),
         (

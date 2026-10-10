@@ -227,6 +227,8 @@ pub enum PaneTypeFile {
     Shuffle(),
     /// rormpc: public playlists followed by `liveplaylist` (add a URL, review new tracks, download)
     LivePlaylists(),
+    /// rormpc: Queue, Hits and Shuffle in one pane (the queue or the weighted plan, the Hits filters, preview + Apply)
+    Play(),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, strum::Display, strum::EnumDiscriminants)]
@@ -278,6 +280,7 @@ pub enum PaneType {
     UpNext,
     Shuffle,
     LivePlaylists,
+    Play,
 }
 
 pub const PANES_ALLOWED_IN_BOTH_TAB_AND_LAYOUT: [PaneTypeDiscriminants; 2] =
@@ -425,6 +428,7 @@ impl TryFrom<PaneTypeFile> for PaneType {
             PaneTypeFile::UpNext() => PaneType::UpNext,
             PaneTypeFile::Shuffle() => PaneType::Shuffle,
             PaneTypeFile::LivePlaylists() => PaneType::LivePlaylists,
+            PaneTypeFile::Play() => PaneType::Play,
         })
     }
 }
@@ -1017,8 +1021,10 @@ impl SizedPaneOrSplit {
 impl Default for TabsFile {
     fn default() -> Self {
         Self(vec![
+            // rormpc: Play replaces the Hits, Queue and Shuffle tabs in the default (plans/combined-view.md,
+            // phase 3); those panes still load from an explicit config
             TabFile {
-                name: "Hits".to_string(),
+                name: "Play".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
                     direction: DirectionFile::Vertical,
@@ -1027,193 +1033,9 @@ impl Default for TabsFile {
                         size: "100%".to_string(),
                         borders: BordersFile::ALL,
                         border_symbols: BorderSymbolsFile::Rounded,
-                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Hits {
-                            path: None, command: None,
-                        }),
+                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Play()),
                         ..Default::default()
                     }],
-                },
-            },
-            TabFile {
-                name: "Queue".to_string(),
-                border_type: BorderTypeFile::None,
-                pane: PaneOrSplitFile::Split {
-                    direction: DirectionFile::Horizontal,
-                    borders: BordersFile::NONE,
-                    panes: vec![
-                        SubPaneFile {
-                            size: "35%".to_string(),
-                            background_color: None,
-                            borders: BordersFile::NONE,
-                            border_style: None,
-                            border_active_style: None,
-                            border_title: Vec::new(),
-                            border_title_position: BorderTitlePosition::Top,
-                            border_title_alignment: Alignment::Left,
-                            border_symbols: BorderSymbolsFile::default(),
-                            pane: PaneOrSplitFile::Split {
-                                direction: DirectionFile::Vertical,
-                                borders: BordersFile::NONE,
-                                panes: vec![
-                                    SubPaneFile {
-                                        pane: PaneOrSplitFile::Pane(PaneTypeFile::AlbumArt),
-                                        background_color: None,
-                                        size: "100%".to_string(),
-                                        borders: BordersFile::TOP
-                                            | BordersFile::LEFT
-                                            | BordersFile::RIGHT,
-                                        border_style: None,
-                                        border_active_style: None,
-                                        border_title_position: BorderTitlePosition::Top,
-                                        border_title_alignment: Alignment::Left,
-                                        border_symbols: BorderSymbolsFile::Rounded,
-                                        border_title: Vec::new(),
-                                    },
-                                    SubPaneFile {
-                                        pane: PaneOrSplitFile::Pane(PaneTypeFile::Lyrics),
-                                        background_color: None,
-                                        size: "7".to_string(),
-                                        border_title: vec![PropertyFile {
-                                            kind: PropertyKindFileOrText::Text(
-                                                " Lyrics ".to_string(),
-                                            ),
-                                            style: None,
-                                            default: None,
-                                        }],
-                                        borders: BordersFile::ALL,
-                                        border_style: None,
-                                        border_active_style: None,
-                                        border_title_position: BorderTitlePosition::Top,
-                                        border_title_alignment: Alignment::Right,
-                                        border_symbols: BorderSymbolsFile::Inherited(
-                                            BorderSetInherited {
-                                                parent: Box::new(BorderSymbolsFile::Rounded),
-                                                top_left: Some("├".to_string()),
-                                                top_right: Some("┤".to_string()),
-                                                ..Default::default()
-                                            },
-                                        ),
-                                    },
-                                ],
-                            },
-                        },
-                        SubPaneFile {
-                            size: "65%".to_string(),
-                            background_color: None,
-                            borders: BordersFile::NONE,
-                            border_style: None,
-                            border_active_style: None,
-                            border_title: Vec::new(),
-                            border_title_position: BorderTitlePosition::Top,
-                            border_title_alignment: Alignment::Left,
-                            border_symbols: BorderSymbolsFile::default(),
-                            pane: PaneOrSplitFile::Split {
-                                direction: DirectionFile::Vertical,
-                                borders: BordersFile::NONE,
-                                panes: vec![
-                                    SubPaneFile {
-                                        size: "3".to_string(),
-                                        background_color: None,
-                                        borders: BordersFile::ALL,
-                                        border_style: None,
-                                        border_active_style: None,
-                                        border_title: Vec::new(),
-                                        border_title_position: BorderTitlePosition::Top,
-                                        border_title_alignment: Alignment::Left,
-                                        border_symbols: BorderSymbolsFile::Inherited(
-                                            BorderSetInherited {
-                                                parent: Box::new(BorderSymbolsFile::Rounded),
-                                                bottom_left: Some("├".to_string()),
-                                                bottom_right: Some("┤".to_string()),
-                                                ..Default::default()
-                                            },
-                                        ),
-                                        pane: PaneOrSplitFile::Split {
-                                            direction: DirectionFile::Horizontal,
-                                            borders: BordersFile::NONE,
-                                            panes: vec![
-                                                SubPaneFile {
-                                                    pane: PaneOrSplitFile::Pane(
-                                                        PaneTypeFile::Empty(),
-                                                    ),
-                                                    background_color: None,
-                                                    size: "1".to_string(),
-                                                    borders: BordersFile::NONE,
-                                                    border_style: None,
-                                                    border_active_style: None,
-                                                    border_title: Vec::new(),
-                                                    border_title_position: BorderTitlePosition::Top,
-                                                    border_title_alignment: Alignment::Left,
-                                                    border_symbols: BorderSymbolsFile::default(),
-                                                },
-                                                SubPaneFile {
-                                                    size: "100%".to_string(),
-                                                    background_color: None,
-                                                    borders: BordersFile::NONE,
-                                                    border_style: None,
-                                                    border_active_style: None,
-                                                    border_title: Vec::new(),
-                                                    border_title_position: BorderTitlePosition::Top,
-                                                    border_title_alignment: Alignment::Left,
-                                                    border_symbols: BorderSymbolsFile::default(),
-                                                    pane: PaneOrSplitFile::Pane(
-                                                        PaneTypeFile::QueueHeader(),
-                                                    ),
-                                                },
-                                            ],
-                                        },
-                                    },
-                                    SubPaneFile {
-                                        size: "100%".to_string(),
-                                        background_color: None,
-                                        borders: BordersFile::LEFT
-                                            | BordersFile::RIGHT
-                                            | BordersFile::BOTTOM,
-                                        border_style: None,
-                                        border_active_style: None,
-                                        border_title: Vec::new(),
-                                        border_title_position: BorderTitlePosition::Top,
-                                        border_title_alignment: Alignment::Left,
-                                        border_symbols: BorderSymbolsFile::Rounded,
-                                        pane: PaneOrSplitFile::Split {
-                                            direction: DirectionFile::Horizontal,
-                                            borders: BordersFile::NONE,
-                                            panes: vec![
-                                                SubPaneFile {
-                                                    pane: PaneOrSplitFile::Pane(
-                                                        PaneTypeFile::Empty(),
-                                                    ),
-                                                    background_color: None,
-                                                    size: "1".to_string(),
-                                                    borders: BordersFile::NONE,
-                                                    border_style: None,
-                                                    border_active_style: None,
-                                                    border_title: Vec::new(),
-                                                    border_title_position: BorderTitlePosition::Top,
-                                                    border_title_alignment: Alignment::Left,
-                                                    border_symbols: BorderSymbolsFile::default(),
-                                                },
-                                                SubPaneFile {
-                                                    size: "100%".to_string(),
-                                                    background_color: None,
-                                                    borders: BordersFile::NONE,
-                                                    border_style: None,
-                                                    border_active_style: None,
-                                                    border_title: Vec::new(),
-                                                    border_title_position: BorderTitlePosition::Top,
-                                                    border_title_alignment: Alignment::Left,
-                                                    border_symbols: BorderSymbolsFile::default(),
-                                                    pane: PaneOrSplitFile::Pane(
-                                                        PaneTypeFile::Queue,
-                                                    ),
-                                                },
-                                            ],
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                    ],
                 },
             },
             #[cfg(debug_assertions)]
@@ -1433,12 +1255,15 @@ mod rormpc_tests {
     use super::*;
 
     #[test]
-    fn hits_first_and_one_top_level_up_next() {
+    fn play_first_and_one_top_level_up_next() {
         let tabs = TabsFile::default();
-        assert_eq!(tabs.0[0].name, "Hits");
-        assert_eq!(tabs.0[1].name, "Queue");
-        assert_eq!(tabs.0[2].name, "Up next");
+        assert_eq!(tabs.0[0].name, "Play");
+        assert_eq!(tabs.0[1].name, "Up next");
         let converted = tabs.convert(&HashMap::new(), &BorderSetLib::default()).unwrap();
+        // Play replaces Hits, Queue and Shuffle in the default; their panes stay for explicit configs
+        let panes: Vec<_> = converted.tabs.values().flat_map(|t| t.panes.panes_iter().map(|p| p.pane.clone())).collect();
+        assert!(panes.contains(&PaneType::Play));
+        assert!(!panes.iter().any(|p| matches!(p, PaneType::Queue | PaneType::Hits { .. } | PaneType::Shuffle)));
         let up_next_tabs = converted.tabs.values().filter(|tab| {
             tab.panes.panes_iter().any(|pane| matches!(pane.pane, PaneType::UpNext))
         }).collect_vec();

@@ -12,7 +12,10 @@
 use std::{
     path::PathBuf,
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::SystemTime,
 };
 
@@ -456,11 +459,46 @@ pub struct HitsPane {
     /// the pins file as last read: a genre pinned elsewhere (Queue's "Pin genre…") gets its checkbox on the next render
     pins_mtime: Option<SystemTime>,
     job: Arc<Mutex<Job>>,
+    /// rormpc Play: the filter column of the Play pane. A filter change runs `hits` into the preview file at once
+    /// (`requested`: the arguments of the last run asked for); Apply (the button, Enter on it, the row menu)
+    /// sets `commit` for Play to replace the queue instead of running `hits`.
+    play_mode: bool,
+    requested: Option<Vec<String>>,
+    commit: Arc<AtomicBool>,
+    /// the result file's `args` as written: what Play stores in source.json as the rules it played
+    raw_args: Option<serde_json::Value>,
+}
+
+/// What Play shows of the preview: the result's counts, whether it was made by the filters on screen.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct PreviewInfo {
+    /// `hits` is running (the rows are the previous result's)
+    pub running: bool,
+    /// the last run's error, or the file's
+    pub error: Option<String>,
+    /// the result on screen was made by the filters on screen
+    pub ready: bool,
+    pub label: String,
+    /// rows of the result, without excluded or hidden ones shown with "show excluded"
+    pub matched: usize,
+    /// their owned files, in rank order, each once
+    pub files: Vec<String>,
 }
 
 impl HitsPane {
+    /// The Hits filter column and result table inside Play, writing the preview file `path`.
+    pub fn for_play(path: String, command: Vec<String>) -> Self {
+        let mut pane = Self::new(path, command);
+        pane.play_mode = true;
+        pane
+    }
+
     pub fn new(path: String, command: Vec<String>) -> Self {
         Self {
+            play_mode: false,
+            requested: None,
+            commit: Arc::new(AtomicBool::new(false)),
+            raw_args: None,
             command: command.iter().map(|c| expand_home(c)).collect(),
             filters: None,
             focus_filters: false,
@@ -513,7 +551,8 @@ impl HitsPane {
         }
         self.loaded_mtime = mtime;
         match self.read() {
-            Ok(file) => {
+            Ok((file, raw_args)) => {
+                self.raw_args = raw_args;
                 if self.filters.is_none() {
                     let filters = Filters::from_args(&file.args);
                     self.applied_args = Some(filters.args(&self.path.to_string_lossy()));
@@ -537,14 +576,16 @@ impl HitsPane {
         self.table_area.height.saturating_sub(1).into()
     }
 
-    fn read(&self) -> Result<HitsFile> {
+    /// The result file, with its `args` as written (Play keeps them as the rules it applies).
+    fn read(&self) -> Result<(HitsFile, Option<serde_json::Value>)> {
         let text = std::fs::read_to_string(&self.path).with_context(|| {
             format!("no hits file at {} (run `hits ... --json` once)", self.path.display())
         })?;
         let file: HitsFile =
             serde_json::from_str(&text).with_context(|| format!("parsing {}", self.path.display()))?;
         anyhow::ensure!(file.version == 1, "unsupported hits file version {}", file.version);
-        Ok(file)
+        let raw = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("args").cloned());
+        Ok((file, raw))
     }
 
     /// Re-read the fetch queue when the worker or a menu action changed it.
@@ -768,6 +809,107 @@ impl HitsPane {
         });
     }
 
+    /// The Apply button: run `hits` (Hits), or ask Play to play the preview (Play runs `hits` on every change).
+    fn apply_pressed(&mut self, ctx: &Ctx) {
+        if self.play_mode {
+            self.commit.store(true, Ordering::Relaxed);
+        } else {
+            self.apply(ctx);
+        }
+    }
+
+    /// Play: the filters changed since the last run asked for: run `hits` for them (the queued-run rule of
+    /// `apply` keeps it to one run at a time).
+    fn preview_if_changed(&mut self, ctx: &Ctx) {
+        let Some(args) = self.filters.as_ref().map(|f| f.args(&self.path.to_string_lossy())) else { return };
+        if self.requested.as_ref() != Some(&args) {
+            self.requested = Some(args);
+            self.apply(ctx);
+        }
+    }
+
+    /// Play: Apply was pressed in the column or the row menu since the last call.
+    pub(crate) fn take_commit(&self) -> bool {
+        self.commit.swap(false, Ordering::Relaxed)
+    }
+
+    /// Play: set the filters to `args` (a result file's `args`; None: the defaults) without running `hits`.
+    /// What Play starts from, and what Esc returns to.
+    pub(crate) fn reset_filters(&mut self, args: Option<&serde_json::Value>) {
+        let parsed = args.and_then(|a| serde_json::from_value::<HitsArgs>(a.clone()).ok());
+        let filters = parsed.as_ref().map_or_else(Filters::default, Filters::from_args);
+        self.requested = Some(filters.args(&self.path.to_string_lossy()));
+        self.filters = Some(filters);
+        let rows = self.filter_rows();
+        self.filter_sel = snap(&rows, self.filter_sel.min(rows.len().saturating_sub(1)), true);
+        self.scroll_filters(0);
+    }
+
+    /// The hash `reset_filters(args)` would give the filters.
+    pub(crate) fn rules_hash_of(args: Option<&serde_json::Value>) -> String {
+        let parsed = args.and_then(|a| serde_json::from_value::<HitsArgs>(a.clone()).ok());
+        let filters = parsed.as_ref().map_or_else(Filters::default, Filters::from_args);
+        crate::ui::rormpc_play::rules_hash(&filters.rules_key())
+    }
+
+    /// The canonical hash of the filters on screen (`show excluded` is a view, not a rule).
+    pub(crate) fn rules_hash(&self) -> Option<String> {
+        self.filters.as_ref().map(|f| crate::ui::rormpc_play::rules_hash(&f.rules_key()))
+    }
+
+    /// The rule formula of the filters, for Play's collapsed source line.
+    pub(crate) fn formula(&self) -> Option<String> {
+        self.filters.as_ref().map(Filters::formula)
+    }
+
+    /// The result file's `args`, when the result on screen was made by the filters on screen.
+    pub(crate) fn applied_rules(&self) -> Option<serde_json::Value> {
+        self.preview_info().ready.then(|| self.raw_args.clone()).flatten()
+    }
+
+    pub(crate) fn preview_info(&self) -> PreviewInfo {
+        let (running, job_error) = {
+            let j = self.job.lock().expect("hits job lock");
+            (j.running || j.queued.is_some(), j.error.clone())
+        };
+        let current = self.filters.as_ref().map(|f| f.args(&self.path.to_string_lossy()));
+        let ready = !running && current.is_some() && self.applied_args == current && self.error.is_none();
+        let rows: Vec<&HitsRow> = self.all_rows.iter().filter(|r| !r.excluded && !r.hidden).collect();
+        let mut files: Vec<String> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for f in rows.iter().filter_map(|r| r.file.as_ref()) {
+            if seen.insert(f.as_str()) {
+                files.push(f.clone());
+            }
+        }
+        PreviewInfo {
+            running,
+            error: job_error.or_else(|| self.error.clone()),
+            ready,
+            label: self.label.clone(),
+            matched: rows.len(),
+            files,
+        }
+    }
+
+    pub(crate) fn focus_filters(&self) -> bool {
+        self.focus_filters
+    }
+
+    pub(crate) fn set_focus_filters(&mut self, on: bool) {
+        self.focus_filters = on;
+        self.hover_filter = None;
+    }
+
+    /// The `/` search takes keys, or the Downloads view is open: Play hands keys and the body to Hits.
+    pub(crate) fn typing(&self) -> bool {
+        self.typing
+    }
+
+    pub(crate) fn in_downloads(&self) -> bool {
+        self.downloads
+    }
+
     fn filter_rows(&self) -> Vec<FilterRow> {
         self.filters.as_ref().map(Filters::rows).unwrap_or_default()
     }
@@ -783,7 +925,7 @@ impl HitsPane {
             CommonAction::Bottom => self.filter_sel = snap(&rows, rows.len() - 1, false),
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => {
                 self.leave_downloads();
-                self.apply(ctx);
+                self.apply_pressed(ctx);
             }
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Downloads => {
                 if self.downloads {
@@ -1118,6 +1260,9 @@ impl HitsPane {
         };
         let changed = self.applied_args.as_ref() != Some(&filters.args(&self.path.to_string_lossy()));
         let state = match (running, queued, changed) {
+            // Play runs hits on every change; the banner says whether Apply would play anything
+            (true, _, _) if self.play_mode => " preview…",
+            _ if self.play_mode => " (a)",
             (true, true, _) => " running, then again",
             (true, false, _) => " running…",
             (false, _, true) => " • changed",
@@ -1257,7 +1402,18 @@ impl HitsPane {
         // the whole result as a playlist: owned rows in ranking order, missing ones skipped (and said so)
         let owned: Vec<String> = self.all_rows.iter().filter_map(|x| x.file.clone()).collect();
         let missing = self.all_rows.len() - owned.len();
-        if !owned.is_empty() {
+        if !owned.is_empty() && self.play_mode {
+            // Play's Apply: its version check and confirmation rule, the rules in source.json
+            let (commit, sender) = (Arc::clone(&self.commit), ctx.app_event_sender.clone());
+            menu = menu.list_section(ctx, move |mut section| {
+                section.add_item("Apply: play this preview (a)", move |_| {
+                    commit.store(true, Ordering::Relaxed);
+                    let _ = sender.send(AppEvent::RequestRender);
+                    Ok(())
+                });
+                Some(section)
+            });
+        } else if !owned.is_empty() {
             let (name, files) = (self.label.clone(), owned.clone());
             let label = format!("Play these {} songs (as the source)…", owned.len());
             menu = menu.list_section(ctx, move |mut section| {
@@ -1865,8 +2021,20 @@ impl Drop for HitsPane {
     }
 }
 
-impl Pane for HitsPane {
-    fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
+/// Where the Hits pane draws right of its filter column: the chart table with its details, or the Downloads
+/// view with wider details.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HitsBody {
+    pub main: Rect,
+    pub details: Option<Rect>,
+    pub dl_main: Rect,
+    pub dl_details: Rect,
+}
+
+impl HitsPane {
+    /// Take what background work and modals left for this pane (a finished run, a picked genre or artist); in
+    /// Play, run `hits` when the filters changed. Called once per frame, before drawing.
+    pub(crate) fn prepare(&mut self, ctx: &Ctx) {
         let rerun = std::mem::take(&mut self.job.lock().expect("hits job lock").rerun);
         if rerun {
             self.apply(ctx);
@@ -1902,10 +2070,32 @@ impl Pane for HitsPane {
             self.loaded_mtime = None; // hits rewrote the file
             self.reload();
         }
-        let [filter_area, main, details] =
-            Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(30)])
-                .spacing(2)
-                .areas(area);
+        if self.play_mode {
+            self.preview_if_changed(ctx);
+        }
+    }
+
+    /// Draw the filter column into `column` and the table (or Downloads) into `body`; a part given None is
+    /// not drawn and takes no clicks.
+    pub(crate) fn render_parts(&mut self, frame: &mut Frame, column: Option<Rect>, body: Option<HitsBody>, ctx: &Ctx) {
+        self.reload_fetch();
+        if let Some(filter_area) = column {
+            self.render_column(frame, filter_area, ctx);
+        } else {
+            self.filter_area = Rect::default();
+            self.summary_area = Rect::default();
+            self.apply_area = Rect::default();
+            self.hover_filter = None;
+        }
+        if let Some(body) = body {
+            self.render_body(frame, body, ctx);
+        } else {
+            self.table_area = Rect::default();
+            self.hover_like = None;
+        }
+    }
+
+    fn render_column(&mut self, frame: &mut Frame, filter_area: Rect, ctx: &Ctx) {
         // Apply gets its row first, so even a tiny pane shows it; the rule summary sits above it, never scrolled
         let summary_lines = self.filters.as_ref().map_or(0, |f| {
             let width = usize::from(filter_area.width.saturating_sub(1)).max(1);
@@ -1921,8 +2111,11 @@ impl Pane for HitsPane {
         self.filter_area = list_area;
         self.apply_area = apply_area;
         self.scroll_filters(0); // the pane may have been resized
-        self.reload_fetch();
         self.render_filters(frame, list_area, ctx);
+    }
+
+    fn render_body(&mut self, frame: &mut Frame, body: HitsBody, ctx: &Ctx) {
+        let HitsBody { main, details, dl_main, dl_details } = body;
         if self.downloads {
             self.load_downloads(ctx);
             let ready = self.dl_job.lock().expect("downloads lock").ready.take();
@@ -1934,13 +2127,8 @@ impl Pane for HitsPane {
                 Some(Err(err)) => self.dl_error = Some(err),
                 None => {}
             }
-            // the comparison needs room: the details take more of the width than the chart's
-            let [_, main, details] =
-                Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(40)])
-                    .spacing(2)
-                    .areas(area);
-            self.render_downloads(frame, main, details, ctx);
-            return Ok(());
+            self.render_downloads(frame, dl_main, dl_details, ctx);
+            return;
         }
         let searching = self.typing || !self.query.is_empty();
         let [search_area, table_area, footer] = Layout::vertical([
@@ -2071,6 +2259,8 @@ impl Pane for HitsPane {
         };
         // what plays vs what is browsed: the snapshot is never changed by moving a filter
         let playing = match &source {
+            // Play says what plays in its own header and banner
+            _ if self.play_mode => " a: Apply (play these, replacing the queue) · Esc: drop the preview · / search".to_owned(),
             Some((_, name, files)) => {
                 let round = shuffle.round.as_ref().map_or(String::new(), |r| {
                     if r.done { " · round done (Up next menu: new round)".to_owned() } else { format!(" · heard {}/{}", r.heard.len(), r.total) }
@@ -2081,7 +2271,26 @@ impl Pane for HitsPane {
             None => " Ctrl-z: Play these results (as the source) · / search · click ♥ or r to like".to_owned(),
         };
         frame.render_widget(Paragraph::new(vec![Line::from(status), Line::from(Span::styled(playing, dim))]), footer);
-        frame.render_widget(Paragraph::new(self.details(ctx)).wrap(Wrap { trim: false }), details);
+        if let Some(details) = details {
+            frame.render_widget(Paragraph::new(self.details(ctx)).wrap(Wrap { trim: false }), details);
+        }
+    }
+}
+
+impl Pane for HitsPane {
+    fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
+        self.prepare(ctx);
+        let [filter_area, main, details] =
+            Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(30)])
+                .spacing(2)
+                .areas(area);
+        // the comparison needs room: the details take more of the width than the chart's
+        let [_, dl_main, dl_details] =
+            Layout::horizontal([Constraint::Length(24), Constraint::Min(40), Constraint::Percentage(40)])
+                .spacing(2)
+                .areas(area);
+        let body = HitsBody { main, details: Some(details), dl_main, dl_details };
+        self.render_parts(frame, Some(filter_area), Some(body), ctx);
         Ok(())
     }
 
@@ -2118,7 +2327,7 @@ impl Pane for HitsPane {
                 self.focus_filters = true;
                 self.filter_sel = self.filter_rows().len().saturating_sub(1);
                 self.leave_downloads();
-                self.apply(ctx);
+                self.apply_pressed(ctx);
                 ctx.render()?;
             }
             return Ok(());
@@ -2607,6 +2816,39 @@ impl Filters {
         args
     }
 
+    /// The rules as one canonical string, whatever order the rows are in: what Play hashes into source.json
+    /// (mpd-player's round key). `show excluded` only shows ghost rows, so it is not part of it.
+    fn rules_key(&self) -> String {
+        let signed = |items: &[(String, i8)]| {
+            let mut out: Vec<String> = items
+                .iter()
+                .filter(|(_, s)| *s != 0)
+                .map(|(name, s)| format!("{}{}", if *s > 0 { '+' } else { '-' }, name.to_lowercase()))
+                .collect();
+            out.sort();
+            out.dedup();
+            out
+        };
+        let sets: Vec<String> = SETS
+            .iter()
+            .zip(self.sets)
+            .filter(|(_, sign)| *sign != 0)
+            .map(|((key, _, _), sign)| format!("{}{key}", if sign > 0 { '+' } else { '-' }))
+            .collect();
+        serde_json::json!({
+            "v": 1,
+            "sets": sets,
+            "rank": self.rank.arg(),
+            "years_of": self.effective_years_of().arg(),
+            "period": self.period(),
+            "top": self.top(),
+            "genres": signed(&self.genres),
+            "artists": signed(&self.artists),
+            "owned": self.owned,
+        })
+        .to_string()
+    }
+
     /// Start from what produced the current file, so the column matches the table.
     fn from_args(args: &HitsArgs) -> Self {
         let mut f = Self::default();
@@ -3034,6 +3276,32 @@ mod tests {
         assert_eq!(f.line(FilterRow::YearsOf), "Years of: ‹release›");
         let back = Filters::from_args(&written_args(&f.args("x.json")));
         assert_eq!(back.years_of, Some(YearsOf::Release));
+    }
+
+    #[test]
+    fn the_rules_hash_ignores_row_order_and_show_excluded_and_survives_source_json() {
+        let mut a = Filters::default();
+        a.add_genres("+rock, -country");
+        a.add_artist("Toto", 1);
+        let mut b = Filters::default();
+        b.add_genres("-country");
+        b.add_genres("+rock");
+        b.add_artist("toto", 1);
+        b.show_excluded = true;
+        assert_eq!(a.rules_key(), b.rules_key());
+        b.tops = [false, true, false];
+        assert_ne!(a.rules_key(), b.rules_key());
+        // Play keeps the result file's args in source.json and hashes them back on the next start
+        let raw = serde_json::json!({"period": "1980-1989", "top": "1-10", "genre": "+rock, -country",
+            "artist": "+Toto", "owned": false, "sets": ["+billboard"], "rank": "billboard", "years_of": "chart"});
+        let mut play = HitsPane::for_play("/nonexistent/preview.json".into(), vec!["hits".into()]);
+        play.reset_filters(Some(&raw));
+        assert_eq!(play.rules_hash(), Some(HitsPane::rules_hash_of(Some(&raw))));
+        assert_eq!(play.rules_hash(), Some(crate::ui::rormpc_play::rules_hash(&a.rules_key())));
+        // nothing ran for these filters: no preview to apply yet
+        let info = play.preview_info();
+        assert!(!info.ready && info.files.is_empty());
+        assert!(!play.take_commit());
     }
 
     #[test]

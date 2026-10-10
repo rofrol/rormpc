@@ -54,12 +54,43 @@ struct Source {
     /// a Hits snapshot: its files in ranking order (mpd-player plays it in rounds)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     files: Vec<String>,
+    /// Play's Apply: the `args` of the `hits` result it played (loaded back into Play's filters) and their
+    /// canonical hash, mpd-player's round key (the same rules keep the round, other rules start a new one)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rules: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rules_hash: Option<String>,
 }
 
 /// The source being played: (kind, name, snapshot files for a Hits source).
 pub fn source_info() -> Option<(String, String, Vec<String>)> {
     let s = state().lock().ok()?;
     s.source.as_ref().map(|src| (src.kind.clone(), src.name.clone(), src.files.clone()))
+}
+
+/// The rules Play applied for the source being played, with their hash (None for any other source).
+pub fn source_rules() -> Option<(serde_json::Value, String)> {
+    let s = state().lock().ok()?;
+    let src = s.source.as_ref()?;
+    Some((src.rules.clone()?, src.rules_hash.clone()?))
+}
+
+/// What Play's Apply replaces the queue with: a Hits result as the source, with its rules.
+#[derive(Debug, Clone)]
+pub struct HitsSource {
+    pub name: String,
+    pub files: Vec<String>,
+    pub rules: serde_json::Value,
+    pub rules_hash: String,
+}
+
+/// Play's Apply: the queue becomes `src` as "Play these N songs" makes it, but only if MPD's queue is still at
+/// `version` (the `playlist` version the preview's counts and confirmation were judged on). Otherwise nothing
+/// changes and the status bar says so: no retry, no delay.
+pub fn apply_hits_source(ctx: &Ctx, src: HitsSource, version: Option<u32>) {
+    let HitsSource { name, files, rules, rules_hash } = src;
+    let replace = Replace { kind: "hits".to_owned(), name, files, rules: Some(rules), rules_hash: Some(rules_hash) };
+    ctx.command(move |_, client| replace.run(client, version));
 }
 
 /// Hits "Play these results": the owned rows replace the queue as the source, after a confirmation.
@@ -324,6 +355,82 @@ pub fn open_sources(ctx: &Ctx) {
     modal!(ctx, menu);
 }
 
+/// A queue replacement: the source's songs replace everything but the playing song, and `source.json` names it.
+struct Replace {
+    kind: String,
+    name: String,
+    files: Vec<String>,
+    rules: Option<serde_json::Value>,
+    rules_hash: Option<String>,
+}
+
+impl Replace {
+    /// `expect_version`: refuse unless MPD's queue is still at that `playlist` version.
+    fn run(self, client: &mut rmpc_mpd::client::Client<'_>, expect_version: Option<u32>) -> Result<()> {
+        let Replace { kind, name, files, rules, rules_hash } = self;
+        let started = std::time::Instant::now();
+        let status = client.get_status()?;
+        if let Some(want) = expect_version
+            && status.playlist != Some(want)
+        {
+            status_warn!("The queue changed, preview again: nothing was replaced (a then plays the new counts)");
+            return Ok(());
+        }
+        let current = status.songid;
+        // everything but the playing song leaves (two range deletes around it); Up next follows its files
+        // (mpd-player re-finds the requests in the new queue)
+        match status.song {
+            Some(pos) if current.is_some() => {
+                let len = client.playlist_info()?.map_or(0, |q| q.len());
+                if pos + 1 < len {
+                    client.execute(&format!("delete {}:", pos + 1))?;
+                    client.read_ok()?;
+                }
+                if pos > 0 {
+                    client.execute(&format!("delete 0:{pos}"))?;
+                    client.read_ok()?;
+                }
+            }
+            _ => client.clear()?,
+        }
+        match kind.as_str() {
+            "library" => client.add("/", None)?,
+            "hits" => {
+                for f in &files {
+                    client.add(f, None)?;
+                }
+            }
+            _ => client.load_playlist(&name, None)?,
+        }
+        // the playing song was kept: its copy from the new source would make it play twice
+        let queue = client.playlist_info()?.unwrap_or_default();
+        if let Some(cur) = current.and_then(|id| queue.iter().find(|s| s.id == id)).map(|s| s.file.clone()) {
+            for s in queue.iter().filter(|s| s.file == cur && Some(s.id) != current) {
+                client.delete_id(s.id)?;
+            }
+        }
+        let len = client.playlist_info()?.map_or(0, |q| q.len());
+        let st = State { source: Some(Source { kind, name, len, files, rules, rules_hash }) };
+        if let Ok(mut g) = state().lock() {
+            *g = st.clone();
+        }
+        save(&st);
+        if current.is_none() {
+            client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
+        }
+        status_info!(
+            "Playing from {} · {len} songs, prepared in {:.1} s",
+            match st.source.as_ref().map(|s| s.kind.as_str()) {
+                Some("library") => "the whole library",
+                Some("hits") => "the Hits result",
+                _ => "the playlist",
+            },
+            started.elapsed().as_secs_f64()
+        );
+        Ok(())
+    }
+}
+
 fn confirm_replace(ctx: &Ctx, kind: String, name: String) {
     confirm_replace_with(ctx, kind, name, Vec::new());
 }
@@ -341,63 +448,8 @@ fn confirm_replace_with(ctx: &Ctx, kind: String, name: String, files: Vec<String
         if up > 0 { format!("\nUp next ({up}) is kept and plays first.") } else { String::new() }
     )];
     let go = move |ctx: &Ctx| -> anyhow::Result<()> {
-        let (kind, name, files) = (kind.clone(), name.clone(), files.clone());
-        ctx.command(move |_, client| {
-            let started = std::time::Instant::now();
-            let status = client.get_status()?;
-            let current = status.songid;
-            // everything but the playing song leaves (two range deletes around it); Up next follows its files
-            // (mpd-player re-finds the requests in the new queue)
-            match status.song {
-                Some(pos) if current.is_some() => {
-                    let len = client.playlist_info()?.map_or(0, |q| q.len());
-                    if pos + 1 < len {
-                        client.execute(&format!("delete {}:", pos + 1))?;
-                        client.read_ok()?;
-                    }
-                    if pos > 0 {
-                        client.execute(&format!("delete 0:{pos}"))?;
-                        client.read_ok()?;
-                    }
-                }
-                _ => client.clear()?,
-            }
-            match kind.as_str() {
-                "library" => client.add("/", None)?,
-                "hits" => {
-                    for f in &files {
-                        client.add(f, None)?;
-                    }
-                }
-                _ => client.load_playlist(&name, None)?,
-            }
-            // the playing song was kept: its copy from the new source would make it play twice
-            let queue = client.playlist_info()?.unwrap_or_default();
-            if let Some(cur) = current.and_then(|id| queue.iter().find(|s| s.id == id)).map(|s| s.file.clone()) {
-                for s in queue.iter().filter(|s| s.file == cur && Some(s.id) != current) {
-                    client.delete_id(s.id)?;
-                }
-            }
-            let len = client.playlist_info()?.map_or(0, |q| q.len());
-            let st = State { source: Some(Source { kind, name, len, files }) };
-            if let Ok(mut g) = state().lock() {
-                *g = st.clone();
-            }
-            save(&st);
-            if current.is_none() {
-                client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
-            }
-            status_info!(
-                "Playing from {} · {len} songs, prepared in {:.1} s",
-                match st.source.as_ref().map(|s| s.kind.as_str()) {
-                    Some("library") => "the whole library",
-                    Some("hits") => "the Hits result",
-                    _ => "the playlist",
-                },
-                started.elapsed().as_secs_f64()
-            );
-            Ok(())
-        });
+        let replace = Replace { kind: kind.clone(), name: name.clone(), files: files.clone(), rules: None, rules_hash: None };
+        ctx.command(move |_, client| replace.run(client, None));
         Ok(())
     };
     modal!(
