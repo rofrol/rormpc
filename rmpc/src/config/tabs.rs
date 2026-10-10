@@ -263,7 +263,7 @@ impl PlayGrouping {
     }
 }
 
-/// rormpc: what `ShowPlay` opens in the Play tab.
+/// rormpc: what `ShowPlay` opens in the Music tab.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum PlayView {
     /// the queue (or the plan) with the filter column
@@ -1091,7 +1091,7 @@ impl Default for TabsFile {
             // phase 3) and the browsing tabs (Directories, Artists, Album Artists, Albums, Playlists, Live
             // playlists: phase 3b, Play's Browse and Live inbox); those panes still load from an explicit config
             TabFile {
-                name: "Play".to_string(),
+                name: "Music".to_string(),
                 border_type: BorderTypeFile::None,
                 pane: PaneOrSplitFile::Split {
                     direction: DirectionFile::Vertical,
@@ -1269,7 +1269,7 @@ mod rormpc_tests {
     #[test]
     fn play_first_and_one_top_level_up_next() {
         let tabs = TabsFile::default();
-        assert_eq!(tabs.0[0].name, "Play");
+        assert_eq!(tabs.0[0].name, "Music");
         assert_eq!(tabs.0[1].name, "Up next");
         let converted = tabs.convert(&HashMap::new(), &BorderSetLib::default()).unwrap();
         // Play replaces Hits, Queue and Shuffle in the default; their panes stay for explicit configs

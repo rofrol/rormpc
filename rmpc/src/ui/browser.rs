@@ -796,7 +796,7 @@ where
             }
             // rormpc: P plays a collection in its order in Play's Browse, which handles it before this pane
             CommonAction::PlayReplace => {
-                status_info!("P (play, replacing the queue) works in Play's Browse: 5-9 open it");
+                status_info!("P (play, replacing the queue) works in Music's Browse: 5-9 open it");
             }
         }
 

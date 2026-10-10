@@ -1205,7 +1205,7 @@ impl Pane for QueuePane {
                 return Ok(());
             }
             if self.forced_plan.is_some() {
-                status_info!("In Play the table follows w: the plan while weighted, else the queue order");
+                status_info!("In Music the table follows w: the plan while weighted, else the queue order");
             } else {
                 self.switch_view(ctx);
             }
@@ -1279,7 +1279,7 @@ impl Pane for QueuePane {
                 QueueActions::Find => self.start_find(ctx),
                 QueueActions::FindVersions => self.find_versions(ctx),
                 QueueActions::SaveSmartList | QueueActions::SmartLists => {
-                    status_info!("Smart lists live in Play: S saves its filters, L opens the lists");
+                    status_info!("Smart lists live in Music: S saves its filters, L opens the lists");
                 }
                 // rormpc: an exception to the Hits rules; the queue itself does not change
                 QueueActions::PinSong | QueueActions::ExcludeSong => {

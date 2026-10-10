@@ -49,7 +49,7 @@
             "oP":         Partition(),
             "z":          ToggleRepeat,
             "x":          ToggleRandom,
-            "w":          ToggleWeightedShuffle, // rormpc: mpd-player draws the next song; Play shows its plan
+            "w":          ToggleWeightedShuffle, // rormpc: mpd-player draws the next song; Music shows its plan
             "oL":         ScrobbleNow, // rormpc: send the playing song to ListenBrainz now (asks when the rule is not met)
             "c":          ToggleConsume,
             "v":          ToggleSingle,
@@ -65,14 +65,14 @@
             "gt":         NextTab,
             "<S-Tab>":    PreviousTab,
             "gT":         PreviousTab,
-            "1":          SwitchToTab("Play"),
+            "1":          SwitchToTab("Music"),
             "2":          SwitchToTab("Up next"),
             "3":          SwitchToTab("Search"),
             "gu":         SwitchToTab("Up next"),
             "gv":         SwitchToTab("Versions"),
             "gd":         SwitchToTab("Deleted"),
             "gy":         SwitchToTab("Lyrics"),
-            // rormpc: the browsing tabs live in Play's Browse (B in Play); their digits open it on a grouping
+            // rormpc: the browsing tabs live in Music's Browse (B in Music); their digits open it on a grouping
             "5":          ShowPlay(Browse(Folders)),
             "6":          ShowPlay(Browse(Artists)),
             "7":          ShowPlay(Browse(AlbumArtists)),
@@ -181,7 +181,7 @@
     ),
     tabs: [
         (
-            name: "Play",
+            name: "Music",
             pane: Split(
                 direction: Vertical,
                 panes: [(pane: Pane(Play()), size: "100%", borders: "ALL", border_symbols: Rounded)],

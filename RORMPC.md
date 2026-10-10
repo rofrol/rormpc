@@ -81,12 +81,14 @@ are left alone; AirPods/Bluetooth buttons and external keyboards' media keys sti
 
 On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-mpris or mpDris2; see TODO.md).
 
-## Play pane
+## Music tab (the Play pane)
 
-`Pane(Play())`, the first tab of the default config (`1`), is Queue, Hits and Shuffle in one tab
+`Pane(Play())`, the first tab of the default config (`1`, named "Music"), is Queue, Hits and Shuffle in one tab
 (plans/combined-view.md, phase 3). The old `Queue`, `Hits()` and `Shuffle()` panes still load from an explicit
 config; Up next stays its own tab. A header line always says what plays and how:
 `▶ Playing from: Hits · 1980s … · weighted · round 12/84` or `… · in queue order`.
+The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowPlay(...)` and the action names
+(PlayReplace, PlayNext) keep their names, so explicit configs keep loading, a tab named "Play" included.
 
 - **Normal mode** (weighted off): the table is MPD's queue in its order, as in the Queue pane. The Hits filter
   column is collapsed to one line naming the source's rules (`Source: Billboard ∩ 1980-1989 ∩ Top 1-10%`); `h` or a
@@ -117,12 +119,12 @@ config; Up next stays its own tab. A header line always says what plays and how:
 
 ### Browse, the playlist editor and the Live inbox
 
-Play also took over the browsing tabs (plans/combined-view.md, phase 3b, with the user's layout of 2026-10-10):
+Music also took over the browsing tabs (plans/combined-view.md, phase 3b, with the user's layout of 2026-10-10):
 Directories, Artists, Album Artists, Albums, Playlists and Live playlists are no longer default tabs; their panes
 still load from an explicit config.
 
 - **The left column switches Filters | Browse**: `B` (ToggleBrowse), or a click on `Filters` / `Browse` at its top.
-  Browse is about half of Play's width (the three-column browser needs it); the queue or plan stays on the right.
+  Browse is about half of Music's width (the three-column browser needs it); the queue or plan stays on the right.
 - **Groupings**: Artists · Album artists · Albums · Folders · Lists, in a chip row (click), `[` / `]`
   (PreviousGrouping / NextGrouping), or from anywhere with the digits below. Each grouping is the old tab's pane
   (navigation, `/` search, Space marks, the context menu), created on first use and kept, so it remembers its path,
@@ -135,7 +137,7 @@ still load from an explicit config.
   from that song), with weighted shuffle and random off; it asks first under Apply's rule (another source kind, or
   more than a quarter of the queue would go) and refuses when the queue changed meanwhile. `source.json` gets the
   kind (`album`, `artist`, `directory`, `playlist`, `selection`), a name and the files. `t` (PlayNext) puts the
-  selection into Up next; `a` / `A` append. Never Apply: in Browse `a` appends, elsewhere in Play it applies (the
+  selection into Up next; `a` / `A` append. Never Apply: in Browse `a` appends, elsewhere in Music it applies (the
   header says `Browse › Albums (a appends)` while Browse has the keys).
 - **Appending to a Hits source**: songs appended with `a` / `A` while the queue holds a Hits result join its files:
   `source.json` lists them in `added` (the rules hash stays), the source line says `+N added`, and mpd-player
@@ -144,39 +146,39 @@ still load from an explicit config.
   draws them.
 - **An unapplied preview stays** when a Browse action changes the queue: the banner keeps its counts (they do not
   depend on the queue) and Apply judges its confirmation against the queue as it is when `a` is pressed.
-- **The playlist editor** opens as a panel over Play when a playlist is entered in Lists (`l` on it):
+- **The playlist editor** opens as a panel over Music when a playlist is entered in Lists (`l` on it):
   `Editing "melancholic" · changes are saved at once`. J/K move the song (marked songs together), `D` removes it,
   Ctrl-r renames (at the Lists level); every edit is an immediate MPD command, as before. `D` at the Lists level
   deletes whole playlists only after a confirmation naming them. Generated playlists ("Tag …", "Smart …", the
   `hits` exports such as "Hits …", "Not finished", "Skipped", "Folder …", and the Live playlists' MPD playlists)
   are read-only here: D, J/K and Ctrl-r say who writes them. `P`, `t`, `a` work in the panel; Esc (with nothing
   marked) or a click outside closes it.
-- **The Live inbox** is the Live playlists pane as a panel over Play: `0` or `gl` (ShowPlay(Live)), or a click on
-  the `Live` badge at the right of Play's header, which shows `Live 3` while items wait for a decision and `↓ 2`
+- **The Live inbox** is the Live playlists pane as a panel over Music: `0` or `gl` (ShowPlay(Live)), or a click on
+  the `Live` badge at the right of Music's header, which shows `Live 3` while items wait for a decision and `↓ 2`
   while a download runs. Space marks items; `a`, `D` and the menu's "Accept marked" / "Reject marked" act on the
   marked items (else the item under the cursor). Esc clears the marks, then closes the panel.
-- **Keys** (built-in and `assets/example_config.ron`; `ShowPlay(...)` opens the Play tab from anywhere):
+- **Keys** (built-in and `assets/example_config.ron`; `ShowPlay(...)` opens the Music tab from anywhere):
 
   | Key | Map | Action |
   |---|---|---|
-  | `1` / `2` / `3` | global | Play / Up next / Search tabs; `gu` Up next, `gv` Versions, `gd` Deleted, `gy` Lyrics |
+  | `1` / `2` / `3` | global | Music / Up next / Search tabs; `gu` Up next, `gv` Versions, `gd` Deleted, `gy` Lyrics |
   | `5` `6` `7` `8` `9` | global | `ShowPlay(Browse(Folders))`, `(Artists)`, `(AlbumArtists)`, `(Albums)`, `(Lists)` |
   | `0`, `gl` | global | `ShowPlay(Live)`: the Live inbox (`ShowPlay(Queue)` brings the filters back) |
   | `B` | queue | ToggleBrowse: the left column, Filters or Browse |
   | `[` / `]` | queue | PreviousGrouping / NextGrouping in Browse |
   | `P` | navigation | PlayReplace: play the selection replacing the queue (Browse) |
   | `t` | navigation | PlayNext: the selection into Up next (Browse, the browser tabs, the Queue) |
-  | `a` / `A` | navigation | append (Browse); Apply elsewhere in Play |
+  | `a` / `A` | navigation | append (Browse); Apply elsewhere in Music |
   | Esc | navigation | Browse: marks first, then the editor panel, then back to the filters |
 
   A config that binds `P` in its queue map (e.g. `"P": SortByColumn(4)`) drops the built-in navigation `P`: a key
   the user binds replaces the built-in binding in every map. Add `"P": PlayReplace` to its `navigation` map; both
-  then reach Play, the queue claims its sort and Browse its PlayReplace. Configs with their own digits keep them;
+  then reach Music, the queue claims its sort and Browse its PlayReplace. Configs with their own digits keep them;
   bind `ShowPlay(...)` to reach Browse and Live by key (`B` and the badge work without it).
 
 ### Smart lists
 
-A smart list is Play's filters saved under a name (plans/combined-view.md, phase 4), kept by `hits lists` in the
+A smart list is Music's filters saved under a name (plans/combined-view.md, phase 4), kept by `hits lists` in the
 data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `hits` arguments).
 
 - `S` (QueueActions `SaveSmartList`) saves the filters on screen: a name prompt with the rules and the preview's
@@ -191,7 +193,7 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
   ToggleConsume/ConsumeOff, Delete), since a modal sees actions, not keys. Enter on an MPD or Live playlist plays it
   as the source, after the same confirmation as "Sources…". "× Close the smart list" keeps the filters and leaves
   the list.
-- The open smart list is part of the filters: Play runs `hits --open-list ID`, so the list's own exceptions
+- The open smart list is part of the filters: Music runs `hits --open-list ID`, so the list's own exceptions
   (scope `list:ID`) apply, and its id is part of the rules hash. The header names it (`Smart list: 80s party`,
   "(changed)" once the filters differ from its rules); the collapsed source line says `smart list 80s party · …`,
   and a list applied as saved plays as "Hits · smart list 80s party". A new pin or exclusion defaults to the open
@@ -199,7 +201,7 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
 - Export: Apply of a list writes it as the MPD playlist "Smart NAME" (`hits lists export ID` in the background) and
   `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The export is a
   snapshot for phones, never read back as rules, and `hits`' "my playlists" set leaves "Smart " playlists out.
-- Previous sources: each Apply in Play is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json` (the last 10
+- Previous sources: each Apply in Music is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json` (the last 10
   rule sets, the same rules once; local state, not the data repo). Enter loads one as a preview, `a` applies it, so
   "weighted off, now give me the old queue back" is one explicit Apply.
 - A list whose rules or events this version cannot read shows `! NAME · made by a newer rormpc-tools, update it`
@@ -229,9 +231,9 @@ if the playing song's file is in the visible table, it selects that row and focu
 centres it. A search that hides the song stays intact, and a missing match changes neither selection nor
 playback. Queue-only actions such as removing or reordering queue entries are not applied to chart rows.
 
-The default and example configurations have the tabs Play, Up next, Search, Versions, Deleted and Lyrics (Play
-replaced their Hits, Queue and browsing tabs, see Play pane). `1` opens Play, `2` Up next, `3` Search, `5`-`9` and
-`0` Play's Browse groupings and Live inbox; `gu` opens Up next from any pane. Existing explicit configurations
+The default and example configurations have the tabs Music, Up next, Search, Versions, Deleted and Lyrics (Music
+replaced their Hits, Queue and browsing tabs, see Music tab). `1` opens Music, `2` Up next, `3` Search, `5`-`9` and
+`0` Music's Browse groupings and Live inbox; `gu` opens Up next from any pane. Existing explicit configurations
 are not rewritten; the Hits pane works there as before. The last active tab is still restored on startup.
 
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "Sets" are
@@ -327,7 +329,7 @@ song ✚, `-` excludes it ⊘ (QueueActions `PinSong` / `ExcludeSong`; the row m
 "Exclude from results…"). A small menu asks the scope, the default first: library (every result) or one of the
 `+` sets of the filters, an added one included (`set:tag:God`, `set:playlist:NAME`, `set:live:ID`,
 `set:list:ID`; the Queue offers the `+` sets of the Hits result file), which applies only while that set is `+`, or
-the smart list open in Play, which applies only while it is open and is the default then (see Smart
+the smart list open in Music, which applies only while it is open and is the default then (see Smart
 lists). A pin puts the song in whatever the filters
 say (a `-` set, genre or artist included); it needs an owned file, has no rank ("—") and sits after the ranked rows,
 outside the ranking and the Top % cut. An exclusion takes the song out; any applicable exclusion beats any pin.
@@ -339,7 +341,7 @@ dim and marked; "⋯ exceptions…" lists every exception by scope (`hits except
 is gone shows `!`) and Enter removes the one under the cursor (a hide is unhidden). In the filter column the same
 `+` / `-` set the set, genre or artist row under the cursor (pressed again: off). Only these keys record an
 exception: "Remove from queue" and a song added by hand stay one-offs, and the queue itself never changes when an
-exception is recorded; the next "Play these" (or Apply in Play) takes it into account. The log is
+exception is recorded; the next "Play these" (or Apply in Music) takes it into account. The log is
 `<data_dir>/exceptions.jsonl`, keyed by music-data's song id (songs.jsonl), so a pin follows a moved or merged file.
 
 ```ron

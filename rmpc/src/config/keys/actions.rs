@@ -70,7 +70,7 @@ pub enum GlobalAction {
     PreviousTab,
     #[strum(to_string = "SwitchToTab({0})")]
     SwitchToTab(TabName),
-    /// rormpc: the Play tab with Browse on a grouping, the Live inbox, or the queue
+    /// rormpc: the Music tab with Browse on a grouping, the Live inbox, or the queue
     #[strum(to_string = "ShowPlay({0})")]
     ShowPlay(crate::config::tabs::PlayView),
     Command {
@@ -136,7 +136,7 @@ pub enum GlobalActionFile {
     NextTab,
     PreviousTab,
     SwitchToTab(String),
-    /// rormpc: the Play tab with Browse on a grouping (`ShowPlay(Browse(Albums))`), the Live inbox
+    /// rormpc: the Music tab with Browse on a grouping (`ShowPlay(Browse(Albums))`), the Live inbox
     /// (`ShowPlay(Live)`) or the queue (`ShowPlay(Queue)`)
     ShowPlay(crate::config::tabs::PlayView),
     QueueTab,
@@ -258,7 +258,7 @@ impl ToDescription for GlobalAction {
             GlobalAction::NextTab => "Switch to next tab".into(),
             GlobalAction::PreviousTab => "Switch to previous tab".into(),
             GlobalAction::SwitchToTab(name) => Cow::Owned(format!("Switch directly to {name} tab")),
-            GlobalAction::ShowPlay(view) => Cow::Owned(format!("Play tab: {}", view.describe())),
+            GlobalAction::ShowPlay(view) => Cow::Owned(format!("Music tab: {}", view.describe())),
             GlobalAction::ShowHelp => "Show keybinds".into(),
             GlobalAction::CommandMode => "Enter command mode".into(),
             GlobalAction::Command { description: None, .. } => "Execute a command".into(),
@@ -504,11 +504,11 @@ impl ToDescription for QueueActions {
             QueueActions::FindVersions => "Open Versions on the selected song's group (Esc returns)".into(),
             QueueActions::PinSong => "Pin the song in Hits results (asks the scope; Queue and Hits)".into(),
             QueueActions::ExcludeSong => "Exclude the song from Hits results (asks the scope; Queue and Hits)".into(),
-            QueueActions::SaveSmartList => "Save Play's filters as a smart list (Play)".into(),
-            QueueActions::SmartLists => "Smart lists, previous sources and playlists (Play)".into(),
-            QueueActions::ToggleBrowse => "Play's left column: Filters or Browse (Play)".into(),
-            QueueActions::PreviousGrouping => "Browse: the previous grouping (Play)".into(),
-            QueueActions::NextGrouping => "Browse: the next grouping (Play)".into(),
+            QueueActions::SaveSmartList => "Save Music's filters as a smart list (Music)".into(),
+            QueueActions::SmartLists => "Smart lists, previous sources and playlists (Music)".into(),
+            QueueActions::ToggleBrowse => "Music's left column: Filters or Browse (Music)".into(),
+            QueueActions::PreviousGrouping => "Browse: the previous grouping (Music)".into(),
+            QueueActions::NextGrouping => "Browse: the next grouping (Music)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),
             QueueActions::Play => "Play song under cursor".into(),
@@ -1204,9 +1204,9 @@ impl ToDescription for CommonAction {
             }
             CommonAction::PaneDown => "Focus the pane below the current one".into(),
             CommonAction::PlayReplace => {
-                "Play the selection now, replacing the queue in album/folder/list order (Play's Browse)".into()
+                "Play the selection now, replacing the queue in album/folder/list order (Music's Browse)".into()
             }
-            CommonAction::PlayNext => "Put the selection into Up next (Play)".into(),
+            CommonAction::PlayNext => "Put the selection into Up next (Music)".into(),
             CommonAction::PaneUp => "Focus the pane above the current one".into(),
             CommonAction::PaneRight => "Focus the pane to the right of the current one".into(),
             CommonAction::PaneLeft => "Focus the pane to the left of the current one".into(),
