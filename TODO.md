@@ -525,6 +525,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the stale preview's files, 7 of its 16 no longer exist, MPD refused `add`, and the queue was left with 2 songs,
       so the weighted shuffle drew only from those 2 ("only picks from two songs all the time"). Also: Apply must
       recompute (or re-check) a preview older than the library's last change instead of trusting it.
+- [ ] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table
+      still only 1980-1989: "I don't understand why there is a year limit here when it is not selected in the UI.
+      ask the models"). Checked: the rows were the previous result (Period 1980-1989, chart years) while a newer
+      hits run (`--rank plays --years-of listened -n 0`, started for an intermediate click) ran for minutes; only a
+      footer said "the table shows the previous result". Consulted (Sol 3713451e, MiMo 83e1f64b), both: a banner
+      pinned above the table's column headers naming the filters the shown rows were computed for and the ones
+      being computed, with elapsed time ("Showing Period: 1980–1989 · updating for Period: All years, Rank by: my
+      plays · 1:12"); an empty decade list reads "All years"; cancel a running hits run as soon as a newer one is
+      queued (newest wins; a superseded result never replaces the table); Esc stops a run. Sol also dims the stale
+      rows (MiMo against; the coordinator takes Sol's dim plus the banner, so it shows without color too). Also:
+      why "Rank by: my plays" takes minutes (the play-history split per run): cache it across runs.
+      Moved up 2026-10-10: "do it next".
 - [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
@@ -590,17 +602,6 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       remembered and re-clamped when turned back on; labels "From: Any" / "From: ‹ 2000 ›", the period line "Any
       year", "Up to 1991", "From 2000", "1991–2000"; a footer hint "←/→ change year · Space toggle bound"; hits gets
       an open-ended period.
-- [ ] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table
-      still only 1980-1989: "I don't understand why there is a year limit here when it is not selected in the UI.
-      ask the models"). Checked: the rows were the previous result (Period 1980-1989, chart years) while a newer
-      hits run (`--rank plays --years-of listened -n 0`, started for an intermediate click) ran for minutes; only a
-      footer said "the table shows the previous result". Consulted (Sol 3713451e, MiMo 83e1f64b), both: a banner
-      pinned above the table's column headers naming the filters the shown rows were computed for and the ones
-      being computed, with elapsed time ("Showing Period: 1980–1989 · updating for Period: All years, Rank by: my
-      plays · 1:12"); an empty decade list reads "All years"; cancel a running hits run as soon as a newer one is
-      queued (newest wins; a superseded result never replaces the table); Esc stops a run. Sol also dims the stale
-      rows (MiMo against; the coordinator takes Sol's dim plus the banner, so it shows without color too). Also:
-      why "Rank by: my plays" takes minutes (the play-history split per run): cache it across runs.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
