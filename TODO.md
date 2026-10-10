@@ -264,8 +264,21 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       or not; Pane(Play()) has the hits command and ~/.cache/rormpc/hits/preview.json fixed; Enter in a preview row
       plays/appends it as in Hits; re-applying the same rules works only with that result on screen ("The queue
       already plays these filters"). Your config needs a Pane(Play()) tab to show it (choice 18).
-- [ ] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
+- [x] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
       MPD export "Smart NAME" on by default; no freeze action.
+      Done in rormpc b50c38b, rormpc-tools 66c37f4 (worker; pytest 300, cargo test 1011; tested on a scratch MPD: save and
+      update, load as preview, Apply, rename, duplicate, delete, default pin scope, a blocked list, export after
+      Apply; a full `musicdb update` and the mouse were not tested). `hits lists` + smartlists.jsonl, `hits --list /
+      --rules / --open-list`, list:ID scopes, the "Smart NAME" export in musicdb update (exceptions.jsonl and
+      smartlists.jsonl now committed with the data). Default keys: S SaveSmartList, L SmartLists, SelectAlbum moved
+      from L to M (your config sets none of them, so it gets these). Also fixed: InputModal's initial value was
+      ignored (renames started empty), a set-chip result without Top % reloaded with Top 10% ticked (the Proposed
+      "-n 0" bug may be this; check before doing it). Settled by the coordinator: Duplicate copies the list's
+      exceptions. Noted: the picker's r/u/c/d letters are found through the actions bound to them (Rate, Update,
+      ToggleConsume, Delete): rebinding those breaks them, arrows and clicks always work; Apply with an open list
+      re-exports the list's saved rules even when the filters on screen differ; the first key after closing a
+      modal can be lost when sent in one batch with Esc (seen with Esc then L; the modal closes through the event
+      channel, see AGENTS.md). Not released.
 - [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
       a cycle check.
 
@@ -931,7 +944,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: both leave out the shuffle's own picks | both count every play | keep it as it is
       Checked: reported by the phase 1 worker 2026-10-10 (hits_rules.score).
       Decided by the user 2026-10-10: both leave out the shuffle's own picks ("probably"; queued in Next).
-- [ ] Add `"+": PinSong` and `"-": ExcludeSong` to the queue keybinds in your dotfiles rormpc config? Your config
+- [x] Add `"+": PinSong` and `"-": ExcludeSong` to the queue keybinds in your dotfiles rormpc config? Closed 2026-10-10 by the coordinator: the question was wrong; your config does not set `clear`, so the built-in keys (+, - since afcb9be) merge with yours and already work. Your config
       has its own queue keymap, so the new keys do nothing there until added; the Queue menu's "Pin in Hits
       results…" / "Exclude from Hits results…" work without them.
       Options: yes, the coordinator adds both | other keys (name them) | no, the menu is enough
