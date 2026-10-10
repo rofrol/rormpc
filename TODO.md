@@ -576,7 +576,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Released 2026-10-10: rormpc-tools v0.2.43 (also the my-plays cache), installer and rormpc installed; the
       coordinator ran `liveplaylist add https://radio.omarchy.org/`: subscription omarchy-radio, 33 items pending
       your review in the Live overlay (0 / gl), MPD playlist "Omarchy Radio".
-- [ ] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
+- [x] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
       2000. Investigate with the models. A repair plan for the whole library?"): a worker finds where 2000 comes from
       for that song (file tags: date vs originaldate, a compilation's date, MusicBrainz release vs recording first
       release, what rormpc and hits read), measures how many library songs show a compilation or reissue year
@@ -600,6 +600,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (video disambiguations, compilation/video-only releases, a year far from the album's other tracks), a dry-run
       report (current vs proposed, evidence, confidence), review, tags written atomically with the previous values
       kept for undo, MusicBrainz at 1 req/s with a cache (~3 h for the whole library).
+      Measured and planned (worker, 2026-10-10; rormpc-tools d119bff docs/release-years-plan.md, matcher fix 4bdbfee, pushed):
+      817 files, 638 dated, 651 with a recording MBID; 407 of 408 dated YouTube downloads have TDRC = TDOR; 69 matched
+      to video recordings (49 dated), 29 to DJ-mix segments, 13 to cast recordings. MusicBrainz sample (189
+      recordings): of 616 dated matched files ~206 right, ~104 differ (69 by ≥2 years, 36 by ≥5), ~306 not checkable
+      (mostly no work link); of 37 hand-checked proposals 24 right; later-year proposals almost always wrong (8/9),
+      earlier ones right or closer 25/28. Sweet Dreams confirmed: a video recording on 2000/2005 video compilations,
+      the audio recordings give 1983. Every view reads TDRC; nothing reads TDOR. Plan: a hybrid rule (remix/live/
+      cover keep their own date; else the earliest official album/single release among audio recordings of the same
+      work and artist within ±10 s), dry-run report, review, atomic writes keeping the old values, ~66 min at 1 req/s.
+      The matcher now treats MusicBrainz's video flag like "(video)" and prefers an audio candidate (new downloads).
+      Its 5 open choices are in "Needs a decision" ("Release years:").
 - [ ] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view:
       "on hover the hearts don't light up like they used to, to show they can be clicked. ask the models"): a worker
       finds which change lost the hover highlight (the old Queue pane had it; Music / the plan projection may not
@@ -1430,3 +1441,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Radio: Detect an MP3 replaced under the same file name on the station? Decided by the user 2026-10-10: no, accept the limitation.
       Options: no, accept the limitation (rare) | a HEAD per accepted track on check, comparing its ETag
       Checked: the radio worker 2026-10-10: the playlist.json ETag does not change when only an MP3 is replaced.
+- [ ] Release years: Which year do the views show?
+      Options: TDOR (original release), TDRC kept per recording | TDRC = TDOR = the original release, as today | TDOR, and TDRC only for versions
+      Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): every view reads TDRC today; MPD exposes TDOR as `originaldate`.
+- [ ] Release years: May high-confidence rows be applied without row-by-row review?
+      Options: yes, earlier-only same-length rows with a matching release-group year | no, review every row | yes, every earlier proposal
+      Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 12 of 15 high rows right in the sample, the other 3 off by one year; earlier-only proposals 25 of 28 right or closer.
+- [ ] Release years: Where is the review done?
+      Options: the Markdown report with --accept/--reject ids | a rormpc "Years to review" view | both, the view later
+      Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): an earlier review of undated files used the report-and-ids flow.
+- [ ] Release years: Should a video match with no audio alternative be swapped to the audio recording through the work on download?
+      Options: yes, look the work up and swap to the same-length audio recording | send it to review instead | keep the video recording and fix only the year
+      Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): at least 24 of 60 earlier video matches had an audio alternative; the rest need a work lookup.
+- [ ] Release years: What happens to files without any MusicBrainz work link?
+      Options: keep the current year, list only suspect classes | clear the year when it is a video recording's | ask for an MBID through the picker
+      Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 46 of 189 sampled recordings have no work relationship.
