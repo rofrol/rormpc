@@ -173,6 +173,24 @@ struct HitsRow {
     /// false: outside the rank's population (or Rank by none); `rank` is then only a unique row number
     #[serde(default = "ranked_default")]
     ranked: bool,
+    /// a missing song deleted from the library before (`musicdb delete`): never fetched again until allowed
+    #[serde(default)]
+    deleted: Option<DeletedMark>,
+}
+
+/// The deletion that blocks a missing row (`hits --json` rows' "deleted").
+#[derive(Debug, Clone, Deserialize)]
+struct DeletedMark {
+    id: String,
+    deleted_at: String,
+    #[serde(default)]
+    file: String,
+}
+
+impl DeletedMark {
+    fn date(&self) -> &str {
+        self.deleted_at.get(..10).unwrap_or(&self.deleted_at)
+    }
 }
 
 fn ranked_default() -> bool {
@@ -278,7 +296,7 @@ struct Staged {
 
 impl FetchItem {
     fn in_downloads(&self) -> bool {
-        matches!(self.state.as_str(), "review" | "failed")
+        matches!(self.state.as_str(), "review" | "failed" | "blocked")
     }
 
     fn busy(&self) -> bool {
@@ -323,7 +341,9 @@ fn short_reason(f: &FetchItem) -> &'static str {
         "review" if text.starts_with("no MusicBrainz match") => "no MB match",
         "review" if text.starts_with("other recording") => "other recording",
         "review" if text.starts_with("different song") => "different song",
+        "review" if text.starts_with("deleted before") => "deleted before",
         "review" => "to review",
+        "blocked" => "deleted",
         _ if text.contains("rejected before") => "all rejected",
         _ if text.starts_with("no YouTube upload") => "no upload fits",
         _ if text.contains("429") => "YouTube 429",
@@ -349,7 +369,19 @@ fn plain_reason(f: &FetchItem) -> String {
         if let Some(what) = reason.strip_prefix("different song: ") {
             return format!("MusicBrainz identifies the upload as a different song: {what}.");
         }
+        if let Some(what) = reason.strip_prefix("deleted before: ") {
+            return format!(
+                "MusicBrainz identifies the upload as a song you deleted from the library: {what}. Reject it, \
+                 unless you want it back."
+            );
+        }
         return reason.to_owned();
+    }
+    if f.state == "blocked" {
+        return format!(
+            "You deleted this song from the library: {reason}. It is not fetched again; allow it in the Deleted \
+             tab (or the song's menu), then Retry."
+        );
     }
     if error.contains("rejected before") {
         return format!("Every YouTube candidate was rejected before ({error}).");
@@ -399,6 +431,20 @@ fn next_and_style(next: Option<String>, playing: bool, owned: bool, hidden: bool
     }
 }
 
+/// `musicdb deletions allow ID` in the background: the deleted song may be downloaded again; `done` reruns Hits.
+fn allow_deleted(id: String, done: rormpc_exceptions::Done) {
+    std::thread::spawn(move || {
+        match Command::new("musicdb").args(["deletions", "allow", &id]).output() {
+            Ok(out) if out.status.success() => {
+                status_info!("Allowed downloading again: {id}");
+                done();
+            }
+            Ok(out) => status_error!("musicdb deletions allow failed: {}", String::from_utf8_lossy(&out.stderr).trim()),
+            Err(err) => status_error!("{}", crate::shared::dependencies::cannot_run("musicdb", &err)),
+        }
+    });
+}
+
 /// One-cell mark of a missing row's fetch state.
 fn fetch_mark(state: &str) -> &'static str {
     match state {
@@ -406,6 +452,7 @@ fn fetch_mark(state: &str) -> &'static str {
         "searching" | "downloading" | "verifying" => "↓",
         "review" => "?",
         "failed" => "!",
+        "blocked" => "⌫",
         "ok" => "+",
         _ => "✗",
     }
@@ -643,7 +690,8 @@ impl HitsPane {
     /// Menu section for a missing row: fetch it (or more), or decide on what the queue found.
     fn fetch_section<'m>(&self, ctx: &Ctx, menu: MenuModal<'m>, r: &HitsRow) -> MenuModal<'m> {
         let path = self.path.to_string_lossy().into_owned();
-        let missing = self.rows.iter().filter(|x| x.file.is_none() && !x.hidden && !x.excluded).count();
+        let missing =
+            self.rows.iter().filter(|x| x.file.is_none() && !x.hidden && !x.excluded && x.deleted.is_none()).count();
         let item = self.fetch_for(r).cloned();
         let busy = self.fetch.iter().any(FetchItem::busy);
         let pane = self.clone_for_fetch();
@@ -685,6 +733,14 @@ impl HitsPane {
                     });
                 }
                 Some("review" | "failed") => pane.decision_items(&mut section, item.as_ref().expect("fetch item")),
+                Some("blocked") => {
+                    let f = item.clone().expect("blocked item");
+                    let a = pane.clone();
+                    section.add_item("Retry fetching this song (after allowing it again)", move |ctx| {
+                        a.fetch_decision(ctx, "retry", &[], f.key.clone());
+                        Ok(())
+                    });
+                }
                 Some("rejected") => {
                     let f = item.clone().expect("rejected item");
                     let a = pane.clone();
@@ -1395,7 +1451,15 @@ impl HitsPane {
                 Some(section)
             });
         }
-        if r.file.is_none() && !r.hidden && !r.excluded {
+        if let Some(d) = r.deleted.clone().filter(|_| r.file.is_none()) {
+            let done = self.rerun_done(ctx);
+            menu = menu.list_section(ctx, move |section| {
+                Some(section.item(format!("Allow downloading again (deleted {})", d.date()), move |_| {
+                    allow_deleted(d.id, done);
+                    Ok(())
+                }))
+            });
+        } else if r.file.is_none() && !r.hidden && !r.excluded {
             menu = self.fetch_section(ctx, menu, &r);
             // not in the library: the genres `hits` gave the chart row
             let (genres, what) = (r.genres.clone(), format!("'{}'", r.title));
@@ -1541,7 +1605,13 @@ impl HitsPane {
             }
             None => {
                 lines.push(field("In library", "no (not found in MPD)".to_owned()));
-                if let Some(f) = self.fetch_for(r) {
+                if let Some(d) = &r.deleted {
+                    lines.push(field("Deleted", format!("{} ({})", d.date(), d.file)));
+                    lines.push(Line::from(Span::styled(
+                        "not downloaded again · menu: Allow downloading again (also in the Deleted tab)",
+                        dim,
+                    )));
+                } else if let Some(f) = self.fetch_for(r) {
                     lines.push(field("Fetch", f.state.clone()));
                     for detail in [&f.reason, &f.error].into_iter().flatten() {
                         lines.push(Line::from(Span::styled(detail.clone(), dim)));
@@ -2236,7 +2306,8 @@ impl HitsPane {
         let playing_file = ctx.current_song().map(|s| s.file.as_str());
         let rows = self.rows.iter().enumerate().map(|(i, r)| {
             let owned = r.file.is_some();
-            let missing_mark = self.fetch_for(r).map_or("✗", |f| fetch_mark(&f.state));
+            let missing_mark =
+                if r.deleted.is_some() { "⌫" } else { self.fetch_for(r).map_or("✗", |f| fetch_mark(&f.state)) };
             let like = r.file.as_deref().and_then(|f| ctx.song_stickers(f)).and_then(|st| st.get("like").cloned());
             let like_cell = match (owned, like.as_deref()) {
                 (false, _) => Cell::from(Span::styled("·", dim)),
@@ -3647,6 +3718,28 @@ mod tests {
             "tags_from_channel": true, "rejected_ids": ["old"],
         }))
         .expect("a fetch item")
+    }
+
+    #[test]
+    fn deleted_songs_are_marked_and_not_fetched() {
+        let r: HitsRow = serde_json::from_value(serde_json::json!({
+            "rank": 1, "pct": 1, "cohort": 3, "artist": "Test", "title": "Song", "year": 2007, "file": null,
+            "deleted": {"id": "20261010-x.mp3", "deleted_at": "2026-10-10T14:40:06", "file": "Hits/x.mp3"},
+        }))
+        .expect("a deleted row");
+        assert_eq!(r.deleted.as_ref().map(DeletedMark::date), Some("2026-10-10"));
+        let mut pane = pane();
+        pane.rows[0].deleted = r.deleted.clone();
+        assert_eq!(pane.rows.iter().filter(|x| x.file.is_none() && x.deleted.is_none()).count(), 0);
+        let mut f = item("k", "blocked");
+        f.reason = Some("deleted on 2026-10-10 (musicdb deletions allow x to download it again)".to_owned());
+        assert!(f.in_downloads() && !f.busy());
+        assert_eq!((short_reason(&f), fetch_mark(&f.state)), ("deleted", "⌫"));
+        assert!(plain_reason(&f).starts_with("You deleted this song from the library: deleted on 2026-10-10"));
+        f.state = "review".to_owned();
+        f.reason = Some("deleted before: ABBA - Waterloo, deleted on 2026-10-10 (…)".to_owned());
+        assert_eq!(short_reason(&f), "deleted before");
+        assert!(plain_reason(&f).contains("a song you deleted from the library: ABBA - Waterloo"));
     }
 
     #[test]

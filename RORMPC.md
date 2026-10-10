@@ -315,6 +315,11 @@ words. Enter (or the menu) decides; the same items are in a `?` / `!` chart row'
 - Try another candidate (`hits fetch another`): the upload's video id is stored as rejected and the worker takes the
   next YouTube search result; a failed item offers it too, beside Retry. Retry also skips rejected videos.
 
+A song deleted from the library before (Ctrl-x, any mode) is never fetched again: its missing row shows `⌫` with
+the date in the details, Fetch missing… leaves it out, and its menu offers "Allow downloading again" (`musicdb
+deletions allow ID`, then Hits reruns). A queued one becomes `blocked` (`⌫`, "deleted" in Downloads; Retry after
+allowing it), and a download that MusicBrainz identifies as a deleted recording waits in review ("deleted before").
+
 Esc or the Downloads row again goes back to the chart; Apply does too.
 
 Exceptions (pins and exclusions with a scope, `hits except`, rormpc-tools): `+` on a Hits or Queue row pins the
@@ -385,6 +390,9 @@ file went to the Trash or was deleted permanently, whether its history was kept 
 (`!`). The details show the ListenBrainz listens deleted, the YouTube playlists the video was removed from and
 each step's outcome. Enter (or the context menu) restores a song still in the Trash (`musicdb undo --id`) or
 retries failed steps; nothing in this pane deletes. It reloads when shown and when the MPD database changes.
+The Download column says whether the downloaders skip the song (`blocked`: Hits, `hits fetch`, `yt-mp3-mb`,
+Live playlists never download it again; the details list what it matches: video, recording, chart song) or
+`allowed`; the menu switches it (`musicdb deletions allow|block ID`). Restoring a trashed song lifts the block.
 
 ```ron
 (name: "Deleted", pane: Split(size: "100%", direction: Vertical, panes: [
@@ -397,7 +405,8 @@ retries failed steps; nothing in this pane deletes. It reloads when shown and wh
 Public YouTube playlists followed by `liveplaylist` (rormpc-tools newer than 0.2.33): left the subscriptions (`!`
 when the last check failed, the number of new items), right the selected one's items in playlist order with their
 decision (`?` to review, `✓` accepted, `✗` rejected) and state (to review, queued, downloading, needs match, ready,
-in library, failed, gone upstream). Left/Right moves between the two lists. The footer shows the download's progress
+in library, failed, blocked: deleted from the library before, accept it again after allowing it in the Deleted
+tab, gone upstream). Left/Right moves between the two lists. The footer shows the download's progress
 (from the CLI's stderr and its `status.json`), the last download's errors, and for the selected item its error,
 the uncertain MusicBrainz proposal, its file or its video link.
 
