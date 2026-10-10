@@ -174,7 +174,8 @@ pub struct DeletedPane {
     job: Arc<Mutex<Job>>,
 }
 
-fn run(args: &[&str]) -> Result<String, String> {
+/// Run `musicdb` with `args`: its stdout, or its last stderr line (also the Years to review panel's runner).
+pub(crate) fn run(args: &[&str]) -> Result<String, String> {
     match Command::new(MUSICDB).args(args).output() {
         Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
         Ok(out) => Err(String::from_utf8_lossy(&out.stderr)

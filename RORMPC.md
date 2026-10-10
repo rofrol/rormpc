@@ -192,6 +192,7 @@ still load from an explicit config.
   step whose outcome is "failed"). The panel has the pane's keys (Enter restores, retries, allows or blocks
   downloading it again); Esc or a click outside closes it. It replaced the Deleted tab (decided by the user
   2026-10-10).
+- **Years to review** is a panel over Music too: `gY` (ShowPlay(Years)), see Years to review.
 - **Keys** (built-in and `assets/example_config.ron`; `ShowPlay(...)` opens the Music tab from anywhere):
 
   | Key | Map | Action |
@@ -201,6 +202,7 @@ still load from an explicit config.
   | `5` `6` `7` `8` `9` | global | `ShowPlay(Browse(Folders))`, `(Artists)`, `(AlbumArtists)`, `(Albums)`, `(Lists)` |
   | `0`, `gl` | global | `ShowPlay(Live)`: the Live inbox (`ShowPlay(Queue)` brings the filters back) |
   | `gd` | global | `ShowPlay(Deleted)`: the Deleted panel |
+  | `gY` | global | `ShowPlay(Years)`: the Years to review panel |
   | `B` | queue | ToggleBrowse: the left column, Filters or Browse |
   | `[` / `]` | queue | PreviousGrouping / NextGrouping in Browse |
   | `P` | navigation | PlayReplace: play the selection replacing the queue (Browse) |
@@ -445,6 +447,41 @@ default tabs no longer have a Deleted tab, but an explicit config can still put 
     (pane: Pane(Deleted()), size: "100%", borders: "ALL", border_symbols: Rounded),
 ])),
 ```
+
+## Years to review
+
+The release years to review (rormpc-tools `docs/release-years-plan.md`, stage B), a panel over Music: `gY`
+(ShowPlay(Years)). It reads `musicdb years --json`, the report `musicdb years --dry-run` writes (version 1; another
+version or a musicdb without `years` is said in the panel): one row per file whose shown year (OriginalDate, else
+Date) would change or that is suspect. The top line counts the rows (undecided, accepted, rejected, applied, high,
+review, needing an MBID); the table shows the decision (`✓` accepted, `✗` rejected, `✓✓` applied), the row id, the
+file, the current and proposed TDRC / TDOR, the rule, the confidence and a short evidence line (the suspect
+classes and the source release); the details (beside the table on a wide panel, under it on a narrow one) show
+the whole evidence, the date source, the release, its release-group date and the recording's own first release.
+
+Every row is reviewed (decided by the user 2026-10-10, no automatic apply):
+
+| Key | Action |
+|---|---|
+| `a` | accept (`musicdb years --accept ID...`); on rows already accepted: undecide (`--undecide`) |
+| `D` | reject (`--reject`); on rows already rejected: undecide |
+| Space / Ctrl-Space | mark the row and move on / invert the marks of the shown rows; `a` and `D` act on the marked rows |
+| `h` / `l` | decision filter: undecided (the default), accepted, rejected, all |
+| Enter | the menu: accept, reject, undecide; Apply accepted…; Roll back…; filters by decision, confidence, class |
+| Esc | clears the marks, then closes the panel |
+
+Marks stay only on the rows the filter shows. "Apply accepted…" confirms, then runs `musicdb years --apply` in the
+background (only files whose audio and date tags are what the report saw; the old values go to
+`years-backup.jsonl` first; `mpc update` afterwards) and shows what it wrote and skipped. "Roll back #ID…" (on an
+applied row) and "Roll back every file's newest apply…" run `musicdb years --rollback [ID...]` the same way.
+Rows that need an MBID (no MusicBrainz recording in the tags, or no work relationship) are dimmed and read-only
+with the note "MBID picker comes next" (meanwhile `musicdb years --mbid ID MBID`); applied rows are read-only until
+rolled back. The panel reloads when opened, after each decision, apply or rollback, and when MPD's database changes.
+
+What the views read: the Year column of the theme and the album browser show OriginalDate (TDOR, the song's original
+release), falling back to Date. The album browser does it with `artists: (album_date_tags: [OriginalDate, Date])`
+(the default now); Browse's `P` on an artist plays the albums in that date's order; a theme's Year column uses
+`Truncate(content: (kind: Property(Other("originaldate")), default: (kind: Property(Other("date")))), length: 4)`.
 
 ## Live playlists pane
 

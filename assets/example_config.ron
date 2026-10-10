@@ -80,6 +80,7 @@
             "0":          ShowPlay(Live), // the Live playlists inbox, a panel over Play
             "gl":         ShowPlay(Live),
             "gd":         ShowPlay(Deleted), // the deletion journal, a panel over Music
+            "gY":         ShowPlay(Years), // the release years to review (musicdb years), a panel over Music
             "u":          Update,
             "U":          Rescan,
             "R":          AddRandom,
@@ -177,7 +178,7 @@
     artists: (
         album_display_mode: SplitByDate,
         album_sort_by: Date,
-        album_date_tags: [Date],
+        album_date_tags: [OriginalDate, Date], // rormpc: the original release, else this recording's
     ),
     tabs: [
         (

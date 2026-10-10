@@ -3,7 +3,8 @@
 //!
 //! - `P` on a container (an album, artist, folder or list, or several marked ones) plays its songs; on a song it
 //!   plays the column the song is in (the album, folder or list) from that song. Order: an album in disc/track
-//!   order, an artist by album date then disc/track, a folder in filename order, a list in its own order.
+//!   order, an artist by album date (`OriginalDate`, else `Date`) then disc/track, a folder in filename order, a list
+//!   in its own order.
 //! - Generated playlists ("Tag NAME", "Smart NAME", rormpc-tools' "Hits …" exports, the Live playlists' `.m3u`)
 //!   are rewritten by their owner: the editor shows them, but does not move, remove or rename in them.
 
@@ -13,7 +14,7 @@ use rmpc_mpd::commands::Song;
 use crate::{
     config::tabs::PlayGrouping,
     ctx::Ctx,
-    ui::{browser::BrowserPane, dir_or_song::DirOrSong, rormpc_upnext::Collection},
+    ui::{browser::BrowserPane, dir_or_song::DirOrSong, rormpc_upnext::Collection, rormpc_years::shown_date},
 };
 
 /// Prefixes of the playlists rormpc-tools writes (its `hits.GENERATED_PLAYLISTS`, plus tags and smart lists).
@@ -55,7 +56,7 @@ fn tag(song: &Song, tag: &str) -> String {
 pub fn sort_for(kind: &str, songs: &mut [Song]) {
     match kind {
         "album" => songs.sort_by_key(|s| (number(s, "disc"), number(s, "track"))),
-        "artist" => songs.sort_by_cached_key(|s| (tag(s, "date"), tag(s, "album"), number(s, "disc"), number(s, "track"))),
+        "artist" => songs.sort_by_cached_key(|s| (shown_date(s), tag(s, "album"), number(s, "disc"), number(s, "track"))),
         "directory" => songs.sort_by(|a, b| a.file.cmp(&b.file)),
         _ => {}
     }
@@ -189,6 +190,13 @@ mod tests {
         ];
         sort_for("artist", &mut songs);
         assert_eq!(files(&songs), ["early-1", "early-2", "late-1"]);
+        // the original release orders a reissue among the albums of its time
+        let mut songs = vec![
+            song("mid", &[("date", "1985"), ("album", "M"), ("track", "1")]),
+            song("reissue", &[("date", "2002"), ("originaldate", "1979"), ("album", "R"), ("track", "1")]),
+        ];
+        sort_for("artist", &mut songs);
+        assert_eq!(files(&songs), ["reissue", "mid"]);
     }
 
     #[test]

@@ -20,7 +20,9 @@ impl Default for ArtistsFile {
         Self {
             album_display_mode: AlbumDisplayMode::default(),
             album_sort_by: AlbumSortMode::default(),
-            album_date_tags: vec![AlbumDateTag::Date],
+            // rormpc: the song's original release (TDOR), falling back to this recording's (rormpc-tools
+            // docs/release-years-plan.md "What the views read")
+            album_date_tags: vec![AlbumDateTag::OriginalDate, AlbumDateTag::Date],
         }
     }
 }
