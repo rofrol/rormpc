@@ -690,6 +690,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       switch to send_user_command, the old Karabiner shell script deleted with the switch; (2) the Now Playing and
       MPRIS provider with its units, retiring mpd-now-playable. The user tests the Control Center tile after the
       install (the worker never stops mpd-now-playable); the worker writes a short test and rollback procedure.
+      Stage 1 done 2026-10-10: rormpc-tools f817794 (mpd-player command socket: JSON datagrams, flock, 0600 socket,
+      `mpd-player send`, `socket-path --check`, 70 tests; scratch MPD: 1-2 ms from receipt to MPD), rormpc e606c62
+      (companions print the socket and the Karabiner rule, `status` shows it bound); released v0.2.47, installed
+      (socket bound); dotfiles 5d47ea3 (Karabiner F7/F8/F9 send_user_command, ~/scripts/mpd-media-key deleted;
+      Karabiner reloaded it). The daemon makes ~/.local/state/rormpc 0700 where an older mpd-player made it 0755
+      (the plan refused such a directory; accepted by the coordinator: only the same user reads it). Live key test
+      is the user's: F8 toggle, F9 next (also from a pause), F7 prev ("confirmed" in prev.jsonl), a held F9 one
+      next per press, F8 still MPD while a browser plays; the log is ~/Library/Logs/mpd-player.log, a failed send
+      shows as "send_user_command: send_to failed" in Karabiner's console_user_server.log; rollback: revert
+      dotfiles 5d47ea3. Left over: ~/.local/state/media-keys/ (the old script's log), for the user to delete.
+      Stage 2 decides what `pause` does while "Pause for…" holds the pause (today: nothing, the timer runs on).
 - [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:"
       decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
       the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
@@ -1190,6 +1201,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 - [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
       the whole text or wrap it, and keep it long enough to read.
+- [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle
+      prev`, MPD `next`) when it is bound (raised by the stage 1 worker 2026-10-10): one control path; behaviour
+      is the same today. Cost: a small rormpc change, no build beyond the usual install.
+
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
