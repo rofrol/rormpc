@@ -446,6 +446,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (decided 2026-10-10; the coordinator does it).
       Done 2026-10-10: v0.2.41 tagged and pushed (tests green), installer 1372bce, companions and rormpc 1372bce
       installed and pushed; the config loads; `musicdb deletions` works. Restart rormpc.
+- [ ] Rename the "Play" tab to "Music" (asked 2026-10-10 with a screenshot: "it looks like a button. another name? ask
+      the models"; Sol 0eb6ec94 and MiMo 2f26e04d both put Music first, Player second; decided by the user
+      2026-10-10: Music): the tab label in the built-in default and assets/example_config.ron, SwitchToTab names,
+      RORMPC.md and plans; the pane type Pane(Play()) stays (explicit configs keep loading); your config's tab and
+      its "1" key too.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
