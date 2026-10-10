@@ -639,6 +639,20 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       reason in the header; J/K do not swap across the round boundary. Limit: a source smaller than 10 cannot show
       several rounds (one MPD priority per queue entry, 12 h rest): the plan shows this round and at most the next
       one with the reason (in "Needs a decision"). ↻/≈ are not in the old Queue's ShuffleNext column.
+- [x] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
+      "illogical that this is smaller than from. ask the models. Besides, no option to turn off either this or from?").
+      Consulted (Sol 3f2a69ae, MiMo fb2e7e9b): clamp while stepping (from stops at to and back, equal years allowed;
+      no push, no swap). Decided by the user 2026-10-10 (Sol's way): Space on a bound row toggles it, the year is
+      remembered and re-clamped when turned back on; labels "From: Any" / "From: ‹ 2000 ›", the period line "Any
+      year", "Up to 1991", "From 2000", "1991–2000"; a footer hint "←/→ change year · Space toggle bound"; hits gets
+      an open-ended period.
+      Done: rormpc fa87993, rormpc-tools c00c20f (worker); released v0.2.45 and installed 2026-10-10 (UI not
+      checked live by the worker).
+- [ ] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
+      rename or --name, the playlist file moved, the subscription updated).
+- [ ] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
+      user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
+      notifies; nothing is accepted or downloaded by itself.
 - [ ] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
       in mpd-player as the one control interface (next through the plan, previous through its history, toggle);
       the user's Karabiner F7/F8/F9 call it with send_user_command (no shell, mpc or DNS lookup per press; the
@@ -653,31 +667,22 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Now Playing as a second process `mpd-player nowplaying` with its own launchd agent; MPRIS in the daemon via
       dbus-fast; companions stops mpd-now-playable before starting the new one; karabiner.json only suggested. Six
       open choices in "Needs a decision" ("Media keys:"); the build waits for them.
-- [x] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
-      "illogical that this is smaller than from. ask the models. Besides, no option to turn off either this or from?").
-      Consulted (Sol 3f2a69ae, MiMo fb2e7e9b): clamp while stepping (from stops at to and back, equal years allowed;
-      no push, no swap). Decided by the user 2026-10-10 (Sol's way): Space on a bound row toggles it, the year is
-      remembered and re-clamped when turned back on; labels "From: Any" / "From: ‹ 2000 ›", the period line "Any
-      year", "Up to 1991", "From 2000", "1991–2000"; a footer hint "←/→ change year · Space toggle bound"; hits gets
-      an open-ended period.
-      Done: rormpc fa87993, rormpc-tools c00c20f (worker); released v0.2.45 and installed 2026-10-10 (UI not
-      checked live by the worker).
-- [ ] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
-      user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
-      notifies; nothing is accepted or downloaded by itself.
-- [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
-      something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
-      the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
-      timestamps into .lrc, language detection, cost per song), and plans or builds "Transcribe lyrics" for a song
-      with no lyrics (radio tracks first), labelled as machine-transcribed like the machine translations.
+      Decided by the user 2026-10-10 (consult round 20261010-225609-d67e, Sol e510c27c, MiMo c6d56c6f): two
+      stages, each committed, released and installed alone: (1) the command socket in mpd-player and the Karabiner
+      switch to send_user_command, the old Karabiner shell script deleted with the switch; (2) the Now Playing and
+      MPRIS provider with its units, retiring mpd-now-playable. The user tests the Control Center tile after the
+      install (the worker never stops mpd-now-playable); the worker writes a short test and rollback procedure.
 - [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:"
       decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
       the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
       tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
       download a video match without an audio alternative is swapped to the same-length audio recording through
       the work. MusicBrainz at 1 req/s (~66 min for the library, cached), run as a herdr-job.
-- [ ] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
-      rename or --name, the playlist file moved, the subscription updated).
+- [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
+      something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
+      the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
+      timestamps into .lrc, language detection, cost per song), and plans or builds "Transcribe lyrics" for a song
+      with no lyrics (radio tracks first), labelled as machine-transcribed like the machine translations.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1481,7 +1486,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Release years: What happens to files without any MusicBrainz work link? Decided by the user 2026-10-10: ask for an MBID through the picker.
       Options: keep the current year, list only suspect classes | clear the year when it is a video recording's | ask for an MBID through the picker
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 46 of 189 sampled recordings have no work relationship.
-- [ ] Forecast on a source smaller than 10 songs: show the rest of this round and the next one with the reason (as
+- [x] Forecast on a source smaller than 10 songs: show the rest of this round and the next one with the reason (as Decided by the user 2026-10-10: as built.
       built), or add a display-only preview of later rounds?
       Options: as built (one MPD priority per queue entry; a played song rests ≥ 12 h) | a display-only preview of
       later rounds without MPD priorities | duplicate entries in the queue (changes your queue)
@@ -1492,13 +1497,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Media keys: When should the provider claim Now Playing? Decided by the user 2026-10-10: on the first MPD play after it starts, then the true state.
       Options: on the first MPD play after it starts, then the true state (paused stays paused) | at startup as Playing like mpd-now-playable (takes the slot from a browser) | only while MPD plays
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [ ] Media keys: May a worker stop your mpd-now-playable for about 15 minutes for a Control Center test on a scratch MPD?
+- [x] Media keys: May a worker stop your mpd-now-playable for about 15 minutes for a Control Center test on a scratch MPD? Decided by the user 2026-10-10: no, the user runs that test after the install.
       Options: no, you run that test after the install | yes, the worker stops it and starts it again
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
 - [x] Media keys: Next (key, Now Playing, MPRIS) while you have paused MPD: play the next song, or stay paused on it? Decided by the user 2026-10-10: play it.
       Options: play it, as Previous already does | stay paused, as MPD's own next does
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [ ] Media keys: Keep the old Karabiner shell script after the rule moves to send_user_command?
+- [x] Media keys: Keep the old Karabiner shell script after the rule moves to send_user_command? Decided by the user 2026-10-10: delete it with the switch.
       Options: keep it as a manual fallback for a week, then delete | delete it with the switch
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
 - [x] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in? Decided by the user 2026-10-10: on by default, warn when another MPD MPRIS bridge runs.
