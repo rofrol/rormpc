@@ -573,6 +573,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       already in the library refers to it; `hits --set +live:omarchy-radio` works. Also fixed: `add` did not mark
       deleted songs at the first review (YouTube too). Live overlay shows the artist and a "Source" link. Tools and
       rormpc must be released together. Dismissed: auto-accept (MiMo), blocking by artist+title alone.
+      Released 2026-10-10: rormpc-tools v0.2.43 (also the my-plays cache), installer and rormpc installed; the
+      coordinator ran `liveplaylist add https://radio.omarchy.org/`: subscription omarchy-radio, 33 items pending
+      your review in the Live overlay (0 / gl), MPD playlist "Omarchy Radio".
 - [ ] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
       2000. Investigate with the models. A repair plan for the whole library?"): a worker finds where 2000 comes from
       for that song (file tags: date vs originaldate, a compilation's date, MusicBrainz release vs recording first
