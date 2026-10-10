@@ -345,6 +345,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Diverged: Sol = generic line + docs link, no detection; MiMo = detect the OS (/etc/os-release ID / ID_LIKE,
       sys.platform), print one matching command, generic fallback (open choice below). Checked: the catch is
       already narrow enough (it answers only when the error's filename is a known program, else re-raises).
+      Decided by the user 2026-10-10: always a generic line ("<program> not found on PATH; <what stops working>")
+      plus a link to one per-manager table in the docs (brew, apt, pacman, guix incl. the home.scm line; Windows
+      unsupported); no OS detection; the installer says Shepherd is not supported.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1047,7 +1050,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       installer 12c4876 pins both, companions installed, rormpc 12c4876 installed and pushed; dotfiles b6720d3 adds
       the Play tab first (1 Play, 2 Hits, 3 Queue, 4 Up next, 5 Shuffle, 6-9 browsers, 0 Playlists; Live playlists
       by gl); the config loads. Restart running rormpc instances.
-- [ ] Install hints: how does a missing program's message name the install?
+- [x] Install hints: how does a missing program's message name the install? Decided by the user 2026-10-10: always a generic line + a docs link (Sol).
       Options: detect the OS and print the one matching command (brew, apt, pacman, guix), generic line + docs link
       otherwise (MiMo) | always a generic line + a docs link to the per-manager table (Sol) | keep brew + apt
       Checked: consult round 2026-10-10 (see the "Install hints" item in Next); you run macOS, Omarchy (Arch) and
