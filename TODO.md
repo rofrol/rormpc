@@ -477,6 +477,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
       MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
       bug signal"); live tests with the media key on the user's MPD go to "Needs a decision" first.
+- [ ] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
+      2000. Investigate with the models. A repair plan for the whole library?"): a worker finds where 2000 comes from
+      for that song (file tags: date vs originaldate, a compilation's date, MusicBrainz release vs recording first
+      release, what rormpc and hits read), measures how many library songs show a compilation or reissue year
+      instead of the first release, consults the models, and writes a repair plan (which year field each view uses,
+      how tags are corrected, dry run, review, undo) into "Needs a decision" before any file is changed.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
