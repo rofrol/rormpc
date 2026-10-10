@@ -151,6 +151,8 @@ companions() {
     shift
   done
   command -v uv >/dev/null || { echo "needs uv: https://docs.astral.sh/uv/" >&2; exit 1; }
+  # musicdb update hashes the audio with it, yt-mp3-mb converts with it
+  command -v ffmpeg >/dev/null || { echo "needs ffmpeg: brew install ffmpeg (macOS) or sudo apt install ffmpeg (Debian/Ubuntu)" >&2; exit 1; }
   if [ -n "$local_build" ]; then
     uv tool install --force --editable "$RORMPC_TOOLS_DIR"
   else
@@ -163,7 +165,7 @@ companions() {
     cargo install --locked --git "$RO_LB_REPO" --rev "$RO_LB_REF"
   else
     cargo install --locked --git "$RO_LB_REPO" --tag "$RO_LB_TAG"
-  fi || { echo "building ro-listenbrainz-mpd failed; on Debian/Ubuntu it needs: sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev" >&2; exit 1; }
+  fi || { echo "building ro-listenbrainz-mpd failed; on Debian/Ubuntu the companions need: sudo apt install build-essential pkg-config libssl-dev libsqlite3-dev ffmpeg" >&2; exit 1; }
   local tools; tools="$(uv tool dir --bin)"
   service musicdb 3600 "$tools/musicdb" update
   [ -f "$lb_config" ] || "$HOME/.cargo/bin/ro-listenbrainz-mpd" --create-default-config
@@ -205,7 +207,7 @@ status() {
   grep -qE '^[[:space:]]*token(_file)?[[:space:]]*=' "$lb_config" 2>/dev/null && echo "ListenBrainz token: set" || echo "ListenBrainz token: missing in $lb_config"
   echo "listen rule: $(grep -E '^listen_' "$lb_config" 2>/dev/null | tr '\n' ' ')"
   local tool
-  for tool in hits musicdb mpc uv; do printf '%s: %s\n' "$tool" "$(command -v "$tool" || echo 'not on PATH')"; done
+  for tool in hits musicdb mpc uv ffmpeg; do printf '%s: %s\n' "$tool" "$(command -v "$tool" || echo 'not on PATH')"; done
 }
 
 case "${1:-}" in
