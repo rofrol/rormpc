@@ -136,6 +136,16 @@ struct BrowseAreas {
     deleted_badge: Rect,
 }
 
+/// What an Apply waits for before it plays the preview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApplyWait {
+    No,
+    /// a picked list's or previous source's Apply: its preview is being made
+    Ready,
+    /// Apply found the preview older than the library: `hits` runs again, the Apply that follows trusts it
+    Recomputing,
+}
+
 #[derive(Debug)]
 pub struct PlayPane {
     hits: HitsPane,
@@ -160,8 +170,9 @@ pub struct PlayPane {
     synced: bool,
     /// what the list picker and the Save modal hand back (`rormpc_smartlists::Pick`)
     inbox: rormpc_smartlists::Inbox,
-    /// a picked list's or previous source's Apply: play its preview once it is in
-    apply_when_ready: bool,
+    /// an Apply waiting for its preview (a picked list's or previous source's, or one that found the preview
+    /// outdated): it plays once the preview is in
+    wait: ApplyWait,
     /// areas of the last render, for the mouse
     collapsed_area: Rect,
     apply_area: Rect,
@@ -186,7 +197,7 @@ impl PlayPane {
             source_hash: None,
             synced: false,
             inbox: rormpc_smartlists::Inbox::default(),
-            apply_when_ready: false,
+            wait: ApplyWait::No,
             collapsed_area: Rect::default(),
             apply_area: Rect::default(),
             queue_area: Rect::default(),
@@ -225,9 +236,9 @@ impl PlayPane {
             if let Err(err) = self.hits.load_filters(&args) {
                 status_error!("These rules cannot be loaded: {err}");
             } else if apply {
-                self.apply_when_ready = true;
+                self.wait = ApplyWait::Ready;
             } else {
-                self.apply_when_ready = false;
+                self.wait = ApplyWait::No;
                 if !self.preview_active() {
                     status_info!("The queue already plays these rules");
                 }
@@ -238,11 +249,10 @@ impl PlayPane {
 
     /// A picked Apply waits for its preview: play it once `hits` wrote it (its run ends with a render).
     fn apply_if_ready(&mut self, ctx: &Ctx) {
-        if self.apply_when_ready {
+        if self.wait != ApplyWait::No {
             let info = self.hits.preview_info();
             if info.error.is_some() || info.ready {
-                self.apply_when_ready = false;
-                self.apply(ctx);
+                self.apply(ctx); // it takes `wait`
             }
         }
     }
@@ -700,8 +710,18 @@ impl PlayPane {
             }
             return status_info!("The queue already plays these filters: change one to prepare another source");
         }
+        let recomputed = std::mem::replace(&mut self.wait, ApplyWait::No) == ApplyWait::Recomputing;
         if let Some(err) = info.error {
             return status_error!("No preview to apply: {err}");
+        }
+        // a song deleted since the preview was made is not played from it: hits runs again first (once)
+        if !recomputed {
+            let changes = [rormpc_play::db_updated_at(ctx), self.deleted.newest_deletion()];
+            if rormpc_play::preview_outdated(self.hits.result_mtime(), &changes) {
+                self.wait = ApplyWait::Recomputing;
+                self.hits.recompute(ctx);
+                return status_info!("Preview outdated (the library changed since), recomputing: Apply follows");
+            }
         }
         if info.files.is_empty() {
             return status_info!("0 owned songs: widen the filter (the queue stays as it is)");
@@ -722,6 +742,7 @@ impl PlayPane {
     fn escape(&mut self) -> bool {
         if self.preview_active() {
             self.hits.reset_filters(self.baseline.as_ref());
+            self.wait = ApplyWait::No;
             status_info!("Preview dropped: the table shows the playing source again");
             return true;
         }
@@ -787,7 +808,11 @@ impl PlayPane {
             Layout::vertical([Constraint::Length(u16::from(preview)), Constraint::Min(1)]).areas(area);
         self.apply_area = Rect::default();
         if preview {
-            let (text, enabled) = rormpc_play::banner(&self.hits.preview_info(), ctx.current_song().map(|s| s.file.as_str()));
+            let (text, enabled) = rormpc_play::banner(
+                &self.hits.preview_info(),
+                ctx.current_song().map(|s| s.file.as_str()),
+                self.wait == ApplyWait::Recomputing,
+            );
             let width = APPLY_BUTTON.chars().count() as u16;
             let [t, b] = Layout::horizontal([Constraint::Min(1), Constraint::Length(width)]).spacing(1).areas(banner);
             frame.render_widget(Paragraph::new(Line::from(Span::styled(text, ctx.config.theme.preview_label_style))), t);
