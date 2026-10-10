@@ -747,9 +747,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       alternative to the work's same-length audio recording (years.audio_for, the same cache, 1 req/s), evidence in
       row["swap"] (from, to, rule, why), method ends ">work"; a failed lookup keeps the match. Not released. The
       MBID picker (stage B2) waits for its two decisions.
-- [ ] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch
+- [x] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch
       proposal, so a swapped download shows from → to and why (found by the stage C worker 2026-10-11; today only
       the ">work" method suffix shows; logging only, one revert).
+      Done in rormpc-tools 4d8c6da (worker): log.jsonl entries and --batch proposals carry "swap"; the
+      "files" entries do not. Not released.
 - [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
       something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
