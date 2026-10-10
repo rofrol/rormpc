@@ -147,6 +147,31 @@ service_state() {
   fi
 }
 
+# launchd_started NAME (macOS): right after `service NAME` bootstrapped an always-on job, wait until launchd runs it
+# and print "running", or print the real failure: "not loaded", or "exited (last exit code N)" once it has exited
+# since the bootstrap (KeepAlive would spawn it again). Meanwhile launchd reports the spawn in progress ("spawn
+# scheduled", "xpcproxy", "not running" with no exit yet), which is no failure
+launchd_started() {
+  local target out state="" pid exit_code _
+  target="gui/$(id -u)/io.github.rofrol.rormpc.$1"
+  for _ in $(seq 100); do
+    out="$(launchctl print "$target" 2>/dev/null)" || { echo "not loaded"; return 0; }
+    state="$(sed -n 's/^\tstate = //p' <<<"$out")"
+    pid="$(sed -n 's/^\tpid = //p' <<<"$out")"
+    exit_code="$(sed -n 's/^\tlast exit code = //p' <<<"$out")"
+    if [ -n "$exit_code" ] && [ "$exit_code" != "(never exited)" ]; then
+      echo "exited (last exit code $exit_code)"
+      return 0
+    fi
+    if [ "$state" = running ] && [ -n "$pid" ]; then
+      echo running
+      return 0
+    fi
+    sleep 0.1  # delay: polling launchd, which has no event or blocking form for a job's spawn; at most 10 s
+  done
+  echo "${state:-in an unknown state} after 10 s"
+}
+
 # mpd_player_env MPD_PLAYER ARGS...: run mpd-player with the XDG variables its service gets, so a path it prints is
 # the service's: launchd agents get none, systemd user units the user manager's
 mpd_player_env() {
@@ -225,7 +250,7 @@ now_playing() {
       "program; 'mpd-now-playable install-launchagent' brings it back)"
   fi
   service mpd-player-nowplaying "" "$player" nowplaying
-  local state; state="$(service_state mpd-player-nowplaying)"
+  local state; state="$(launchd_started mpd-player-nowplaying)"
   if [ "$state" != running ]; then
     echo "warning: mpd-player's Now Playing is $state, see ~/Library/Logs/mpd-player-nowplaying.log. To go back:" \
       "'launchctl bootout gui/$(id -u)/io.github.rofrol.rormpc.mpd-player-nowplaying'," \
