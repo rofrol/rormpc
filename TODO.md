@@ -498,6 +498,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       downloaded again from its video with the block lifted), resubmits its ListenBrainz listens from what the
       journal or the local listens log kept (timestamps preserved, no duplicates), puts back the playlist entries
       and play counts/stickers, and runs it for this song; anything it cannot restore is reported.
+      Built in rormpc-tools 47c4a10, rormpc ed89d68 (worker, consulted Sol + MiMo; pytest 365, cargo test 1037):
+      `musicdb restore ID` (dry run by default, --yes, each step journaled in deletions/restored.jsonl and resumed by
+      a rerun or musicdb update; a re-download goes to a staging dir and enters the library only when video id,
+      length and recording match; a deleted ListenBrainz listen is resubmitted once LB no longer lists it, with its
+      original time, never twice; `yt-playlist add` skips playlists that already have the video); Deleted overlay
+      "Restore…" shows the dry-run plan in its confirmation. Dry run for this song (coordinator, 2026-10-10): file
+      re-downloaded from lDK9QqIzhwk to its old path (MPD playlists still list it), song id back, stickers
+      playCount 2, 2 play events, the 2026-10-06 16:35:51 listen waits until LB has processed the deletion, the
+      2026-10-10 16:15:05 listen was never deleted on LB (imported back hourly), back into the YouTube playlist
+      (appended), download allowed again. Open choices in "Needs a decision".
+
 - [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
@@ -556,6 +567,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rormpc_install.sh companions, replacing mpd-now-playable (its docs and the user's LaunchAgent removed after the
       switch). A worker plans it first with the models (macOS Now Playing from Python: PyObjC MediaPlayer or a small
       helper; MPRIS via D-Bus), open choices to "Needs a decision"; live key tests are the user's.
+- [ ] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
+      with a screenshot: "error. to the TODO"): Music, Hits 1980-1989 top 1-10% "(modified)", weighted, round done,
+      the queue left with 2 songs. Likely a file in the result that is no longer in MPD's database (e.g. a song
+      deleted today, still in hits' cache or current.json) aborts the whole add; the screenshot was taken with the
+      old rormpc 1372bce still running. A worker reproduces it on a scratch MPD and makes Apply/Play skip files MPD
+      does not know (reported in the status, never an empty or half-replaced queue), and checks hits marks such rows
+      as not owned.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1322,3 +1340,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       for users without Karabiner, mpd-player registers as the Now Playing provider (macOS) / MPRIS player (Linux)
       using the same commands, installed by rormpc_install.sh; 127.0.0.1 in the script is only a stopgap.
       (MiMo's "prev sends both mpc prev and shuffle prev" was dismissed: the script sends one of them.)
+- [ ] Restore: a re-downloaded file whose audio MD5 differs from the deleted one (a new encode of the same video)?
+      Options: restore it and note the difference (as built) | keep it in staging for a decision | restore only identical audio
+      Checked: the restore worker 2026-10-10.
+- [ ] Restore: when the tagger does not recognise the re-download, write MBID, artist and title from the journal?
+      Options: yes, from the journal (as built; the same video was recognised before) | keep it in staging for a decision
+      Checked: the restore worker 2026-10-10.
