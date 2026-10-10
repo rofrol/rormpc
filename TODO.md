@@ -309,7 +309,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in rormpc c0caebc, rormpc-tools f90bf91 (worker; pytest 338): the four entry points print one line naming the
       missing program (ffmpeg, yt-dlp, fpcalc, mpc) with its brew/apt install and exit 1; `companions` stops without
       ffmpeg, `status` lists it, the apt hint includes it; the smoke test's musicdb comment updated. Not released.
-- [ ] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
+- [x] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
       scrobbler, and what percent of the required percent is done, and whether it is still possible since the song
       was scrolled, e.g. to 20%, and a manual button to send it to the scrobbler. It has to take the information
       how many percent is needed to send to the scrobbler from the ro mpd listenbrainz daemon. Ask the models.")
@@ -319,6 +319,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       to "Needs a decision".
 
 
+      Done in rormpc 765f0bf, ro-listenbrainz-mpd cabb936 (worker, consulted Sol + MiMo; cargo test 20 and 1020; end to end
+      on a scratch MPD, scratch scrobbler and a local API stub: countdown, seek → impossible, oL sends exactly one
+      listen, no second automatic one, "scrobbler not running"). The daemon writes status.json next to
+      listens.jsonl on every change (rule, counted/required, counting|impossible|never|sent); rormpc watches it and
+      adds only MPD's elapsed time; a manual send is an MPD message `submit <instance> <play>` on channel
+      listenbrainz_listen, logged with "manual": true. Also fixed a flaky scrobbler test (7/40 → 0/40). Not
+      released: needs a ro-listenbrainz-mpd tag, RO_LB_TAG bump and `companions`. To see it, your theme needs
+      `(kind: Property(Status(Scrobble)))` (RORMPC.md "Scrobble status"); oL works with your config already.
+      Open choices are in "Needs a decision" ("Scrobble status:").
 - [ ] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
       (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
 
@@ -993,3 +1002,21 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Combined view: Artists and Album artists in Browse?
       Options: two separate groupings (MiMo; the code has both) | one grouping with a toggle
       Checked: plans/combined-view.md "Open choices" (20); the first option is the plan's recommendation.
+- [ ] Scrobble status: What does "62% of 50%" mean?
+      Options: progress toward the required share (62% of the way to the threshold, as built) | the share of the song heard ("31% of 50%")
+      Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
+- [ ] Scrobble status: Which key sends to ListenBrainz now?
+      Options: oL (as built) | oL plus an item in the Queue menu for the playing song | another key
+      Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
+- [ ] Scrobble status: When does a manual send ask for a confirmation?
+      Options: when the rule is not met yet (as built) | always | never
+      Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
+- [ ] Scrobble status: Which timestamp does a manual send carry after a seek under the uninterrupted rule?
+      Options: the seek (as built, the same as an automatic listen) | the song's start
+      Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
+- [ ] Scrobble status: Should the scrobbler remember a send across its own restart in the middle of a song (today a later automatic listen could go a second time)?
+      Options: leave it (rare) | store it in the daemon's SQLite database
+      Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
+- [ ] Scrobble status: Add Status(Scrobble) to your theme in dotfiles?
+      Options: next to the progress bar, before the time | in the header | no
+      Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
