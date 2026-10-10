@@ -724,6 +724,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
       download a video match without an audio alternative is swapped to the same-length audio recording through
       the work. MusicBrainz at 1 req/s (~66 min for the library, cached), run as a herdr-job.
+      Stage A done 2026-10-11: rormpc-tools b758320 (worker): `musicdb years` (--dry-run report with stable ids,
+      every row undecided; --accept/--reject/--undecide; --mbid ROW MBID; --apply only accepted rows whose audio md5
+      and date tags are unchanged, years-backup.jsonl fsynced first, temp copy + os.replace, `mpc update --wait`;
+      --rollback only when the file still has what that apply wrote; --json for rormpc); hits reads originaldate,
+      falling back to date; downloads write TDRC = the recording's first release, TDOR = the rule. Values the worker
+      chose (accepted by the coordinator): a proposal keeps the file's current TDRC (album rips keep their dates);
+      a download never takes a TDOR later than its recording's first release (rule `first-release`); a row whose
+      year stays but whose release group is earlier goes to review as `keeps-year`; at most 200 candidate
+      recordings per work (`candidates-truncated`). 15-file sample: 3 right proposals, 2 wrong from MusicBrainz's
+      own dates (one rated high, so the row-by-row review is needed), 6 "needs MBID". Not released. The full dry
+      run: herdr-job 20261011-001830-7e3a. Stage B (rormpc view, MBID picker, views read originaldate) next;
+      stage C (video to audio through the work on download) after it.
 - [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
       something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
@@ -1590,3 +1602,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
       Options: cancel the timer and stay paused | leave it, the timer resumes at its deadline (today)
       Checked: rormpc-tools f4120da player/control.py `_pause` (2026-10-11).
+- [ ] Release years: About 166 files have no recording MBID at all ("needs MBID", class no-recording); should the
+      Years to review view list them for the picker?
+      Options: list them under a separate filter, off by default | list them with the rest | leave them out
+      Checked: rormpc-tools b758320 years.py, the stage A worker's count (2026-10-11).
+- [ ] Release years: When you pick a recording MBID for a file in the picker, should it also rewrite the file's
+      MusicBrainz recording tag (UFID, which the scrobbler sends as recording_mbid)?
+      Options: yes, the picked recording is what the file is | no, only the year's source changes
+      Checked: rormpc-tools b758320 `--mbid` changes only DATE_SOURCE (2026-10-11).
