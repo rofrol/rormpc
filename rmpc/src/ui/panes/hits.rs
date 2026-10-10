@@ -3489,6 +3489,22 @@ mod tests {
     }
 
     #[test]
+    fn a_result_written_with_n_0_and_no_top_loads_with_no_box_ticked() {
+        // `hits --json -n 0` without `--top`: "top" is null, "sets" the default chips
+        let text = r#"{"version": 1, "generated_at": "2026-10-10T12:00:00", "label": "Hits all years · x",
+            "artists": [], "args": {"period": null, "top": null, "genre": "", "artist": "", "owned": false,
+                     "rank": "billboard", "years_of": "chart", "sets": ["+billboard"], "set_names": {},
+                     "show_hidden": false, "show_excluded": false, "source": null, "sort": "plays",
+                     "open_list": null, "open_list_name": null},
+            "rows": []}"#;
+        let file: HitsFile = serde_json::from_str(text).expect("hits file");
+        let f = Filters::from_args(&file.args);
+        assert_eq!((f.tops, f.top()), ([false; 3], None));
+        let args = f.args("x.json");
+        assert!(!args.contains(&"--top".to_owned()) && args.windows(2).any(|w| w == ["-n", "0"]));
+    }
+
+    #[test]
     fn the_rules_hash_ignores_row_order_and_show_excluded_and_survives_source_json() {
         let mut a = Filters::default();
         a.add_genres("+rock, -country");
