@@ -155,11 +155,47 @@ jobs:
       - name: rormpc_install.sh companions
         run: as-ci '~/rormpc_install.sh companions'
 
-      - name: Units are enabled and active
+      - name: Units are enabled and active, and their programs run
         run: |
           as-ci '
             systemctl --user is-enabled rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
             systemctl --user is-active rormpc-musicdb.timer rormpc-ro-listenbrainz-mpd.service rormpc-mpd-player.service
+            # is-active exits 0 when any one of the units is active (a unit restarting without its program prints
+            # "activating" and passed), and a Type=simple unit is "active" right after the fork, even when its
+            # executable is missing. Neither
+            # daemon logs at startup (the scrobbler logs from WARN up, mpd-player only errors), but both subscribe
+            # to an MPD channel once connected: rormpc (mpd-player), listenbrainz_feedback (the scrobbler). MPD
+            # emits a subscription idle event for each subscribe, so each pass waits for one and lists the channels
+            want="listenbrainz_feedback rormpc"
+            coproc IDLE { exec mpc idleloop subscription; }
+            for _ in $(seq 20); do
+              channels="$(mpc channels | sort | tr "\n" " ")"
+              [ "$channels" = "$want " ] && break
+              # delay: external deadline for a daemon to connect to MPD after its start (it takes about a second);
+              # a missing or crashing program never subscribes, and this gives up
+              read -r -t 60 -u "${IDLE[0]}" _ || break
+            done
+            kill "$IDLE_PID" || true
+            echo "MPD channels: $channels"
+            [ "$channels" = "$want " ] || { echo "a daemon never subscribed to its MPD channel" >&2; exit 1; }
+            # and the subscribers are the units main processes, running the installed programs
+            tools="$(uv tool dir --bin)"
+            check_main() {  # UNIT EXPECTED: MainPID > 0 and EXPECTED is its executable or its script argument
+              local pid; pid="$(systemctl --user show -p MainPID --value "$1")"
+              [ "$pid" -gt 0 ] || { echo "$1: no main process" >&2; return 1; }
+              local exe; exe="$(readlink "/proc/$pid/exe")"
+              local cmd; cmd="$(tr "\0" " " < "/proc/$pid/cmdline")"
+              echo "$1: pid $pid exe $exe cmdline $cmd"
+              [ "$exe" = "$2" ] || case " $cmd" in *" $2 "*) ;; *) echo "$1 does not run $2" >&2; return 1 ;; esac
+            }
+            check_main rormpc-ro-listenbrainz-mpd.service ~/.cargo/bin/ro-listenbrainz-mpd
+            # a uv tool script: the venv python runs it
+            check_main rormpc-mpd-player.service "$tools/mpd-player"
+            # the hourly musicdb is a oneshot: its ExecStart binary exists and runs
+            exec_path="$(systemctl --user show -p ExecStart --value rormpc-musicdb.service | sed -n "s/^{ path=\([^ ;]*\) ;.*/\1/p")"
+            echo "musicdb ExecStart: $exec_path"
+            [ "$exec_path" = "$tools/musicdb" ]
+            "$exec_path" --version
           '
 
       - name: The scrobbler counts a listen without crashing
