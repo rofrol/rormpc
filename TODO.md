@@ -482,6 +482,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
       MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
       bug signal"); live tests with the media key on the user's MPD go to "Needs a decision" first.
+- [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
+      models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
+      the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
+      offers (a playlist, a track history API, a stream with metadata), consults the models, and builds it as a
+      Live playlists source if it fits (the same review, accept/reject, deleted-song blocks); open choices go to
+      "Needs a decision".
+      Moved up 2026-10-10: "radio next" (right after the item in progress).
 - [ ] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
       2000. Investigate with the models. A repair plan for the whole library?"): a worker finds where 2000 comes from
       for that song (file tags: date vs originaldate, a compilation's date, MusicBrainz release vs recording first
@@ -525,12 +532,6 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       forecast always aims at 10 playable songs, those of the next round marked "next round" and nothing marked
       heard by planning; the reason shown when fewer ("4 ahead; 12 resting"); rest relaxed on a small source to the
       least recently played eligible song, shown as relaxed.
-- [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
-      models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
-      the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
-      offers (a playlist, a track history API, a stream with metadata), consults the models, and builds it as a
-      Live playlists source if it fits (the same review, accept/reject, deleted-song blocks); open choices go to
-      "Needs a decision".
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
