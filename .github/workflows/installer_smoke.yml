@@ -220,8 +220,8 @@ jobs:
 
       - name: musicdb update runs without a crash
         run: |
-          # failed network steps (no ListenBrainz user configured) are reported and make it exit 1; a traceback
-          # is a bug
+          # failed network steps (the fake api_url from the scrobbler config refuses the connection) are reported
+          # and make it exit 1; a traceback is a bug
           as-ci 'systemctl --user start rormpc-musicdb.service' || true
           # its output, and the user manager's messages about it (a failed start: 203/EXEC)
           sudo journalctl --no-pager _SYSTEMD_USER_UNIT=rormpc-musicdb.service + USER_UNIT=rormpc-musicdb.service | tee musicdb.log
