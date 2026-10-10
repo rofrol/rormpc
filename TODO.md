@@ -441,9 +441,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       view end at the forecast; a `/` match outside it shows after the forecast as a "·" row ("N · in the pool, not
       in the forecast") with Play now / Play next, pin/exclude and delete; J/K do not move it. `/` in the TUI was
       checked by a unit test only.
-- [ ] Release rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab download
+- [x] Release rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab download
       column, Hits ⌫ rows, scope-menu cursor, weighted view without unplanned rows) after the weighted-mode change
       (decided 2026-10-10; the coordinator does it).
+      Done 2026-10-10: v0.2.41 tagged and pushed (tests green), installer 1372bce, companions and rormpc 1372bce
+      installed and pushed; the config loads; `musicdb deletions` works. Restart rormpc.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
