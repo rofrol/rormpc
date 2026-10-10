@@ -463,13 +463,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Incident: the dotfiles commit used ShowPlay(Deleted), which the installed rormpc did not know, so your config
       failed to load ("Unexpected variant named `Deleted`") until the coordinator installed rormpc 46c2a3a minutes
       later (running instances were not affected). Lesson queued for AGENTS.md.
-- [ ] Remove the Up next tab; its last bits move into Music (asked 2026-10-10: "not needed at all. does it duplicate
+- [x] Remove the Up next tab; its last bits move into Music (asked 2026-10-10: "not needed at all. does it duplicate
       Music? ask the models"; Sol 54478bdf and MiMo 3e4eecf6: yes, a duplicate; Music already has the ↑ rows with
       play now, J/K, Make next, remove). Missing in Music and to be added: a header row "Up next · N" between the
       playing song and the forecast in both modes, J/K/D/Make next bounded to that block (no moving a forecast row
       by accident), "Clear Up next…" (confirmed) on it, the rejected-play error in Music's footer even when no
       request row is left, a key to jump to the block (gu). The Up next tab leaves the default tabs and your config;
       the pane stays loadable.
+      Done in ce83924 (worker; cargo test 1035; on a scratch MPD), installed, then dotfiles f6a62a4 (the coordinator, after
+      the install): "Up next · N" header in both modes, J/K/D/Make next bounded to the requests, "Clear Up next (N)…"
+      on the header (Enter, menu, D), the rejected-play error in Music's footer, 2 and gu = ShowPlay(UpNext); "New
+      round" moved from the Up next tab's menu to Music's song and header menus.
 - [ ] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only
       together with the install of a rormpc that knows it (the coordinator installs, then commits the config), never
       ahead of it (2026-10-10: ShowPlay(Deleted) broke loading the config until the install).
