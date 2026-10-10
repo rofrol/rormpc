@@ -509,6 +509,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       2026-10-10 16:15:05 listen was never deleted on LB (imported back hourly), back into the YouTube playlist
       (appended), download allowed again. Open choices in "Needs a decision".
 
+- [ ] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
+      with a screenshot: "error. to the TODO"): Music, Hits 1980-1989 top 1-10% "(modified)", weighted, round done,
+      the queue left with 2 songs. Likely a file in the result that is no longer in MPD's database (e.g. a song
+      deleted today, still in hits' cache or current.json) aborts the whole add; the screenshot was taken with the
+      old rormpc 1372bce still running. A worker reproduces it on a scratch MPD and makes Apply/Play skip files MPD
+      does not know (reported in the status, never an empty or half-replaced queue), and checks hits marks such rows
+      as not owned.
+      Cause (coordinator, 2026-10-10): preview.json was computed at 15:30; between 15:55 and 16:31 the user deleted
+      Bette Davis Eyes, Look Away, Physical, Call Me, Faith and I Want to Know What Love Is with Ctrl-x; Apply added
+      the stale preview's files, 7 of its 16 no longer exist, MPD refused `add`, and the queue was left with 2 songs,
+      so the weighted shuffle drew only from those 2 ("only picks from two songs all the time"). Also: Apply must
+      recompute (or re-check) a preview older than the library's last change instead of trusting it.
 - [ ] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
@@ -567,13 +579,6 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rormpc_install.sh companions, replacing mpd-now-playable (its docs and the user's LaunchAgent removed after the
       switch). A worker plans it first with the models (macOS Now Playing from Python: PyObjC MediaPlayer or a small
       helper; MPRIS via D-Bus), open choices to "Needs a decision"; live key tests are the user's.
-- [ ] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
-      with a screenshot: "error. to the TODO"): Music, Hits 1980-1989 top 1-10% "(modified)", weighted, round done,
-      the queue left with 2 songs. Likely a file in the result that is no longer in MPD's database (e.g. a song
-      deleted today, still in hits' cache or current.json) aborts the whole add; the screenshot was taken with the
-      old rormpc 1372bce still running. A worker reproduces it on a scratch MPD and makes Apply/Play skip files MPD
-      does not know (reported in the status, never an empty or half-replaced queue), and checks hits marks such rows
-      as not owned.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
