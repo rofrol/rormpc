@@ -333,7 +333,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in rormpc-tools 682387b, rormpc 376ec64 (worker; a new test fails on the old score for release, chart and
       rediscover): my plays and rediscover count plays without the shuffle's own picks; the Plays column still
       counts every play; "not lately" (days since the last play) is unchanged. Not released.
-- [ ] Install hints (asked 2026-10-10: "a line with the brew or apt install command instead of a traceback - hmm.
+- [x] Install hints (asked 2026-10-10: "a line with the brew or apt install command instead of a traceback - hmm.
       odd, this hardcoding. And what about Arch, Guix, Windows? I don't know myself. Ask the models."): decide after
       a consult round how rormpc-tools and the installer name a missing program (ffmpeg, yt-dlp, fpcalc, mpc) on
       macOS, Debian/Ubuntu, Arch, Guix and Windows, then change it.
@@ -348,6 +348,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Decided by the user 2026-10-10: always a generic line ("<program> not found on PATH; <what stops working>")
       plus a link to one per-manager table in the docs (brew, apt, pacman, guix incl. the home.scm line; Windows
       unsupported); no OS detection; the installer says Shepherd is not supported.
+      Done in rormpc-tools ca3e150, rormpc ded2e43 (worker; pytest 345): one generic line + link to the README's
+      "Dependencies" table (brew, apt, pacman, guix with the home.scm note; Windows unsupported); optional programs
+      say what stops working, once per run; `companions` stops on Linux without a systemd user session and names
+      Shepherd as unsupported. Unverified package names are footnoted (rsgain on Arch/Guix, fpcalc in Guix's
+      chromaprint); the coordinator doubts Guix's "mpclient" for mpc (Guix may call it mpd-mpc): check on the
+      Guix machine. Not released.
 - [ ] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
       browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
       the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
