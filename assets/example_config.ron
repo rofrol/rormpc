@@ -66,13 +66,20 @@
             "<S-Tab>":    PreviousTab,
             "gT":         PreviousTab,
             "1":          SwitchToTab("Play"),
+            "2":          SwitchToTab("Up next"),
+            "3":          SwitchToTab("Search"),
             "gu":         SwitchToTab("Up next"),
-            "3":          SwitchToTab("Directories"),
-            "4":          SwitchToTab("Artists"),
-            "5":          SwitchToTab("Album Artists"),
-            "6":          SwitchToTab("Albums"),
-            "7":          SwitchToTab("Playlists"),
-            "8":          SwitchToTab("Search"),
+            "gv":         SwitchToTab("Versions"),
+            "gd":         SwitchToTab("Deleted"),
+            "gy":         SwitchToTab("Lyrics"),
+            // rormpc: the browsing tabs live in Play's Browse (B in Play); their digits open it on a grouping
+            "5":          ShowPlay(Browse(Folders)),
+            "6":          ShowPlay(Browse(Artists)),
+            "7":          ShowPlay(Browse(AlbumArtists)),
+            "8":          ShowPlay(Browse(Albums)),
+            "9":          ShowPlay(Browse(Lists)),
+            "0":          ShowPlay(Live), // the Live playlists inbox, a panel over Play
+            "gl":         ShowPlay(Live),
             "u":          Update,
             "U":          Rescan,
             "R":          AddRandom,
@@ -131,6 +138,8 @@
                               ("Artist - Title", (content: Metadata([(kind: Property(Artist)), (kind: Text(" - ")), (kind: Property(Title))]), all: false)),
                           ])),
             "y":          CopyToClipboard(kind: Content(content: DisplayedValue, all : false)),
+            "P":          PlayReplace, // rormpc: Play's Browse plays the selection in its order, replacing the queue
+            "t":          PlayNext, // rormpc: the selection goes into Up next
         },
         queue: {
             "d":          Delete,
@@ -143,6 +152,9 @@
             "-":          ExcludeSong,
             "S":          SaveSmartList, // rormpc: Play's filters as a smart list
             "L":          SmartLists, // rormpc: Play's list picker (smart lists, previous sources, playlists)
+            "B":          ToggleBrowse, // rormpc: Play's left column, Filters or Browse
+            "[":          PreviousGrouping, // rormpc: Browse's grouping (Artists, Album artists, Albums, Folders, Lists)
+            "]":          NextGrouping,
             "M":          SelectAlbum(),
             "X":          Shuffle,
         },
@@ -183,56 +195,6 @@
             ),
         ),
         (
-            name: "Directories",
-            borders: "ALL",
-            border_symbols: Rounded,
-            pane: Split(
-                size: "100%",
-                direction: Vertical,
-                panes: [(pane: Pane(Directories), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            )
-        ),
-        (
-            name: "Artists",
-            borders: "ALL",
-            border_symbols: Rounded,
-            pane: Split(
-                size: "100%",
-                direction: Vertical,
-                panes: [(pane: Pane(Artists), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            )
-        ),
-        (
-            name: "Album Artists",
-            borders: "ALL",
-            border_symbols: Rounded,
-            pane: Split(
-                size: "100%",
-                direction: Vertical,
-                panes: [(pane: Pane(AlbumArtists), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            )
-        ),
-        (
-            name: "Albums",
-            borders: "ALL",
-            border_symbols: Rounded,
-            pane: Split(
-                size: "100%",
-                direction: Vertical,
-                panes: [(pane: Pane(Albums), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            )
-        ),
-        (
-            name: "Playlists",
-            borders: "ALL",
-            border_symbols: Rounded,
-            pane: Split(
-                size: "100%",
-                direction: Vertical,
-                panes: [(pane: Pane(Playlists), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            )
-        ),
-        (
             name: "Search",
             borders: "ALL",
             border_symbols: Rounded,
@@ -241,6 +203,27 @@
                 direction: Vertical,
                 panes: [(pane: Pane(Search), size: "100%", borders: "ALL", border_symbols: Rounded)],
             )
+        ),
+        (
+            name: "Versions",
+            pane: Split(
+                direction: Vertical,
+                panes: [(pane: Pane(Versions()), size: "100%", borders: "ALL", border_symbols: Rounded)],
+            ),
+        ),
+        (
+            name: "Deleted",
+            pane: Split(
+                direction: Vertical,
+                panes: [(pane: Pane(Deleted()), size: "100%", borders: "ALL", border_symbols: Rounded)],
+            ),
+        ),
+        (
+            name: "Lyrics",
+            pane: Split(
+                direction: Vertical,
+                panes: [(pane: Pane(Lyrics), size: "100%", borders: "ALL", border_symbols: Rounded)],
+            ),
         ),
     ],
 )

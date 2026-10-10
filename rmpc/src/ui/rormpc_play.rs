@@ -8,18 +8,36 @@
 //! - It asks first only when the source kind changes or more than a quarter of the queue would go.
 //! - The counts and the confirmation are judged on MPD's queue at that moment; the replace carries that queue's
 //!   `playlist` version and refuses ("the queue changed, preview again") when MPD's differs. No retry, no delay.
+//! - Browse's `P` (phase 3b) replaces the queue with an album, folder, artist or list in its order under the same
+//!   confirmation rule, and starts it at once.
+//! - `ShowPlay` (5-9, 0, gl) leaves the view it asks for here; Play takes it on its next render.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Mutex};
 
 use crate::{
+    config::tabs::PlayView,
     ctx::Ctx,
     shared::macros::modal,
     ui::{
         modals::confirm_modal::{Action, ConfirmModal},
         panes::hits::PreviewInfo,
-        rormpc_upnext::{self, HitsSource},
+        rormpc_upnext::{self, Collection, HitsSource},
     },
 };
+
+static VIEW_REQUEST: Mutex<Option<PlayView>> = Mutex::new(None);
+
+/// `ShowPlay`: what the Play pane shows next (taken by `take_view` on its render).
+pub fn request_view(view: PlayView) {
+    if let Ok(mut v) = VIEW_REQUEST.lock() {
+        *v = Some(view);
+    }
+}
+
+/// The view `ShowPlay` asked for, once.
+pub fn take_view() -> Option<PlayView> {
+    VIEW_REQUEST.lock().ok().and_then(|mut v| v.take())
+}
 
 /// Where Play's `hits` runs write their result.
 pub const PREVIEW_FILE: &str = "~/.cache/rormpc/hits/preview.json";
@@ -50,19 +68,37 @@ pub fn confirm_reason(
     up_next: &[u32],
     files: &HashSet<&str>,
 ) -> Option<String> {
+    confirm_reason_for("hits", current_kind, queue, playing, up_next, files)
+}
+
+/// Apply's rule for any new source kind (Browse's `P`: "album", "directory", ...): ask only when the kind
+/// changes or more than a quarter of the queue would go.
+pub fn confirm_reason_for(
+    new_kind: &str,
+    current_kind: Option<&str>,
+    queue: &[Entry<'_>],
+    playing: Option<u32>,
+    up_next: &[u32],
+    files: &HashSet<&str>,
+) -> Option<String> {
     let rest: Vec<&Entry<'_>> =
         queue.iter().filter(|e| Some(e.id) != playing && !up_next.contains(&e.id)).collect();
     if rest.is_empty() {
         return None;
     }
-    if current_kind != Some("hits") {
+    if current_kind != Some(new_kind) {
         let what = match current_kind {
             Some("library") => "the whole library".to_owned(),
             Some("playlist") => "a playlist".to_owned(),
-            Some(kind) => format!("a {kind} source"),
+            Some("hits") => "a Hits result".to_owned(),
+            Some(kind) => format!("{} source", with_article(rormpc_upnext::kind_label(kind))),
             None => "songs from no known source".to_owned(),
         };
-        return Some(format!("The queue holds {what} ({} songs); Apply makes it a Hits result.", rest.len()));
+        let makes = match new_kind {
+            "hits" => "Apply makes it a Hits result".to_owned(),
+            kind => format!("P makes it {}", with_article(rormpc_upnext::kind_label(kind))),
+        };
+        return Some(format!("The queue holds {what} ({} songs); {makes}.", rest.len()));
     }
     let gone = rest.iter().filter(|e| !files.contains(e.file)).count();
     (gone * 4 > rest.len()).then(|| format!("{gone} of the {} songs in the queue would go.", rest.len()))
@@ -126,6 +162,50 @@ pub fn apply(ctx: &Ctx, src: HitsSource) {
     );
 }
 
+/// "an album", "a folder".
+fn with_article(word: &str) -> String {
+    let an = word.starts_with(['a', 'e', 'i', 'o', 'u']);
+    format!("{} {word}", if an { "an" } else { "a" })
+}
+
+/// Browse's `P`: replace the queue with `col` and start it now, asking first under Apply's rule. The queue
+/// version is the one the decision was made on: the replace refuses if MPD's queue moved since.
+pub fn play_collection(ctx: &Ctx, col: Collection) {
+    if col.files.is_empty() {
+        return crate::shared::macros::status_info!("Nothing to play here");
+    }
+    let version = ctx.status.playlist;
+    let kind = rormpc_upnext::source_info().map(|(kind, _, _)| kind);
+    let entries: Vec<Entry<'_>> = ctx.queue.iter().map(|s| Entry { id: s.id, file: s.file.as_str() }).collect();
+    let files: HashSet<&str> = col.files.iter().map(String::as_str).collect();
+    let reason =
+        confirm_reason_for(&col.kind, kind.as_deref(), &entries, ctx.status.songid, &rormpc_upnext::up_next_ids(), &files);
+    let Some(reason) = reason else {
+        rormpc_upnext::play_collection(ctx, col, version);
+        return;
+    };
+    let first = col.files.get(col.start).map_or("", |f| f.rsplit('/').next().unwrap_or(f));
+    let message = vec![format!(
+        "Play {} \"{}\" ({} song{})?\n\n{reason}\nIt starts now with {first}, in its order: weighted shuffle and random go off.",
+        rormpc_upnext::kind_label(&col.kind),
+        col.name,
+        col.files.len(),
+        if col.files.len() == 1 { "" } else { "s" },
+    )];
+    let go = move |ctx: &Ctx| -> anyhow::Result<()> {
+        rormpc_upnext::play_collection(ctx, col, version);
+        Ok(())
+    };
+    modal!(
+        ctx,
+        ConfirmModal::builder()
+            .ctx(ctx)
+            .message(message)
+            .action(Action::CustomButtons { buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Play", Box::new(go))] })
+            .build()
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +255,22 @@ mod tests {
         assert!(reason.contains("the whole library"), "{reason}");
         assert!(confirm_reason(None, &q, None, &[], &files).is_some());
         assert_eq!(confirm_reason(None, &[], None, &[], &files), None);
+    }
+
+    #[test]
+    fn browse_play_uses_apply_rule_for_its_own_kind() {
+        let q = queue(&["a", "b", "c", "d"]);
+        let album: HashSet<&str> = ["x", "y"].into();
+        // a Hits queue replaced by an album: the kind changes, it asks
+        let reason = confirm_reason_for("album", Some("hits"), &q, None, &[], &album).expect("a kind change asks");
+        assert_eq!(reason, "The queue holds a Hits result (4 songs); P makes it an album.");
+        // album after album: only the share that goes counts
+        let same: HashSet<&str> = ["a", "b", "c", "x"].into();
+        assert_eq!(confirm_reason_for("album", Some("album"), &q, None, &[], &same), None);
+        assert!(confirm_reason_for("album", Some("album"), &q, None, &[], &album).is_some());
+        // a folder over a playlist names the old kind
+        let reason = confirm_reason_for("directory", Some("playlist"), &q, None, &[], &album).expect("a kind change asks");
+        assert!(reason.starts_with("The queue holds a playlist (4 songs); P makes it a folder"), "{reason}");
     }
 
     fn info(files: &[&str], matched: usize) -> PreviewInfo {

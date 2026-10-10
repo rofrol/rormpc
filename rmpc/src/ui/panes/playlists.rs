@@ -44,6 +44,8 @@ pub struct PlaylistsPane {
     stack: DirStack<DirOrSong, ListState>,
     browser: Browser<DirOrSong>,
     initialized: bool,
+    /// rormpc: where MPD replies go (`PaneType::Playlists`, or Play's Browse grouping)
+    target: PaneType,
 }
 
 const INIT: &str = "init";
@@ -52,8 +54,13 @@ const FETCH_DATA: &str = "fetch_data";
 const PLAYLIST_INFO: &str = "preview";
 
 impl PlaylistsPane {
-    pub fn new(_ctx: &Ctx) -> Self {
-        Self { stack: DirStack::default(), browser: Browser::new(), initialized: false }
+    pub fn new(ctx: &Ctx) -> Self {
+        Self::with_target(PaneType::Playlists, ctx)
+    }
+
+    /// rormpc: the same pane answering to another query target (Play's Browse owns one of its own).
+    pub fn with_target(target: PaneType, _ctx: &Ctx) -> Self {
+        Self { stack: DirStack::default(), browser: Browser::new(), initialized: false, target }
     }
 }
 
@@ -67,7 +74,7 @@ impl Pane for PlaylistsPane {
     fn before_show(&mut self, ctx: &Ctx) -> Result<()> {
         if !self.initialized {
             let compare = StringCompare::from(ctx.config.browser_song_sort.as_ref());
-            ctx.query().id(INIT).target(PaneType::Playlists).replace_id(INIT).query(
+            ctx.query().id(INIT).target(self.target.clone()).replace_id(INIT).query(
                 move |client| {
                     let result: Vec<_> = client
                         .list_playlists()
@@ -95,7 +102,7 @@ impl Pane for PlaylistsPane {
                 };
 
                 let sort_opts = ctx.config.browser_song_sort.clone();
-                ctx.query().id(id).replace_id(id).target(PaneType::Playlists).query(
+                ctx.query().id(id).replace_id(id).target(self.target.clone()).query(
                     move |client| {
                         let result: Vec<_> = client
                             .list_playlists()
@@ -330,7 +337,7 @@ impl BrowserPane<DirOrSong> for PlaylistsPane {
                 ctx.query()
                     .id(FETCH_DATA)
                     .replace_id("playlists_data")
-                    .target(PaneType::Playlists)
+                    .target(self.target.clone())
                     .query(move |client| {
                         let data = client
                             .list_playlist_info(&playlist, None)?
@@ -351,7 +358,7 @@ impl BrowserPane<DirOrSong> for PlaylistsPane {
             DirOrSong::Dir { name, .. } => {
                 let playlist = name.clone();
                 ctx.query()
-                    .target(PaneType::Playlists)
+                    .target(self.target.clone())
                     .replace_id(PLAYLIST_INFO)
                     .id(PLAYLIST_INFO)
                     .query(move |client| {

@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(not(debug_assertions))]
 #[cfg(debug_assertions)]
 use crate::config::keys::actions::CopyContentsFile;
+use crate::config::tabs::{PlayGrouping, PlayView};
 use crate::config::keys::{
     actions::{
         CopyContentFile,
@@ -104,14 +105,22 @@ impl Default for KeyConfigFile {
             (s().char('g').char('t'),             G::NextTab),
             (s().tab().shift(),                   G::PreviousTab),
             (s().char('g').char('T'),             G::PreviousTab),
+            // rormpc: the browsing tabs live in Play (plans/combined-view.md, phase 3b): their digits open Play's
+            // Browse on that grouping, 0 and gl the Live inbox
             (s().char('1'),                       G::SwitchToTab("Play".to_string())),
+            (s().char('2'),                       G::SwitchToTab("Up next".to_string())),
+            (s().char('3'),                       G::SwitchToTab("Search".to_string())),
             (s().char('g').char('u'),             G::SwitchToTab("Up next".to_string())),
-            (s().char('3'),                       G::SwitchToTab("Directories".to_string())),
-            (s().char('4'),                       G::SwitchToTab("Artists".to_string())),
-            (s().char('5'),                       G::SwitchToTab("Album Artists".to_string())),
-            (s().char('6'),                       G::SwitchToTab("Albums".to_string())),
-            (s().char('7'),                       G::SwitchToTab("Playlists".to_string())),
-            (s().char('8'),                       G::SwitchToTab("Search".to_string())),
+            (s().char('g').char('v'),             G::SwitchToTab("Versions".to_string())),
+            (s().char('g').char('d'),             G::SwitchToTab("Deleted".to_string())),
+            (s().char('g').char('y'),             G::SwitchToTab("Lyrics".to_string())),
+            (s().char('5'),                       G::ShowPlay(PlayView::Browse(PlayGrouping::Folders))),
+            (s().char('6'),                       G::ShowPlay(PlayView::Browse(PlayGrouping::Artists))),
+            (s().char('7'),                       G::ShowPlay(PlayView::Browse(PlayGrouping::AlbumArtists))),
+            (s().char('8'),                       G::ShowPlay(PlayView::Browse(PlayGrouping::Albums))),
+            (s().char('9'),                       G::ShowPlay(PlayView::Browse(PlayGrouping::Lists))),
+            (s().char('0'),                       G::ShowPlay(PlayView::Live)),
+            (s().char('g').char('l'),             G::ShowPlay(PlayView::Live)),
             (s().char('u'),                       G::Update),
             (s().char('U'),                       G::Rescan),
             (s().char('R'),                       G::AddRandom),
@@ -168,6 +177,8 @@ impl Default for KeyConfigFile {
             (s().char('s').ctrl().char('a'),      C::Save { kind: SaveKind::Modal { all: true, duplicates_strategy: DuplicateStrategy::Ask }, current: false }),
             (s().char('s').ctrl().char('c'),      C::Save { kind: SaveKind::Modal { all: false, duplicates_strategy: DuplicateStrategy::Ask }, current: true }),
             (s().char('r'),                       C::Rate { kind: RateKind::default(), current: false, min_rating: 0, max_rating: 10 }),
+            (s().char('P'),                       C::PlayReplace),
+            (s().char('t'),                       C::PlayNext),
         ]);
 
         let queue = HashMap::from([
@@ -181,6 +192,9 @@ impl Default for KeyConfigFile {
             (s().char('-'),                       Q::ExcludeSong),
             (s().char('S'),                       Q::SaveSmartList),
             (s().char('L'),                       Q::SmartLists),
+            (s().char('B'),                       Q::ToggleBrowse),
+            (s().char('['),                       Q::PreviousGrouping),
+            (s().char(']'),                       Q::NextGrouping),
             (s().char('M'),                       Q::SelectAlbum()),
             (s().char('X'),                       Q::Shuffle),
         ]);

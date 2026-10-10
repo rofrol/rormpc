@@ -4,9 +4,11 @@
 //! new tracks, accepts or rejects items, accepts every pending item, downloads the queue and cancels it. All of it
 //! runs `liveplaylist ... --json` with argv in background threads; the download worker reports progress on stderr
 //! and in its status file, and SIGTERM cancels it (the CLI queues the item again).
+//! Space marks items: accept (`a`, the menu) and reject (`D`, the menu) then act on the marked items. Play opens
+//! this pane as its Live inbox and shows `badge()` in its header.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
@@ -177,6 +179,8 @@ pub struct LivePlaylistsPane {
     subs_area: Rect,
     items_area: Rect,
     job: Arc<Mutex<Job>>,
+    /// marked items (ytids) of the selected playlist; a switch to another playlist clears them
+    marked: BTreeSet<String>,
 }
 
 fn status_path() -> PathBuf {
@@ -373,9 +377,23 @@ fn accept(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, ytids: Vec<String>) {
     command(ctx, job, args, &busy, "Accepted", true);
 }
 
-fn reject(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, ytid: String) {
-    let args = vec!["reject".to_owned(), id.to_owned(), ytid];
-    command(ctx, job, args, "Rejecting…", "Rejected: never downloaded", false);
+fn reject(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, ytids: Vec<String>) {
+    if ytids.is_empty() {
+        return;
+    }
+    let busy = format!("Rejecting {}…", ytids.len());
+    let mut args = vec!["reject".to_owned(), id.to_owned()];
+    args.extend(ytids);
+    command(ctx, job, args, &busy, "Rejected: never downloaded", false);
+}
+
+/// What accept and reject act on: the marked items in list order, else the item under the cursor.
+fn targets(items: &[Item], marked: &BTreeSet<String>, cursor: Option<&Item>) -> Vec<String> {
+    if marked.is_empty() {
+        cursor.map(|it| vec![it.ytid.clone()]).unwrap_or_default()
+    } else {
+        items.iter().filter(|it| marked.contains(&it.ytid)).map(|it| it.ytid.clone()).collect()
+    }
 }
 
 fn decision_mark(it: &Item) -> &'static str {
@@ -406,7 +424,48 @@ impl LivePlaylistsPane {
             subs_area: Rect::default(),
             items_area: Rect::default(),
             job: Arc::new(Mutex::new(Job::default())),
+            marked: BTreeSet::new(),
         }
+    }
+
+    /// Play's header badge: (items waiting for a decision, items queued or downloading while a download runs).
+    pub fn badge(&self) -> (u32, u32) {
+        let pending = self.subs.iter().map(|s| s.count("pending")).sum();
+        let running = {
+            let j = self.job.lock().expect("live playlists job lock");
+            j.worker.is_some() || j.status.as_ref().is_some_and(|st| st.running)
+        };
+        let downloads = if running {
+            self.subs.iter().map(|s| s.count("queued") + s.count("downloading")).sum::<u32>().max(1)
+        } else {
+            0
+        };
+        (pending, downloads)
+    }
+
+    /// The MPD playlists the followed playlists are written to (generated: Play's Browse shows them read-only).
+    pub fn playlist_names(&self) -> Vec<String> {
+        self.subs.iter().map(|s| s.playlist.clone()).filter(|p| !p.is_empty()).collect()
+    }
+
+    /// Take a newer listing (and load again after a command) without drawing: Play keeps its badge current
+    /// while the inbox is closed.
+    pub fn refresh(&mut self, ctx: &Ctx) {
+        let (fresh, reload) = {
+            let mut j = self.job.lock().expect("live playlists job lock");
+            (j.subs.take(), std::mem::take(&mut j.reload))
+        };
+        if reload {
+            load(&self.job, ctx);
+        }
+        if let Some(subs) = fresh {
+            self.take(subs);
+        }
+    }
+
+    /// Marks to clear (Esc clears them before it closes anything).
+    pub fn has_marks(&self) -> bool {
+        !self.marked.is_empty()
     }
 
     fn sub(&self) -> Option<&Sub> {
@@ -436,6 +495,9 @@ impl LivePlaylistsPane {
     }
 
     fn sync_items(&mut self, keep: Option<String>) {
+        if keep.is_none() {
+            self.marked.clear(); // another playlist: its marks do not carry over
+        }
         let (len, idx) = self.sub().map_or((0, None), |s| {
             (s.items.len(), keep.and_then(|y| s.items.iter().position(|it| it.ytid == y)))
         });
@@ -446,12 +508,24 @@ impl LivePlaylistsPane {
     fn open_menu(&self, ctx: &Ctx) {
         let sub = self.sub().cloned();
         let item = if self.focus == Focus::Items { self.item().cloned() } else { None };
+        let marked: Vec<String> = self.sub().map(|s| targets(&s.items, &self.marked, None)).unwrap_or_default();
         let worker = self.job.lock().expect("live playlists job lock").worker.is_some();
         let several = self.subs.len() > 1;
         let job = Arc::clone(&self.job);
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
-                if let (Some(sub), Some(it)) = (&sub, &item) {
+                if let (Some(sub), false) = (&sub, marked.is_empty()) {
+                    let (j, id, ytids) = (Arc::clone(&job), sub.id.clone(), marked.clone());
+                    section.add_item(format!("Accept marked ({})", marked.len()), move |ctx| {
+                        accept(ctx, &j, &id, ytids);
+                        Ok(())
+                    });
+                    let (j, id, ytids) = (Arc::clone(&job), sub.id.clone(), marked.clone());
+                    section.add_item(format!("Reject marked ({}, never download them)", marked.len()), move |ctx| {
+                        reject(ctx, &j, &id, ytids);
+                        Ok(())
+                    });
+                } else if let (Some(sub), Some(it)) = (&sub, &item) {
                     let label = match (it.decision.as_str(), it.job.as_deref()) {
                         (_, Some("needs_match")) => Some("Accept as it is (names only, no MBID)"),
                         (_, Some("failed")) => Some("Retry the download"),
@@ -468,7 +542,7 @@ impl LivePlaylistsPane {
                     if it.decision != "rejected" {
                         let (job, id, ytid) = (Arc::clone(&job), sub.id.clone(), it.ytid.clone());
                         section.add_item("Reject (never download it)", move |ctx| {
-                            reject(ctx, &job, &id, ytid);
+                            reject(ctx, &job, &id, vec![ytid]);
                             Ok(())
                         });
                     }
@@ -545,9 +619,14 @@ impl LivePlaylistsPane {
             )
         } else if self.subs.is_empty() {
             Span::styled(" No live playlists yet: Enter → Add a playlist URL…", dim)
+        } else if !self.marked.is_empty() {
+            Span::styled(format!(" {} marked · a accept · D reject · Esc clears the marks", self.marked.len()), dim)
         } else {
             let pending = self.subs.iter().map(|s| s.count("pending")).sum::<u32>();
-            Span::styled(format!(" {} playlists · {pending} items to review · Enter: menu", self.subs.len()), dim)
+            Span::styled(
+                format!(" {} playlists · {pending} items to review · Space marks · Enter: menu", self.subs.len()),
+                dim,
+            )
         };
         drop(j);
         let key = ctx.config.theme.preview_label_style;
@@ -586,20 +665,11 @@ impl LivePlaylistsPane {
 
 impl Pane for LivePlaylistsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        let (fresh, reload) = {
-            let mut j = self.job.lock().expect("live playlists job lock");
-            (j.subs.take(), std::mem::take(&mut j.reload))
-        };
-        if reload {
-            load(&self.job, ctx);
-        }
         let [main, footer] = Layout::vertical([Constraint::Min(3), Constraint::Length(2)]).areas(area);
         let [subs_area, items_area] =
             Layout::horizontal([Constraint::Percentage(30), Constraint::Min(30)]).spacing(2).areas(main);
         (self.subs_area, self.items_area) = (subs_area, items_area);
-        if let Some(subs) = fresh {
-            self.take(subs);
-        }
+        self.refresh(ctx);
         self.sub_state.set_content_and_viewport_len(self.subs.len(), subs_area.height.saturating_sub(1).into());
         let item_len = self.sub().map_or(0, |s| s.items.len());
         self.item_state.set_content_and_viewport_len(item_len, items_area.height.saturating_sub(1).into());
@@ -630,7 +700,7 @@ impl Pane for LivePlaylistsPane {
         let rows = items.iter().map(|it| {
             let name = if it.channel.is_empty() { it.title.clone() } else { format!("{}  · {}", it.title, it.channel) };
             Row::new(vec![
-                Cell::from(decision_mark(it)),
+                Cell::from(if self.marked.contains(&it.ytid) { "●" } else { decision_mark(it) }),
                 Cell::from(if it.active { job_label(it) } else { "gone upstream".to_owned() }),
                 Cell::from(name),
             ])
@@ -718,16 +788,28 @@ impl Pane for LivePlaylistsPane {
                     accept(ctx, &self.job, &sub.id, sub.pending());
                 }
             }
-            CommonAction::AddOptions { kind: AddKind::Action(_) } if self.focus == Focus::Items => {
-                if let (Some(sub), Some(it)) = (self.sub(), self.item()) {
-                    accept(ctx, &self.job, &sub.id, vec![it.ytid.clone()]);
+            CommonAction::AddOptions { kind: AddKind::Action(_) } if self.focus == Focus::Items || self.has_marks() => {
+                if let Some(sub) = self.sub() {
+                    accept(ctx, &self.job, &sub.id, targets(&sub.items, &self.marked, self.item()));
                 }
+                self.marked.clear();
             }
-            CommonAction::Delete if self.focus == Focus::Items => {
-                if let (Some(sub), Some(it)) = (self.sub(), self.item()) {
-                    reject(ctx, &self.job, &sub.id, it.ytid.clone());
+            CommonAction::Delete if self.focus == Focus::Items || self.has_marks() => {
+                if let Some(sub) = self.sub() {
+                    reject(ctx, &self.job, &sub.id, targets(&sub.items, &self.marked, self.item()));
                 }
+                self.marked.clear();
             }
+            // Space marks the item under the cursor (Items) and moves on
+            CommonAction::Select if self.focus == Focus::Items => {
+                if let Some(ytid) = self.item().map(|it| it.ytid.clone())
+                    && !self.marked.remove(&ytid)
+                {
+                    self.marked.insert(ytid);
+                }
+                self.item_state.next(scrolloff, false);
+            }
+            CommonAction::Close if self.has_marks() => self.marked.clear(),
             CommonAction::Confirm | CommonAction::ContextMenu => {
                 if self.subs.is_empty() {
                     add_url(ctx, &self.job);
@@ -776,6 +858,11 @@ mod tests {
         assert_eq!(job_label(&sub.items[0]), "to review");
         assert_eq!(job_label(&sub.items[1]), "needs match");
         assert_eq!(sub.items[1].review.as_ref().map(|r| r.title.as_str()), Some("Y"));
+        // accept / reject act on the marked items in list order, else on the cursor item
+        let marked: BTreeSet<String> = ["bbbbbbbbbb2".to_owned(), "aaaaaaaaaa1".to_owned()].into();
+        assert_eq!(targets(&sub.items, &marked, None), vec!["aaaaaaaaaa1".to_owned(), "bbbbbbbbbb2".to_owned()]);
+        assert_eq!(targets(&sub.items, &BTreeSet::new(), sub.items.get(1)), vec!["bbbbbbbbbb2".to_owned()]);
+        assert!(targets(&sub.items, &BTreeSet::new(), None).is_empty());
     }
 
     #[test]
