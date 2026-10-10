@@ -1,4 +1,5 @@
-//! rormpc: Live playlists pane. Public playlists followed by `liveplaylist` (rormpc-tools): left the
+//! rormpc: Live playlists pane. Public playlists (`YouTube`, Omarchy Radio) followed by `liveplaylist`
+//! (rormpc-tools): left the
 //! subscriptions, right the selected one's items with their decision (pending / accepted / rejected) and job
 //! (queued / downloading / needs match / ready / failed). The context menu (Enter) adds a playlist URL, checks for
 //! new tracks, accepts or rejects items, accepts every pending item, downloads the queue and cancels it. All of it
@@ -47,11 +48,22 @@ const LIVEPLAYLIST: &str = "liveplaylist";
 
 #[derive(Debug, Clone, Deserialize)]
 struct Item {
-    ytid: String,
+    /// the item's key in its playlist: a `YouTube` video id, an Omarchy Radio file name or URL
+    #[serde(default)]
+    key: String,
+    /// older `liveplaylist` versions name `YouTube` items only by this
+    #[serde(default)]
+    ytid: Option<String>,
     #[serde(default)]
     title: String,
     #[serde(default)]
     channel: String,
+    /// a radio track's artist (`YouTube` items have the channel)
+    #[serde(default)]
+    artist: String,
+    /// where the item comes from (the video, the MP3)
+    #[serde(default)]
+    url: Option<String>,
     decision: String,
     #[serde(default)]
     job: Option<String>,
@@ -65,6 +77,16 @@ struct Item {
     error: Option<String>,
     #[serde(default)]
     review: Option<Review>,
+}
+
+impl Item {
+    fn key(&self) -> &str {
+        if self.key.is_empty() { self.ytid.as_deref().unwrap_or_default() } else { &self.key }
+    }
+
+    fn source_url(&self) -> String {
+        self.url.clone().unwrap_or_else(|| format!("https://www.youtube.com/watch?v={}", self.key()))
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -110,7 +132,7 @@ impl Sub {
     }
 
     fn pending(&self) -> Vec<String> {
-        self.items.iter().filter(|it| it.active && it.decision == "pending").map(|it| it.ytid.clone()).collect()
+        self.items.iter().filter(|it| it.active && it.decision == "pending").map(|it| it.key().to_owned()).collect()
     }
 }
 
@@ -179,7 +201,7 @@ pub struct LivePlaylistsPane {
     subs_area: Rect,
     items_area: Rect,
     job: Arc<Mutex<Job>>,
-    /// marked items (ytids) of the selected playlist; a switch to another playlist clears them
+    /// marked items (keys) of the selected playlist; a switch to another playlist clears them
     marked: BTreeSet<String>,
 }
 
@@ -352,7 +374,7 @@ fn add_url(ctx: &Ctx, job: &Arc<Mutex<Job>>) {
         ctx,
         InputModal::new(ctx)
             .title("Live playlist")
-            .input_label("Public YouTube playlist URL:")
+            .input_label("Public YouTube playlist or radio.omarchy.org URL:")
             .confirm_label("Add")
             .on_confirm(move |ctx, value| {
                 let url = value.trim().to_owned();
@@ -366,33 +388,33 @@ fn add_url(ctx: &Ctx, job: &Arc<Mutex<Job>>) {
 }
 
 /// Accept items (queue only), then start the worker unless one runs.
-fn accept(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, ytids: Vec<String>) {
-    if ytids.is_empty() {
+fn accept(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, keys: Vec<String>) {
+    if keys.is_empty() {
         return;
     }
-    let busy = format!("Accepting {}…", ytids.len());
+    let busy = format!("Accepting {}…", keys.len());
     let mut args = vec!["accept".to_owned(), id.to_owned()];
-    args.extend(ytids);
+    args.extend(keys);
     args.push("--no-download".to_owned());
     command(ctx, job, args, &busy, "Accepted", true);
 }
 
-fn reject(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, ytids: Vec<String>) {
-    if ytids.is_empty() {
+fn reject(ctx: &Ctx, job: &Arc<Mutex<Job>>, id: &str, keys: Vec<String>) {
+    if keys.is_empty() {
         return;
     }
-    let busy = format!("Rejecting {}…", ytids.len());
+    let busy = format!("Rejecting {}…", keys.len());
     let mut args = vec!["reject".to_owned(), id.to_owned()];
-    args.extend(ytids);
+    args.extend(keys);
     command(ctx, job, args, &busy, "Rejected: never downloaded", false);
 }
 
 /// What accept and reject act on: the marked items in list order, else the item under the cursor.
 fn targets(items: &[Item], marked: &BTreeSet<String>, cursor: Option<&Item>) -> Vec<String> {
     if marked.is_empty() {
-        cursor.map(|it| vec![it.ytid.clone()]).unwrap_or_default()
+        cursor.map(|it| vec![it.key().to_owned()]).unwrap_or_default()
     } else {
-        items.iter().filter(|it| marked.contains(&it.ytid)).map(|it| it.ytid.clone()).collect()
+        items.iter().filter(|it| marked.contains(it.key())).map(|it| it.key().to_owned()).collect()
     }
 }
 
@@ -486,7 +508,7 @@ impl LivePlaylistsPane {
     /// Take a newer listing, keeping the selected subscription and item by id.
     fn take(&mut self, subs: Vec<Sub>) {
         let keep_sub = self.sub().map(|s| s.id.clone());
-        let keep_item = self.item().map(|it| it.ytid.clone());
+        let keep_item = self.item().map(|it| it.key().to_owned());
         self.subs = subs;
         let si = keep_sub.and_then(|id| self.subs.iter().position(|s| s.id == id)).unwrap_or(0);
         self.sub_state.set_content_and_viewport_len(self.subs.len(), self.subs_area.height.saturating_sub(1).into());
@@ -499,7 +521,7 @@ impl LivePlaylistsPane {
             self.marked.clear(); // another playlist: its marks do not carry over
         }
         let (len, idx) = self.sub().map_or((0, None), |s| {
-            (s.items.len(), keep.and_then(|y| s.items.iter().position(|it| it.ytid == y)))
+            (s.items.len(), keep.and_then(|y| s.items.iter().position(|it| it.key() == y)))
         });
         self.item_state.set_content_and_viewport_len(len, self.items_area.height.saturating_sub(1).into());
         self.item_state.select((len > 0).then_some(idx.unwrap_or(0)), 0);
@@ -515,14 +537,14 @@ impl LivePlaylistsPane {
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
                 if let (Some(sub), false) = (&sub, marked.is_empty()) {
-                    let (j, id, ytids) = (Arc::clone(&job), sub.id.clone(), marked.clone());
+                    let (j, id, keys) = (Arc::clone(&job), sub.id.clone(), marked.clone());
                     section.add_item(format!("Accept marked ({})", marked.len()), move |ctx| {
-                        accept(ctx, &j, &id, ytids);
+                        accept(ctx, &j, &id, keys);
                         Ok(())
                     });
-                    let (j, id, ytids) = (Arc::clone(&job), sub.id.clone(), marked.clone());
+                    let (j, id, keys) = (Arc::clone(&job), sub.id.clone(), marked.clone());
                     section.add_item(format!("Reject marked ({}, never download them)", marked.len()), move |ctx| {
-                        reject(ctx, &j, &id, ytids);
+                        reject(ctx, &j, &id, keys);
                         Ok(())
                     });
                 } else if let (Some(sub), Some(it)) = (&sub, &item) {
@@ -535,16 +557,16 @@ impl LivePlaylistsPane {
                         _ => None,
                     };
                     if let Some(label) = label {
-                        let (job, id, ytid) = (Arc::clone(&job), sub.id.clone(), it.ytid.clone());
+                        let (job, id, key) = (Arc::clone(&job), sub.id.clone(), it.key().to_owned());
                         section.add_item(label, move |ctx| {
-                            accept(ctx, &job, &id, vec![ytid]);
+                            accept(ctx, &job, &id, vec![key]);
                             Ok(())
                         });
                     }
                     if it.decision != "rejected" {
-                        let (job, id, ytid) = (Arc::clone(&job), sub.id.clone(), it.ytid.clone());
+                        let (job, id, key) = (Arc::clone(&job), sub.id.clone(), it.key().to_owned());
                         section.add_item("Reject (never download it)", move |ctx| {
-                            reject(ctx, &job, &id, vec![ytid]);
+                            reject(ctx, &job, &id, vec![key]);
                             Ok(())
                         });
                     }
@@ -642,7 +664,7 @@ impl LivePlaylistsPane {
                 } else if let Some(path) = &it.path {
                     ("File", path.clone())
                 } else {
-                    ("Video", format!("https://www.youtube.com/watch?v={}", it.ytid))
+                    ("Source", it.source_url())
                 };
                 Line::from(vec![Span::styled(format!(" {label}: "), key), Span::raw(text)])
             }
@@ -700,9 +722,10 @@ impl Pane for LivePlaylistsPane {
 
         let items = self.sub().map(|s| s.items.clone()).unwrap_or_default();
         let rows = items.iter().map(|it| {
-            let name = if it.channel.is_empty() { it.title.clone() } else { format!("{}  · {}", it.title, it.channel) };
+            let by = if it.artist.is_empty() { &it.channel } else { &it.artist };
+            let name = if by.is_empty() { it.title.clone() } else { format!("{}  · {by}", it.title) };
             Row::new(vec![
-                Cell::from(if self.marked.contains(&it.ytid) { "●" } else { decision_mark(it) }),
+                Cell::from(if self.marked.contains(it.key()) { "●" } else { decision_mark(it) }),
                 Cell::from(if it.active { job_label(it) } else { "gone upstream".to_owned() }),
                 Cell::from(name),
             ])
@@ -804,10 +827,10 @@ impl Pane for LivePlaylistsPane {
             }
             // Space marks the item under the cursor (Items) and moves on
             CommonAction::Select if self.focus == Focus::Items => {
-                if let Some(ytid) = self.item().map(|it| it.ytid.clone())
-                    && !self.marked.remove(&ytid)
+                if let Some(key) = self.item().map(|it| it.key().to_owned())
+                    && !self.marked.remove(&key)
                 {
-                    self.marked.insert(ytid);
+                    self.marked.insert(key);
                 }
                 self.item_state.next(scrolloff, false);
             }
@@ -836,7 +859,8 @@ impl Pane for LivePlaylistsPane {
 mod tests {
     use super::*;
 
-    /// The shape `liveplaylist list --json` prints (rormpc-tools tests/test_liveplaylist.py::test_list_json_shape).
+    /// The shape `liveplaylist list --json` printed before items had a "key" (rormpc-tools
+    /// `tests/test_liveplaylist.py::test_list_json_shape`): the video id is the key.
     #[test]
     fn parses_the_list_json() {
         let json = r#"{"subscriptions": [{"schema": 1, "id": "yt-PLx", "kind": "youtube", "url": "u", "title": "T",
@@ -865,6 +889,30 @@ mod tests {
         assert_eq!(targets(&sub.items, &marked, None), vec!["aaaaaaaaaa1".to_owned(), "bbbbbbbbbb2".to_owned()]);
         assert_eq!(targets(&sub.items, &BTreeSet::new(), sub.items.get(1)), vec!["bbbbbbbbbb2".to_owned()]);
         assert!(targets(&sub.items, &BTreeSet::new(), None).is_empty());
+    }
+
+    /// An Omarchy Radio subscription (rormpc-tools `tests/test_liveplaylist_radio.py`): items keyed by file name, an
+    /// artist instead of a channel, the MP3's URL, no video id.
+    #[test]
+    fn parses_a_radio_listing() {
+        let json = r#"{"subscriptions": [{"schema": 1, "id": "omarchy-radio", "kind": "omarchy",
+            "url": "https://radio.omarchy.org/tracks/playlist.json", "title": "Omarchy Radio",
+            "playlist": "Omarchy Radio", "counts": {"pending": 1},
+            "items": [
+              {"key": "michel-krapf-still-licensed.mp3", "ytid": null, "title": "Still Licensed",
+               "artist": "Michel Krapf", "url": "https://radio.omarchy.org/tracks/michel-krapf-still-licensed.mp3",
+               "album": null, "explicit": false, "decision": "pending", "job": null, "path": null, "active": true,
+               "position": 0, "deleted": null},
+              {"key": "aaaaaaaaaa1", "ytid": "aaaaaaaaaa1", "title": "A", "channel": "C", "decision": "accepted",
+               "url": "https://www.youtube.com/watch?v=aaaaaaaaaa1", "active": true}
+            ]}], "status": null}"#;
+        let listing: Listing = serde_json::from_str(json).expect("list --json");
+        let sub = &listing.subscriptions[0];
+        assert_eq!(sub.pending(), vec!["michel-krapf-still-licensed.mp3".to_owned()]);
+        assert_eq!(sub.items[0].artist, "Michel Krapf");
+        assert_eq!(sub.items[0].source_url(), "https://radio.omarchy.org/tracks/michel-krapf-still-licensed.mp3");
+        assert_eq!(sub.items[1].key(), "aaaaaaaaaa1");
+        assert_eq!(targets(&sub.items, &BTreeSet::new(), sub.items.first()), vec!["michel-krapf-still-licensed.mp3"]);
     }
 
     #[test]
