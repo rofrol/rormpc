@@ -747,6 +747,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       alternative to the work's same-length audio recording (years.audio_for, the same cache, 1 req/s), evidence in
       row["swap"] (from, to, rule, why), method ends ">work"; a failed lookup keeps the match. Not released. The
       MBID picker (stage B2) waits for its two decisions.
+      Full dry run 2026-10-11 (herdr-job 20261011-001830-7e3a, nothing written): 517 rows in
+      music-data/years-report.json: 59 high and 67 review proposals, 391 without one; 352 need an MBID (165
+      no-recording, 187 no-work); classes: video 51, dj-mix 27, version 21, rg-earlier 21, later 14, undated 21.
+      Sweet Dreams (row 348) 2000 → 1983 high, Livin' on a Prayer (row 362) 1988 → 1986 high. Ready for the
+      user's review in `gY`.
 - [x] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch
       proposal, so a swapped download shows from → to and why (found by the stage C worker 2026-10-11; today only
       the ">work" method suffix shows; logging only, one revert).
