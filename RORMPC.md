@@ -92,7 +92,7 @@ config; Up next stays its own tab. A header line always says what plays and how:
   column is collapsed to one line naming the source's rules (`Source: Billboard ∩ 1980-1989 ∩ Top 1-10%`); `h` or a
   click on it opens the column, `l` (or Esc without a preview) closes it again.
 - **Weighted mode** (`w`, ToggleWeightedShuffle, now also in the default keys): the table is the plan projection of
-  the Queue plan view (past plays, `0 ▶`, `↑n` requests, the forecast, then the unplanned rest), and the filter
+  the Queue plan view (past plays, `0 ▶`, `↑n` requests and the forecast, nothing after it), and the filter
   column stays open. `o` does nothing here: the table follows `w`. Turning weighted off keeps the queue as it is.
 - **A filter change prepares**: `hits` runs at once (one run at a time, as Hits' Apply) into its own file,
   `~/.cache/rormpc/hits/preview.json` (`current.json` stays the Hits pane's), and the table shows that result under
@@ -658,7 +658,11 @@ would move 770 songs in MPD and be stale one song later; consulted Sol and MiMo)
 
 `o` (`TogglePlanView`, add it to an existing explicit Queue keymap) toggles a **view**, not an MPD sort.
 It shows the last two plays still identified in Queue as dimmed `-2`, `-1`, current `0 ▶`, requests `↑n`,
-forecast `1`..`10`, a nonselectable `unplanned · queue order` divider, then the rest in physical MPD order.
+forecast `1`..`10`, and nothing after it (decided by the user 2026-10-10: an "unplanned · queue order" tail
+misled, as the shuffle never plays that order, and a big source buried the forecast). The rest of the pool is
+reached through `/` and Browse: a `/` match outside the forecast shows after it with the turn `·`, and the filter
+line counts them ("N · in the pool, not in the forecast"), so Play now, Play next, pin/exclude and delete stay
+on its row.
 An ID appears only once: current/request/forecast takes precedence over history, and an old ID belonging to
 another file is never reused. Selection, marks, scrolling and mouse actions follow song IDs across refreshes;
 filtering retains the original turn numbers. Next-header sorting (and other physical sorts) is disabled here.
