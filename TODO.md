@@ -279,9 +279,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       re-exports the list's saved rules even when the filters on screen differ; the first key after closing a
       modal can be lost when sent in one batch with Esc (seen with Esc then L; the modal closes through the event
       channel, see AGENTS.md). Not released.
-- [ ] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
+- [x] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
       a cycle check.
 
+      Done in rormpc b983fed, rormpc-tools 52df098 (worker; pytest 322, cargo test 1015; UI on a scratch MPD: picker
+      sections, counts, `/`, [+] and [-], formula, × clear sets, a cycle refused; the mouse was not tested). `hits
+      sets [--json]`, `--set ±tag:NAME|playlist:NAME|live:ID|list:ID`, scopes `set:<kind>:<name>`, cycles reported
+      in `hits lists --json`, `hits sets` and the L picker. Noted: a smart list used as a set brings its missing
+      chart songs only when the outer rules have chart rows too; the picker's count of a smart list is its last
+      "Smart NAME" export (none before one); "× clear sets" also turns the fixed chips off (mockup 6); `set:list:ID`
+      (a list used as a set) differs from `list:ID` (the open list). Not released.
 - [ ] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
       executable, and a log line from it (decided 2026-10-09; a Type=simple unit is "active" with a missing binary).
 - [ ] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
