@@ -66,6 +66,14 @@ A file for [guiding AI coding agents](https://agents.md/).
 - Don't `export XDG_STATE_HOME` in a shell that then runs `herdr-job`: herdr-job keeps its own state there and
   reports the job as "lost". Pass it to the command with `env` instead.
 
+## The user's config
+
+- A change to the user's dotfiles rormpc config or theme that uses a new action, pane, key or theme name is never
+  committed ahead of the install of a rormpc that knows it: on 2026-10-10 a committed `ShowPlay(Deleted)` made the
+  installed rormpc refuse the config ("Unexpected variant named `Deleted`") until the install. A worker leaves such a
+  change as a diff, checked with a debug build of its branch on a copy of the config with `themes/` next to it; the
+  coordinator applies and commits it right after installing.
+
 ## Coordination
 
 - One TODO coordinator owns rormpc and rormpc-tools: their TODO, workers, releases and installs (decided by the user
