@@ -89,6 +89,7 @@ impl Default for KeyConfigFile {
             (s().char('z'),                       G::ToggleRepeat),
             (s().char('x'),                       G::ToggleRandom),
             (s().char('w'),                       G::ToggleWeightedShuffle),
+            (s().char('o').char('L'),             G::ScrobbleNow),
             (s().char('c'),                       G::ToggleConsume),
             (s().char('v'),                       G::ToggleSingle),
             (s().char('p'),                       G::TogglePause),

@@ -72,6 +72,8 @@ pub enum StatusPropertyFile {
     Partition,
     /// rormpc: short git sha of the build, "+" if built with uncommitted changes
     BuildRevision,
+    /// rormpc: the scrobbler's view of the playing song ("scrobble in 1:23 · 62% of 50%", "scrobbled ✓", ...)
+    Scrobble,
     /// rormpc: mpd-player's weighted shuffle: on (picking), on but waiting (e.g. random off), off
     WeightedShuffle {
         #[serde(default = "defaults::default_on_label")]
@@ -228,6 +230,8 @@ pub enum StatusProperty {
     Partition,
     /// rormpc: short git sha of the build, "+" if built with uncommitted changes
     BuildRevision,
+    /// rormpc: the scrobbler's view of the playing song ("scrobble in 1:23 · 62% of 50%", "scrobbled ✓", ...)
+    Scrobble,
     WeightedShuffle {
         on_label: String,
         off_label: String,
@@ -465,6 +469,7 @@ impl TryFrom<StatusPropertyFile> for StatusProperty {
             },
             StatusPropertyFile::Partition => StatusProperty::Partition,
             StatusPropertyFile::BuildRevision => StatusProperty::BuildRevision,
+            StatusPropertyFile::Scrobble => StatusProperty::Scrobble,
             StatusPropertyFile::WeightedShuffle { on_label, off_label, on_style, waiting_style, off_style } => {
                 let conv = |s: Option<StyleFile>| s.map(|s| -> Result<_> { s.to_config_or(None, None) }).transpose();
                 StatusProperty::WeightedShuffle {
