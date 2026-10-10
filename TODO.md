@@ -513,7 +513,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       downloads allowed; the 2026-10-06 16:35:51 listen waits for ListenBrainz to process its deletion. The hourly
       retry needs `musicdb update` from a release with `restore` (installed is 0.2.41): next release.
 
-- [ ] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
+- [x] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
       with a screenshot: "error. to the TODO"): Music, Hits 1980-1989 top 1-10% "(modified)", weighted, round done,
       the queue left with 2 songs. Likely a file in the result that is no longer in MPD's database (e.g. a song
       deleted today, still in hits' cache or current.json) aborts the whole add; the screenshot was taken with the
@@ -525,6 +525,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the stale preview's files, 7 of its 16 no longer exist, MPD refused `add`, and the queue was left with 2 songs,
       so the weighted shuffle drew only from those 2 ("only picks from two songs all the time"). Also: Apply must
       recompute (or re-check) a preview older than the library's last change instead of trusting it.
+      Done in ee49112 (worker; on a scratch MPD: 4 files with 2 missing → 2 queued and "2 songs no longer in the
+      library were left out"; none existing → queue untouched; the outdated-preview recompute is unit-tested only):
+      the replace adds first and deletes only after, skips files MPD lacks, refuses an empty result; source.json
+      lists only the added files; a preview older than MPD's db_update or the newest deletion is recomputed before
+      Apply ("Preview outdated, recomputing…", Esc cancels). Released with rormpc-tools v0.2.42 (also `musicdb
+      restore` for the hourly retry), installer 47e3363, rormpc 47e3363 installed. Noted: the status bar cut a long
+      message after "in their order" (Proposed).
 - [ ] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table
       still only 1980-1989: "I don't understand why there is a year limit here when it is not selected in the UI.
       ask the models"). Checked: the rows were the previous result (Period 1980-1989, chart years) while a newer
@@ -1089,6 +1096,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
+- [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
+      the whole text or wrap it, and keep it long enough to read.
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
