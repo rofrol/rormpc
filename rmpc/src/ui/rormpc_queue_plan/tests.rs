@@ -425,3 +425,104 @@ fn reused_ids_drop_old_marks_and_block_action_until_paint(mut ctx: Ctx) {
     assert!(!view.marked.contains(&2));
     assert_eq!(view.selected_for_action(), None);
 }
+
+fn wait(ids: &[u32]) {
+    rormpc_upnext::TEST_UPNEXT.with(|t| {
+        *t.borrow_mut() = (
+            ids.iter().map(|id| Waiting { id: *id, file: format!("s{id}"), added: false }).collect(),
+            None,
+        );
+    });
+}
+
+fn screen_rows(terminal: &Terminal<TestBackend>) -> Vec<String> {
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.height)
+        .map(|y| (0..buffer.area.width).map(|x| buffer[(x, y)].symbol()).collect())
+        .collect()
+}
+
+#[rstest]
+fn up_next_header_stands_above_the_requests_only_while_one_waits(mut ctx: Ctx) -> Result<()> {
+    live(&mut ctx);
+    ctx.status.songid = Some(4);
+    publish(shuffle(&[8, 9]));
+    wait(&[5, 6]);
+    let mut view = PlanView::new();
+    view.area = Rect::new(0, 0, 80, 20);
+    view.refresh(&ctx, false);
+    assert_eq!(view.rows.iter().map(|r| r.turn).collect::<Vec<_>>(), vec![
+        Turn::Current,
+        Turn::Header,
+        Turn::Request(1),
+        Turn::Request(2),
+        Turn::Forecast(1),
+        Turn::Forecast(2)
+    ]);
+    assert!(view.jump_to_block(&ctx));
+    assert_eq!(view.selected_turn(), Some(Turn::Header));
+    // no song action reaches a song from the header row
+    assert_eq!(view.selected_for_action(), None);
+    // a redraw keeps the cursor on it
+    view.refresh(&ctx, false);
+    assert_eq!(view.selected_turn(), Some(Turn::Header));
+    view.action(&mut common(CommonAction::Down), &mut ctx)?;
+    assert_eq!(view.selected_id, Some(5));
+    let mut terminal = Terminal::new(TestBackend::new(60, 10))?;
+    terminal.draw(|frame| view.render(frame, frame.area(), &ctx))?;
+    assert!(screen_rows(&terminal)[2].contains("── Up next · 2 ──"), "{:#?}", screen_rows(&terminal));
+    // the last request goes: no header, and gu says so
+    wait(&[]);
+    view.refresh(&ctx, false);
+    assert!(!view.rows.iter().any(|r| r.turn == Turn::Header));
+    assert!(!view.jump_to_block(&ctx));
+    // nor while `/` filters
+    wait(&[5]);
+    view.query = "s5".into();
+    view.refresh(&ctx, true);
+    assert_eq!(view.rows, vec![PlanRow { id: Some(5), turn: Turn::Request(1) }]);
+    Ok(())
+}
+
+#[rstest]
+fn music_queue_order_has_the_up_next_row_and_keeps_songs_out_of_the_block(mut ctx: Ctx) -> Result<()> {
+    live(&mut ctx);
+    ctx.status.songid = Some(2);
+    publish(ShuffleState::default()); // weighted off: Music shows the queue order
+    wait(&[3, 4]);
+    let mut pane = QueuePane::new(&ctx);
+    pane.follow_weighted(false, &ctx);
+    pane.before_show(&ctx)?;
+    let mut terminal = Terminal::new(TestBackend::new(60, 10))?;
+    let mut draw = |pane: &mut QueuePane, ctx: &Ctx| -> Result<Vec<String>> {
+        let mut rendered = Ok(());
+        terminal.draw(|frame| rendered = pane.render(frame, frame.area(), ctx))?;
+        rendered?;
+        Ok(screen_rows(&terminal))
+    };
+    let rows = draw(&mut pane, &ctx)?;
+    assert!(rows[2].contains("── Up next · 2 ──"), "{rows:#?}");
+    // Down from the playing song steps onto the header, which is no song; Down again: the first request
+    pane.handle_action(&mut queue(QueueActions::JumpToCurrent), &mut ctx)?;
+    pane.handle_action(&mut common(CommonAction::Down), &mut ctx)?;
+    assert!(pane.selected_song(&ctx).is_none());
+    pane.handle_action(&mut common(CommonAction::Down), &mut ctx)?;
+    assert_eq!(pane.selected_song(&ctx).map(|s| s.id), Some(3));
+    // the song after the block never moves into it, and the last request never moves out
+    let order = QueuePane::order;
+    let before = order(&pane);
+    pane.handle_action(&mut common(CommonAction::Down), &mut ctx)?;
+    pane.handle_action(&mut common(CommonAction::MoveDown), &mut ctx)?;
+    assert_eq!((order(&pane), pane.selected_song(&ctx).map(|s| s.id)), (before.clone(), Some(4)));
+    pane.handle_action(&mut common(CommonAction::Down), &mut ctx)?;
+    pane.handle_action(&mut common(CommonAction::MoveUp), &mut ctx)?;
+    assert_eq!((order(&pane), pane.selected_song(&ctx).map(|s| s.id)), (before, Some(5)));
+    // gu: the cursor on the header row
+    assert!(pane.jump_to_up_next(&ctx));
+    assert!(pane.selected_song(&ctx).is_none());
+    wait(&[]);
+    assert!(!pane.jump_to_up_next(&ctx));
+    let rows = draw(&mut pane, &ctx)?;
+    assert!(!rows.iter().any(|r| r.contains("Up next")), "{rows:#?}");
+    Ok(())
+}

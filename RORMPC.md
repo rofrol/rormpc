@@ -85,7 +85,8 @@ On Linux MPD has no MPRIS of its own: the keys need an MPRIS bridge (rmpcd, mpd-
 
 `Pane(Play())`, the first tab of the default config (`1`, named "Music"), is Queue, Hits and Shuffle in one tab
 (plans/combined-view.md, phase 3). The old `Queue`, `Hits()` and `Shuffle()` panes still load from an explicit
-config; Up next stays its own tab. A header line always says what plays and how:
+config. Up next lives in it too (its own tab went on 2026-10-10, see Up next in Music). A header line always says
+what plays and how:
 `▶ Playing from: Hits · 1980s … · weighted · round 12/84` or `… · in queue order`.
 The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowPlay(...)` and the action names
 (PlayReplace, PlayNext) keep their names, so explicit configs keep loading, a tab named "Play" included.
@@ -166,7 +167,8 @@ still load from an explicit config.
 
   | Key | Map | Action |
   |---|---|---|
-  | `1` / `2` / `3` | global | Music / Up next / Search tabs; `gu` Up next, `gv` Versions, `gy` Lyrics |
+  | `1` / `3` | global | Music / Search tabs; `gv` Versions, `gy` Lyrics |
+  | `2`, `gu` | global | `ShowPlay(UpNext)`: the cursor on Music's "Up next · N" row ("Up next is empty" without one) |
   | `5` `6` `7` `8` `9` | global | `ShowPlay(Browse(Folders))`, `(Artists)`, `(AlbumArtists)`, `(Albums)`, `(Lists)` |
   | `0`, `gl` | global | `ShowPlay(Live)`: the Live inbox (`ShowPlay(Queue)` brings the filters back) |
   | `gd` | global | `ShowPlay(Deleted)`: the Deleted panel |
@@ -237,10 +239,10 @@ if the playing song's file is in the visible table, it selects that row and focu
 centres it. A search that hides the song stays intact, and a missing match changes neither selection nor
 playback. Queue-only actions such as removing or reordering queue entries are not applied to chart rows.
 
-The default and example configurations have the tabs Music, Up next, Search, Versions and Lyrics (Music
-replaced their Hits, Queue and browsing tabs and holds Deleted as a panel, see Music tab). `1` opens Music, `2` Up
-next, `3` Search, `5`-`9` and `0` Music's Browse groupings and Live inbox, `gd` its Deleted panel; `gu` opens Up
-next from any pane. Existing explicit configurations
+The default and example configurations have the tabs Music, Search, Versions and Lyrics (Music replaced their
+Hits, Queue, Up next and browsing tabs and holds Deleted as a panel, see Music tab). `1` opens Music, `3` Search,
+`2` and `gu` Music's Up next block, `5`-`9` and `0` Music's Browse groupings and Live inbox, `gd` its Deleted panel.
+Existing explicit configurations
 are not rewritten; the Hits pane works there as before. The last active tab is still restored on startup.
 
 The filter column on the left (h/l moves between it and the table) builds the `hits` arguments. "Sets" are
@@ -534,13 +536,22 @@ removing it afterwards.
 - Enter on a song in those panes plays it now and leaves the queue alone (upstream replaced the queue with the
   whole list): a queued song plays from its entry, another one is put right after the current song, played, and
   removed again after it played, so with random off the source goes on from there.
-- The Up next pane (`Pane(UpNext())`, my tab "Up next", `gu`) lists the waiting songs in play order: Enter plays
-  now, K/J (MoveUp/MoveDown) reorder, D (Delete) removes the request (a song added only for Up next leaves the
-  queue, a source song keeps its place), the context menu has Make next and "Clear Up next…" (confirmed). There is
-  no Play next inside it. A rejected play keeps the request waiting and the previous playback unchanged;
-  its error is shown in red in the Up next footer. An event-driven watcher of the atomically published state
+- **Up next in Music** (decided by the user 2026-10-10; Sol and MiMo: the tab duplicated Music): while a request
+  waits, Music's table has a header row `── Up next · N ──` above the requests, right after the playing song in
+  queue order (weighted off: mpd-player keeps them there) and between `0 ▶` and the forecast in the plan
+  (weighted). On a request row Enter plays it now, K/J (MoveUp/MoveDown) move it only within the block, `d`
+  (Delete) takes it out of Up next (a song added only for Up next leaves the queue, a source song keeps its place),
+  and its menu has Make next and Remove from Up next. No other song moves into the block (it goes there with `t`).
+  On the header row Enter, the context menu or a double/right click opens "Clear Up next (N)…" (confirmed), and
+  "New round" when a Hits source's round is done; `D` there clears Up next after the same confirmation, not the
+  queue. `2` and `gu` (`ShowPlay(UpNext)`) put the cursor on that row from anywhere, or say "Up next is empty".
+  A rejected play keeps the request waiting and the previous playback unchanged; its error is shown in red at
+  the bottom of Music, also when no request is left. An event-driven watcher of the atomically published state
   redraws it even while paused or stopped, without polling delays or playback retries. A later explicit
   successful action clears the error.
+- The Up next pane (`Pane(UpNext())`) still loads from an explicit config: the waiting songs in play order with
+  the same request actions, the error and the shuffle's next pick in its footer. It left the default tabs and
+  `assets/example_config.ron` on 2026-10-10.
 - Artists, Album Artists and Albums select the playing song's group every time the tab is shown (its tag value,
   else the root item contained in it, e.g. an artist inside "A feat. B"); nothing playing or no match keeps the
   cursor.
@@ -640,14 +651,15 @@ and its shuffle.json has the `trail` (only an mpd-player that handles `shuffle p
 shuffle it walks back through the songs that really played and counts no skip, with the shuffle off it does MPD's
 own `previous`. Without that mpd-player it is MPD's `previous`, which with random on follows MPD's random order.
 `rewind_to_start_sec` still restarts the playing song first.
-The Up next pane's second footer line shows the pick ("Then likely: … · may change") or why there is none. The theme
+The Up next pane's second footer line (an explicit config only) shows the pick ("Then likely: … · may change") or
+why there is none; in Music the plan shows it. The theme
 property `Status(WeightedShuffle(on_label, off_label, on_style, waiting_style, off_style))` shows its state, e.g.
 a `w shuf` badge next to the mode badges: on_style while it picks, waiting_style while it is on but idle (consume
 on, single on, stopped), off_style when off.
 
 A Hits result played as the source ("Play these N songs (as the source)…" in the Hits menu: its owned rows, a
 snapshot that moving a filter never changes) is shuffled in rounds: each song once, then the shuffle stops
-nominating and says "round done"; the Up next menu starts a new round. The Hits footer says what plays
+nominating and says "round done"; a queue song's menu in Music (or the "Up next · N" row's) starts a new round. The Hits footer says what plays
 ("Playing: Hits · 1980s top 10% · 84 playable · heard 12/84") and "browsing other results" when the filters on
 screen differ. Hits' State column shows only exceptions: `⏳5d` resting, `heard` in this round, `·` not in the
 snapshot being played.

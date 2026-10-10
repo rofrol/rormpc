@@ -2407,7 +2407,7 @@ impl HitsPane {
             _ if self.play_mode => " a: Apply (play these, replacing the queue) · Esc: drop the preview · / search".to_owned(),
             Some((_, name, files)) => {
                 let round = shuffle.round.as_ref().map_or(String::new(), |r| {
-                    if r.done { " · round done (Up next menu: new round)".to_owned() } else { format!(" · heard {}/{}", r.heard.len(), r.total) }
+                    if r.done { " · round done (a queue song's menu in Music: new round)".to_owned() } else { format!(" · heard {}/{}", r.heard.len(), r.total) }
                 });
                 let browsing = if *name == self.label { String::new() } else { " · browsing other results (Ctrl-z: Play these results)".to_owned() };
                 format!(" Playing: Hits · {name} · {} playable{round}{browsing}", files.len())

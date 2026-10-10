@@ -104,6 +104,22 @@ pub struct QueuePane {
     hover_like: Option<usize>,
     /// rormpc: Play's table follows the weighted shuffle instead of `o` (`follow_weighted`); None: `ctx.queue_plan`
     forced_plan: Option<bool>,
+    /// rormpc: Music's cursor is on the "Up next · N" row (the Dir keeps the first request selected)
+    up_header: bool,
+}
+
+/// rormpc: Music's Up next block in queue order: the header row stands before item `at`, above `n` requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct UpBlock {
+    at: usize,
+    n: usize,
+}
+
+/// rormpc: what a screen row of the table shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowHit {
+    Header,
+    Item(usize),
 }
 
 /// rormpc: state of the Queue's live filter.
@@ -150,6 +166,7 @@ impl QueuePane {
             like_col: None,
             hover_like: None,
             forced_plan: None,
+            up_header: false,
         };
 
         s.recalculate_album_indices();
@@ -198,11 +215,198 @@ impl QueuePane {
         }
     }
 
+    /// rormpc: Music's Up next block in queue order (weighted off: mpd-player keeps the requests right after the
+    /// playing song), None outside Music, while filtering, or with nothing waiting.
+    fn up_block(&self) -> Option<UpBlock> {
+        if self.forced_plan.is_none() || self.find.is_some() || self.queue.filter_active {
+            return None;
+        }
+        let waiting = crate::ui::rormpc_upnext::up_next_ids();
+        let mut positions = self.queue.items.iter().enumerate().filter(|(_, s)| waiting.contains(&s.id)).map(|(i, _)| i);
+        let at = positions.next()?;
+        Some(UpBlock { at, n: 1 + positions.count() })
+    }
+
+    /// rormpc: the turn (1..) of the request at queue index `idx`, if it is one.
+    fn request_turn(&self, idx: usize) -> Option<usize> {
+        let id = self.queue.items.get(idx)?.id;
+        crate::ui::rormpc_upnext::up_next_ids().iter().position(|w| *w == id).map(|k| k + 1)
+    }
+
+    /// rormpc: the item or the header on screen row `row` of the table.
+    fn row_hit(&self, row: usize) -> Option<RowHit> {
+        let offset = self.queue.state.offset();
+        match self.up_block().map(|b| b.at).filter(|at| *at >= offset) {
+            Some(at) if row == at - offset => Some(RowHit::Header),
+            Some(at) if row > at - offset => self.queue.state.get_at_rendered_row(row - 1).map(RowHit::Item),
+            _ => self.queue.state.get_at_rendered_row(row).map(RowHit::Item),
+        }
+    }
+
+    /// rormpc: `gu` and Music's header row: the cursor on "Up next · N"; false when nothing is waiting.
+    pub(crate) fn jump_to_up_next(&mut self, ctx: &Ctx) -> bool {
+        if self.plan_view(ctx) {
+            return self.plan.jump_to_block(ctx);
+        }
+        let Some(block) = self.up_block() else { return false };
+        self.queue.select_idx(block.at, ctx.config.scrolloff);
+        self.up_header = true;
+        true
+    }
+
+    /// rormpc: Up/Down step onto and off Music's header row; true when it took the key.
+    fn header_nav(&mut self, down: bool, ctx: &Ctx) -> bool {
+        let Some(block) = self.up_block() else {
+            self.up_header = false;
+            return false;
+        };
+        let selected = self.queue.selected_idx();
+        match (self.up_header, down) {
+            // the Dir already has the first request selected
+            (true, true) => self.up_header = false,
+            (true, false) => {
+                self.up_header = false;
+                self.queue.prev(ctx.config.scrolloff, ctx.config.wrap_navigation);
+            }
+            (false, true) if block.at > 0 && selected == Some(block.at - 1) => {
+                self.queue.select_idx(block.at, ctx.config.scrolloff);
+                self.up_header = true;
+            }
+            (false, false) if selected == Some(block.at) => self.up_header = true,
+            _ => return false,
+        }
+        true
+    }
+
+    /// rormpc: J/K in Music's queue order: a request moves only within Up next (mpd-player moves it), and no
+    /// other song moves into the block. True when it took the key.
+    fn up_next_move(&mut self, delta: isize, ctx: &Ctx) -> bool {
+        let Some(block) = self.up_block() else { return false };
+        // the requests' queue positions (with random off they follow the playing song in a row)
+        let waiting = crate::ui::rormpc_upnext::up_next_ids();
+        let inside = |i: usize| self.queue.items.get(i).is_some_and(|s| waiting.contains(&s.id));
+        if self.up_header {
+            status_info!("J/K move the requests below this row");
+            return true;
+        }
+        if !self.queue.marked().is_empty() {
+            let marked: Vec<usize> = self.queue.marked().iter().copied().collect();
+            let crosses = marked.iter().any(|i| inside(*i) || i.checked_add_signed(delta).is_some_and(inside));
+            if crosses {
+                status_info!("J/K move one Up next request at a time");
+            }
+            return crosses;
+        }
+        let Some(idx) = self.queue.selected_idx() else { return false };
+        if let Some(turn) = self.request_turn(idx) {
+            let target = turn.cast_signed() + delta;
+            if target < 1 || target.cast_unsigned() > block.n {
+                status_info!("{} of Up next: a request stays in it", if delta < 0 { "Start" } else { "End" });
+            } else if let Some(id) = self.queue.items.get(idx).map(|s| s.id) {
+                crate::ui::rormpc_upnext::move_entry(ctx, id, delta);
+                if let Some(to) = idx.checked_add_signed(delta) {
+                    self.queue.select_idx(to, ctx.config.scrolloff); // the cursor follows the request
+                }
+            }
+            return true;
+        }
+        if idx.checked_add_signed(delta).is_some_and(inside) {
+            status_info!("J/K never move a song into Up next: t does");
+            return true;
+        }
+        false
+    }
+
+    /// rormpc: keys on Music's Up next block in queue order (the plan view has its own): the header row's menu,
+    /// Up/Down onto it, J/K within the block, `d` taking a request out of Up next. True when one was taken.
+    fn up_next_action(&mut self, event: &mut ActionEvent, ctx: &Ctx) -> bool {
+        let Some(block) = self.up_block() else {
+            self.up_header = false;
+            return false;
+        };
+        let common = event.actions.iter().find_map(|a| a.as_common()).cloned();
+        let queue = event.actions.iter().find_map(|a| a.as_queue()).cloned();
+        let upnext = crate::ui::rormpc_upnext::up_next_ids();
+        // which layer the key was taken from: the queue's (Enter is Play there) or the common one
+        let mut from_queue = true;
+        match (&queue, &common) {
+            (Some(QueueActions::Play), _) if self.up_header => {
+                crate::ui::rormpc_upnext::open_block_menu(ctx, block.n);
+            }
+            (_, Some(CommonAction::Confirm | CommonAction::ContextMenu)) if self.up_header => {
+                from_queue = false;
+                crate::ui::rormpc_upnext::open_block_menu(ctx, block.n);
+            }
+            (Some(QueueActions::DeleteAll), _) if self.up_header => {
+                crate::ui::rormpc_upnext::confirm_clear(ctx, block.n);
+            }
+            (Some(QueueActions::Delete), _) if self.up_header => {
+                status_info!("d removes a request; D here clears Up next");
+            }
+            (Some(QueueActions::Delete), _) => {
+                let targets: Vec<u32> = if self.queue.marked().is_empty() {
+                    self.queue.selected().map(|s| s.id).into_iter().collect()
+                } else {
+                    self.queue.marked().iter().filter_map(|i| self.queue.items.get(*i)).map(|s| s.id).collect()
+                };
+                if !targets.iter().any(|id| upnext.contains(id)) {
+                    return false;
+                }
+                // a request leaves Up next (an added song leaves the queue too, a source song stays)
+                let (requests, others): (Vec<u32>, Vec<u32>) = targets.into_iter().partition(|id| upnext.contains(id));
+                for id in requests {
+                    crate::ui::rormpc_upnext::remove(ctx, id);
+                }
+                if !others.is_empty() {
+                    ctx.command(move |_, client| {
+                        for id in others {
+                            client.delete_id(id)?;
+                        }
+                        Ok(())
+                    });
+                }
+                self.queue.marked_mut().clear();
+            }
+            (_, Some(CommonAction::Up | CommonAction::Down)) => {
+                from_queue = false;
+                if !self.header_nav(matches!(common, Some(CommonAction::Down)), ctx) {
+                    return false;
+                }
+            }
+            (_, Some(CommonAction::MoveUp | CommonAction::MoveDown)) => {
+                from_queue = false;
+                let delta = if matches!(common, Some(CommonAction::MoveUp)) { -1 } else { 1 };
+                if !self.up_next_move(delta, ctx) {
+                    return false;
+                }
+            }
+            _ => {
+                self.up_header = false;
+                return false;
+            }
+        }
+        if from_queue {
+            let _ = event.claim_queue();
+        } else {
+            let _ = event.claim_common();
+        }
+        true
+    }
+
+    /// The song ids in the order the queue view holds them.
+    #[cfg(test)]
+    pub(crate) fn order(&self) -> Vec<u32> {
+        self.queue.items.iter().map(|s| s.id).collect()
+    }
+
     /// rormpc: the song under the cursor, in either view.
     pub(crate) fn selected_song(&self, ctx: &Ctx) -> Option<Song> {
         if self.plan_view(ctx) {
             let id = self.plan.selected_for_action()?;
             return ctx.queue.iter().find(|s| s.id == id).cloned();
+        }
+        if self.up_header {
+            return None; // the "Up next · N" row is no song
         }
         self.queue.selected().cloned()
     }
@@ -313,6 +517,7 @@ impl QueuePane {
         let selected_song = self.queue.selected().cloned();
         let selected_song_id = selected_song.as_ref().map(|s| s.id);
 
+        let request = selected_song_id.filter(|id| crate::ui::rormpc_upnext::up_next_ids().contains(id));
         let modal = MenuModal::new(ctx)
             .list_section(ctx, |mut section| {
                 section.add_item("Play", move |ctx| {
@@ -324,6 +529,24 @@ impl QueuePane {
                     }
                     Ok(())
                 });
+                // rormpc: a request waiting in Up next
+                if let Some(id) = request {
+                    section.add_item("Make next", move |ctx| {
+                        crate::ui::rormpc_upnext::make_next(ctx, id);
+                        Ok(())
+                    });
+                    section.add_item("Remove from Up next", move |ctx| {
+                        crate::ui::rormpc_upnext::remove(ctx, id);
+                        Ok(())
+                    });
+                }
+                // rormpc: a Hits source's round is done (it lived in the Up next tab's menu)
+                if crate::ui::rormpc_player::shuffle_state().round.is_some_and(|r| r.done) {
+                    section.add_item("New round (every song of the source once more)", |ctx| {
+                        crate::ui::rormpc_player::new_round(ctx);
+                        Ok(())
+                    });
+                }
                 section.add_item("Show info", move |ctx| {
                     if let Some(song) = selected_song {
                         modal!(
@@ -633,9 +856,14 @@ impl Pane for QueuePane {
             b
         };
 
+        // rormpc: Music's "Up next · N" row takes one line of the viewport while requests wait
+        let block = self.up_block();
+        if block.is_none() {
+            self.up_header = false;
+        }
         self.queue.state.set_content_and_viewport_len(
             self.queue.len(),
-            self.areas[Areas::Table].height as usize,
+            (self.areas[Areas::Table].height as usize).saturating_sub(usize::from(block.is_some())),
         );
 
         let widths = Layout::horizontal(self.column_widths.as_slice())
@@ -670,7 +898,7 @@ impl Pane for QueuePane {
         let current_song_id = ctx.current_song().map(|s| s.id);
         let marked = std::mem::take(self.queue.marked_mut());
         let filter = ctx.input.value(self.queue.filter_buffer_id);
-        let selected_idx = self.queue.selected_idx();
+        let selected_idx = self.queue.selected_idx().filter(|_| !self.up_header);
 
         let table = VirtualizedTable::new(&self.queue.items)
             .column_widths(self.column_widths.clone())
@@ -780,10 +1008,27 @@ impl Pane for QueuePane {
 
                 row.into_row(columns)
             });
+        let table = match block {
+            Some(b) => table.gap(b.at, Row::new(Vec::<Line>::new()), self.up_header),
+            None => table,
+        };
 
         frame.render_widget(table_block, self.areas[Areas::Table]);
 
         frame.render_stateful_widget(table, self.areas[Areas::Table], &mut self.queue.state);
+        // rormpc: the header row spans the table, drawn over the gap left for it
+        let area = self.areas[Areas::Table];
+        if let Some(b) = block
+            && let Some(row) = b.at.checked_sub(self.queue.state.offset()).filter(|r| *r < usize::from(area.height))
+        {
+            let style = if self.up_header && self.highlight_enabled {
+                config.theme.current_item_style
+            } else {
+                config.theme.preview_label_style.add_modifier(Modifier::BOLD)
+            };
+            let text = crate::ui::rormpc_queue_plan::header_line(b.n, area.width);
+            frame.render_widget(Line::from(text).style(style), Rect { y: area.y + row as u16, height: 1, ..area });
+        }
 
         let _ = std::mem::replace(self.queue.marked_mut(), marked);
 
@@ -956,7 +1201,10 @@ impl Pane for QueuePane {
         // rormpc: the like cell. Hover shows a heart; a click toggles like <-> no rating and neither selects nor plays
         let table = self.areas[Areas::Table];
         let on_like = self.like_col.is_some_and(|(x, w)| event.x >= x && event.x < x + w) && table.contains(position);
-        let like_row = || self.queue.state.get_at_rendered_row(event.y.saturating_sub(table.y).into());
+        let like_row = || match self.row_hit(event.y.saturating_sub(table.y).into()) {
+            Some(RowHit::Item(i)) => Some(i),
+            _ => None,
+        };
         if matches!(event.kind, MouseEventKind::Moved) {
             let hover = if on_like { like_row() } else { None };
             if hover != self.hover_like {
@@ -989,10 +1237,36 @@ impl Pane for QueuePane {
             return Ok(());
         }
 
+        // rormpc: Music's "Up next · N" row: a click puts the cursor on it, a double or right click opens its menu
+        let clicked_row: usize = event.y.saturating_sub(self.areas[Areas::Table].y).into();
+        let hit = self.row_hit(clicked_row);
+        if hit == Some(RowHit::Header) {
+            if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::DoubleClick | MouseEventKind::RightClick)
+                && self.jump_to_up_next(ctx)
+            {
+                if !matches!(event.kind, MouseEventKind::LeftClick)
+                    && let Some(b) = self.up_block()
+                {
+                    crate::ui::rormpc_upnext::open_block_menu(ctx, b.n);
+                }
+                ctx.render()?;
+                return Ok(());
+            }
+            if matches!(event.kind, MouseEventKind::MiddleClick) {
+                return Ok(());
+            }
+        }
+        let hit_item = || match hit {
+            Some(RowHit::Item(i)) => Some(i),
+            _ => None,
+        };
+        if matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::RightClick) && hit_item().is_some() {
+            self.up_header = false;
+        }
+
         match event.kind {
             MouseEventKind::LeftClick if self.areas[Areas::Table].contains(event.into()) => {
-                let clicked_row: usize = event.y.saturating_sub(self.areas[Areas::Table].y).into();
-                if let Some(idx) = self.queue.state.get_at_rendered_row(clicked_row) {
+                if let Some(idx) = hit_item() {
                     self.queue.select_idx(idx, ctx.config.scrolloff);
 
                     ctx.render()?;
@@ -1000,13 +1274,7 @@ impl Pane for QueuePane {
             }
             MouseEventKind::LeftClick => {}
             MouseEventKind::DoubleClick if self.areas[Areas::Table].contains(event.into()) => {
-                let clicked_row: usize = event.y.saturating_sub(self.areas[Areas::Table].y).into();
-
-                if let Some(song) = self
-                    .queue
-                    .state
-                    .get_at_rendered_row(clicked_row)
-                    .and_then(|idx| self.queue.items.get(idx))
+                if let Some(song) = hit_item().and_then(|idx| self.queue.items.get(idx))
                 {
                     let id = song.id;
                     ctx.command(move |_, client| {
@@ -1017,13 +1285,7 @@ impl Pane for QueuePane {
             }
             MouseEventKind::DoubleClick => {}
             MouseEventKind::MiddleClick if self.areas[Areas::Table].contains(event.into()) => {
-                let clicked_row: usize = event.y.saturating_sub(self.areas[Areas::Table].y).into();
-
-                if let Some(selected_song) = self
-                    .queue
-                    .state
-                    .get_at_rendered_row(clicked_row)
-                    .and_then(|idx| self.queue.items.get(idx))
+                if let Some(selected_song) = hit_item().and_then(|idx| self.queue.items.get(idx))
                 {
                     let id = selected_song.id;
                     ctx.command(move |_, client| {
@@ -1044,8 +1306,7 @@ impl Pane for QueuePane {
             }
             MouseEventKind::ScrollUp => {}
             MouseEventKind::RightClick if self.areas[Areas::Table].contains(event.into()) => {
-                let clicked_row: usize = event.y.saturating_sub(self.areas[Areas::Table].y).into();
-                if let Some(idx) = self.queue.state.get_at_rendered_row(clicked_row) {
+                if let Some(idx) = hit_item() {
                     self.queue.select_idx(idx, ctx.config.scrolloff);
 
                     ctx.render()?;
@@ -1221,6 +1482,9 @@ impl Pane for QueuePane {
         }
         if self.find.is_some() && self.filtered_action(event, ctx)? {
             return Ok(());
+        }
+        if !self.plan_view(ctx) && self.up_next_action(event, ctx) {
+            return Ok(ctx.render()?);
         }
         if let Some(action) = event.claim_queue() {
             match action {

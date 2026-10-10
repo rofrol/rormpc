@@ -66,9 +66,9 @@
             "<S-Tab>":    PreviousTab,
             "gT":         PreviousTab,
             "1":          SwitchToTab("Music"),
-            "2":          SwitchToTab("Up next"),
+            "2":          ShowPlay(UpNext), // Music with the cursor on its "Up next · N" row
             "3":          SwitchToTab("Search"),
-            "gu":         SwitchToTab("Up next"),
+            "gu":         ShowPlay(UpNext),
             "gv":         SwitchToTab("Versions"),
             "gy":         SwitchToTab("Lyrics"),
             // rormpc: the browsing tabs live in Music's Browse (B in Music); their digits open it on a grouping
@@ -185,13 +185,6 @@
             pane: Split(
                 direction: Vertical,
                 panes: [(pane: Pane(Play()), size: "100%", borders: "ALL", border_symbols: Rounded)],
-            ),
-        ),
-        (
-            name: "Up next",
-            pane: Split(
-                direction: Vertical,
-                panes: [(pane: Pane(UpNext()), size: "100%", borders: "ALL", border_symbols: Rounded)],
             ),
         ),
         (

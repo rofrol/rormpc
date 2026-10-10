@@ -43,6 +43,8 @@ pub enum Turn {
     Past(i8),
     Current,
     Request(usize),
+    /// Music's "Up next · N" row above the requests (no song; Enter or the menu on it clears Up next)
+    Header,
     Forecast(usize),
     /// a queued song outside the forecast; shown only as a `/` match
     Pool,
@@ -54,6 +56,7 @@ impl Turn {
             Self::Past(n) => (0, i64::from(n)),
             Self::Current => (1, 0),
             Self::Request(n) => (2, n.cast_signed() as i64),
+            Self::Header => (2, 0),
             Self::Forecast(n) => (3, n.cast_signed() as i64),
             Self::Pool => (4, 0),
         }
@@ -64,6 +67,7 @@ impl Turn {
             Self::Past(n) => n.to_string(),
             Self::Current => "0 ▶".to_owned(),
             Self::Request(n) => format!("↑{n}"),
+            Self::Header => String::new(),
             Self::Forecast(n) => n.to_string(),
             Self::Pool => "·".to_owned(),
         }
@@ -133,6 +137,13 @@ pub fn stale(sh: &ShuffleState, present: bool, now: f64) -> bool {
         || now - sh.updated_at >= rormpc_player::FORECAST_FRESH_SECONDS
 }
 
+/// The "Up next · N" header row's text, ruled to `width`.
+pub fn header_line(n: usize, width: u16) -> String {
+    let text = format!(" ── {} ", rormpc_upnext::block_label(n));
+    let fill = usize::from(width).saturating_sub(text.chars().count());
+    format!("{text}{}", "─".repeat(fill))
+}
+
 fn now() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64()
 }
@@ -141,6 +152,7 @@ fn now() -> f64 {
 mod tests;
 
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)] // independent view flags: selection, typing, staleness, header row
 pub struct PlanView {
     pub rows: Vec<PlanRow>,
     pub selected_id: Option<u32>,
@@ -152,6 +164,10 @@ pub struct PlanView {
     rendered_rows: Vec<Option<(u32, String)>>,
     known_files: HashMap<u32, String>,
     invalidated_selection: bool,
+    /// the cursor is on the "Up next · N" row (it has no song id)
+    on_header: bool,
+    /// the screen row (from the table's top) the header was painted on, for the mouse
+    rendered_header: Option<usize>,
     buffer: BufferId,
     pub typing: bool,
     query: String,
@@ -179,6 +195,8 @@ impl PlanView {
             rendered_rows: Vec::new(),
             known_files: HashMap::new(),
             invalidated_selection: false,
+            on_header: false,
+            rendered_header: None,
             buffer: BufferId::new(),
             typing: false,
             query: String::new(),
@@ -263,6 +281,10 @@ impl PlanView {
         let mut rows = project(&ctx.queue, ctx.status.songid, &requests, &self.snapshot);
         if self.query.is_empty() {
             rows.retain(|r| r.turn != Turn::Pool);
+            // the requests' block gets its header row, shown only while a request is in it
+            if let Some(at) = rows.iter().position(|r| matches!(r.turn, Turn::Request(_))) {
+                rows.insert(at, PlanRow { id: None, turn: Turn::Header });
+            }
         } else {
             let found = crate::ui::panes::queue::find_matches(&ctx.queue, &self.query);
             let matches: BTreeSet<_> = found.rows.iter().map(|i| ctx.queue[*i].id).collect();
@@ -296,6 +318,8 @@ impl PlanView {
         self.state.set_content_and_viewport_len(self.rows.len(), usize::from(self.area.height));
         let selected = if snap {
             None
+        } else if self.on_header {
+            self.rows.iter().position(|r| r.turn == Turn::Header)
         } else {
             self.selected_id.and_then(|id| self.rows.iter().position(|r| r.id == Some(id)))
         };
@@ -325,11 +349,13 @@ impl PlanView {
     }
 
     fn remember_selection(&mut self) {
-        self.selected_id =
-            self.state.get_selected().and_then(|i| self.rows.get(i)).and_then(|r| r.id);
+        let row = self.state.get_selected().and_then(|i| self.rows.get(i));
+        self.on_header = row.is_some_and(|r| r.turn == Turn::Header);
+        self.selected_id = row.and_then(|r| r.id);
     }
 
     pub fn select_id(&mut self, id: Option<u32>) {
+        self.on_header = false;
         self.selected_id = id;
         self.known_files.clear();
         self.invalidated_selection = false;
@@ -340,10 +366,31 @@ impl PlanView {
     }
 
     fn selected_turn(&self) -> Option<Turn> {
+        if self.on_header {
+            return Some(Turn::Header);
+        }
         self.selected_id.and_then(|id| self.rows.iter().find(|r| r.id == Some(id))).map(|r| r.turn)
     }
 
+    /// How many request rows the "Up next · N" header stands above.
+    fn requests_shown(&self) -> usize {
+        self.rows.iter().filter(|r| matches!(r.turn, Turn::Request(_))).count()
+    }
+
+    /// `gu`: the cursor on the "Up next · N" header row; false when no request is waiting.
+    pub fn jump_to_block(&mut self, ctx: &Ctx) -> bool {
+        self.refresh(ctx, false);
+        let Some(i) = self.rows.iter().position(|r| r.turn == Turn::Header) else { return false };
+        self.state.select(Some(i), ctx.config.scrolloff);
+        self.remember_selection();
+        self.invalidated_selection = false;
+        true
+    }
+
     fn play(&self, ctx: &Ctx) {
+        if self.on_header {
+            return rormpc_upnext::open_block_menu(ctx, self.requests_shown());
+        }
         if let Some(id) = self.selected_for_action() {
             if matches!(self.selected_turn(), Some(Turn::Request(_))) {
                 rormpc_upnext::play_entry(ctx, id);
@@ -467,7 +514,7 @@ impl PlanView {
                             rormpc_upnext::make_next(ctx, id);
                             Ok(())
                         })
-                        .item("Remove request", move |ctx| {
+                        .item("Remove from Up next", move |ctx| {
                             rormpc_upnext::remove(ctx, id);
                             Ok(())
                         })
@@ -499,12 +546,21 @@ impl PlanView {
                         self.invalidated_selection = false;
                     }
                 }
+                QueueActions::Delete if self.on_header && self.marked.is_empty() => {
+                    status_info!("d removes a request; D here clears Up next");
+                }
                 QueueActions::Delete => {
                     let ids: Vec<_> = if self.marked.is_empty() {
                         self.selected_for_action().into_iter().collect()
                     } else {
                         self.marked.iter().copied().collect()
                     };
+                    // a request leaves Up next (an added song leaves the queue too, a source song stays)
+                    let waiting = rormpc_upnext::up_next_ids();
+                    let (requests, ids): (Vec<_>, Vec<_>) = ids.into_iter().partition(|id| waiting.contains(id));
+                    for id in requests {
+                        rormpc_upnext::remove(ctx, id);
+                    }
                     if !ids.is_empty() {
                         ctx.command(move |_, client| {
                             for id in ids {
@@ -513,6 +569,9 @@ impl PlanView {
                             Ok(())
                         });
                     }
+                }
+                QueueActions::DeleteAll if self.on_header => {
+                    rormpc_upnext::confirm_clear(ctx, self.requests_shown());
                 }
                 QueueActions::DeleteAll => {
                     event.abandon();
@@ -569,6 +628,9 @@ impl PlanView {
                         self.marked.insert(id);
                     }
                 }
+            }
+            CommonAction::ContextMenu if self.on_header => {
+                rormpc_upnext::open_block_menu(ctx, self.requests_shown());
             }
             CommonAction::ContextMenu if matches!(self.selected_turn(), Some(Turn::Request(_))) => {
                 self.menu(ctx);
@@ -637,7 +699,21 @@ impl PlanView {
             .flatten()
             .cloned()
             .flatten();
+        let on_header = self.area.contains(event.into())
+            && self.rendered_header == Some(usize::from(event.y.saturating_sub(self.area.y)));
         self.refresh(ctx, false);
+        if on_header
+            && matches!(
+                event.kind,
+                MouseEventKind::LeftClick | MouseEventKind::DoubleClick | MouseEventKind::RightClick
+            )
+        {
+            if self.jump_to_block(ctx) && !matches!(event.kind, MouseEventKind::LeftClick) {
+                rormpc_upnext::open_block_menu(ctx, self.requests_shown());
+            }
+            ctx.render()?;
+            return Ok(true);
+        }
         if self.scrollbar.contains(event.into())
             && matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::Drag { .. })
         {
@@ -835,6 +911,23 @@ impl PlanView {
             Row::new(columns).style(style)
         });
         frame.render_stateful_widget(widget, table, &mut self.state);
+        // the header row spans the table: drawn over its empty row
+        self.rendered_header = self
+            .rows
+            .iter()
+            .position(|r| r.turn == Turn::Header)
+            .and_then(|i| i.checked_sub(self.state.offset()))
+            .filter(|row| *row < usize::from(table.height));
+        if let Some(row) = self.rendered_header {
+            let style = if self.on_header {
+                ctx.config.theme.current_item_style
+            } else {
+                ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD)
+            };
+            let line = header_line(self.requests_shown(), table.width);
+            let at = Rect { y: table.y + row as u16, height: 1, ..table };
+            frame.render_widget(Line::from(line).style(style), at);
+        }
         if let Some(widget) = ctx.config.as_styled_scrollbar() {
             frame.render_stateful_widget(widget, scrollbar, self.state.as_scrollbar_state_ref());
         }
