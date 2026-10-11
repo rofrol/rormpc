@@ -1734,18 +1734,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11: automatically after each radio download (d-k5ct3563).
 - [x] Transcribed lyrics: Run the whole library's songs without lyrics (about 274, about 10 hours of CPU)?
       Decided by the user 2026-10-11: yes, once overnight (d-ofgw3a5v).
-- [ ] Transcribed lyrics: May a single-song `--current` request skip vocal separation to answer in about 20 s instead of about 2 min?
-      Options: no, always separate (accuracy, the instrumental gate and language detection need the stem) | yes, a fast mode on the mix with a lower-confidence label | ask each time
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
-- [ ] Transcribed lyrics: Show a transcript that passed the checks at once, or only after the user accepts it?
-      Options: show at once with the machine-transcribed label | keep as draft until accepted in rormpc | show at once for radio tracks only
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
-- [ ] Transcribed lyrics: Default Whisper model?
-      Options: large-v3-turbo | large-v3 | turbo by default with large-v3 on request per song
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
-- [ ] Transcribed lyrics: Where do the heavy dependencies live?
-      Options: a separate uv tool with an inline-dependency script | a `transcribe` extra of rormpc-tools | documented manual install only
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [x] Transcribed lyrics: May a single-song `--current` request skip vocal separation to answer in about 20 s instead of about 2 min?
+      Decided by the user 2026-10-11: no, always separate the vocals (d-ihaam37d).
+- [x] Transcribed lyrics: Show a transcript that passed the checks at once, or only after the user accepts it?
+      Decided by the user 2026-10-11: show at once with the machine-transcribed label (d-m3sz7ubx).
+- [x] Transcribed lyrics: Default Whisper model?
+      Decided by the user 2026-10-11: large-v3 (d-crma4ykk), not the measured large-v3-turbo.
+- [x] Transcribed lyrics: Where do the heavy dependencies live?
+      Decided by the user 2026-10-11: a separate uv tool with an inline-dependency script (d-5z76bdt3).
 - [ ] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
       Options: no | yes, only the public radio tracks | yes, the whole evaluation set
       Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
