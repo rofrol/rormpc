@@ -880,6 +880,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       and once shuffle.json changes, log the projection's inputs for the skipped id (plan, history, requests,
       queue file); fix what it shows (Sol: decide whether Past should outrank Forecast; MiMo: one shuffle.json write
       per transition). The user restarts rormpc to rule out the old binary.
+      Confirmed by the user 2026-10-12 with the current build: the skipped song disappears, then appears again as -1,
+      so the view renders between MPD's song change and mpd-player's history write (the round's second cause).
+      The fix goes in rormpc (a todo run): keep the song that was playing as -1 until shuffle.json has it.
 - [ ] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move [t-7cqbsitp]
       badly for MONTERO (Call Me by Your Name), Lil Nas X"): find whether the .lrc timing or rormpc's scrolling is off.
       Checked 2026-10-11 (coordinator): the file is the official video rip (189.8 s); LRCLIB entry 37216484 (chosen
