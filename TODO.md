@@ -701,6 +701,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       committed in dotfiles 3b49821 right after the install. Found: the worker's scratch test wrote the user's
       ~/.cache/rormpc/hits/preview.json (a fixed path); stage 5's worker adds an AGENTS.md note to run scratch tests
       with their own XDG_CACHE_HOME.
+      Stage 5 done in rormpc (worker, cherry-picked; installed 2026-10-11, 1091 tests): `d`, a middle click and the
+      row menu ("Remove from queue and ban (keep file; z undoes)") take songs out of the queue and `musicdb ban` them
+      in the background; `D`, an Up next request's removal and "Remove repeated entries" do not ban; a ban is an entry
+      on the z / Z timeline (z runs `musicdb unban FILE...`, not `ban --undo`, so an unban in the panel meanwhile
+      cannot misdirect it); the Banned panel (`ShowPlay(Banned)`, default `gB`; added to the user's config in dotfiles
+      727433a after the install) unbans with Enter / u; Previous sources and an open smart list's export record a
+      rule set once one of its songs starts or when the queue moves to another source; +/- on a queue row applies at
+      once while filters own the queue; preview.json follows XDG_CACHE_HOME (AGENTS.md note). Noted: z after banning
+      several songs, some already banned, unbans those too; the first song start after rormpc starts from a stop is
+      not recorded in Previous sources. Proposed below: the smart list picker's "Load" and "a Apply" now do the same.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
@@ -1290,6 +1300,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
+
+- [ ] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
+      instant filtering stage 5 worker (2026-10-11). Cost: a small rormpc change, no build beyond the usual install.
 
 - [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
       the whole text or wrap it, and keep it long enough to read.
