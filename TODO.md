@@ -851,10 +851,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       its own time. Also: the user's config got `L` (SmartLists) in its queue keys (decided d-bjtovhts; dotfiles
       02d3ee1). Note: from 2026-10-11 15:10 a herdr hook limits this coordinator tab to an allowlist; later items go
       through `herdr todo run`.
-- [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle [t-o4a6x3xr]
+- [x] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle [t-o4a6x3xr]
       prev`, MPD `next`) when it is bound (raised by the stage 1 worker 2026-10-10): one control path; behaviour
       is the same today. Cost: a small rormpc change, no build beyond the usual install.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
+      Done 2026-10-11 (3a269ca, installed and pushed by the run) through herdr todo run r-b67l5zil (worker; reviewed by the coordinator): rormpc's Next and Previous
+      (keys and `rmpc next` / `rmpc prev`) send one non-blocking datagram to mpd-player's command socket (the same path rule
+      as `mpd-player socket-path`); a failed send falls back at once (Previous: `shuffle prev`, then MPD `previous`; Next:
+      MPD `next`) and the status bar says so once per outage; the rewind rule comes first as before. Not tried live: the
+      worker's sandbox cannot bind sockets; one watcher test timed out in the sandbox (rormpc_upnext atomic replacements),
+      left to the verify outside it.
 - [ ] Media keys: `pause` (key, Now Playing, MPRIS) while "Pause for…" holds the pause cancels the timer and stays [t-il2f5mdd]
       paused (decided by the user 2026-10-11, d-h2in7kd6). rormpc-tools player/control.py `_pause`.
 - [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
