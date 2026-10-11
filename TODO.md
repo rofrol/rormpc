@@ -866,6 +866,21 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       per transition). The user restarts rormpc to rule out the old binary.
 - [ ] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move
       badly for MONTERO (Call Me by Your Name), Lil Nas X"): find whether the .lrc timing or rormpc's scrolling is off.
+      Checked 2026-10-11 (coordinator): the file is the official video rip (189.8 s); LRCLIB entry 37216484 (chosen
+      automatically, within 2 s) says 190 s but its lines run 0:06.77-2:13.72, the ~2:17 audio's timing, so every
+      line comes early (the video's intro). Other candidates: 170, 147, 144, 143-138 s. rmpc honours `[offset:]`.
+      Round 20261011-150637-ce29 (Sol 7981b1c7, MiMo ea11bfef, both useful), in agreement: an entry's declared
+      duration is not proof; flag an entry whose last line is far before the end (Sol: >30 s and >20% of the file;
+      MiMo: line span < 0.72 of the length or >45 s left, or 15% off the other candidates' median span) as "verify
+      against the audio", never reject it; align with Whisper word timestamps of distinctive lines on the demucs
+      vocal stem (the transcription pipeline), a robust offset fit (MiMo: also a slope for sped-up rips), piecewise
+      only with >=3 anchors on each side of a >2 s jump; refuse and change nothing when the anchors are few or
+      scattered (MiMo: <8 anchors, residual MAD >400 ms, |offset| >25% of the length). Store reversibly with
+      provenance (entry id, file hash, method, residuals) and an undo; nudge keys (±0.1 / ±0.5 s, reset); check the
+      sign of rmpc's `[offset:]` on a test file first. They differ on storage: Sol `[offset:]` for one offset and a
+      derived .lrc for piecewise; MiMo always a generated .lrc beside a sidecar, the source untouched. First test:
+      this MONTERO file (the first line on the first vocal onset ±0.3 s), then a mid-song skit, a long instrumental
+      outro (must refuse).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
