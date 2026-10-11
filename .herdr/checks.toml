@@ -1,0 +1,18 @@
+# Checks `herdr todo run --check NAME...` may run to verify a worker's commit
+# (and the command that installs master after the cherry-pick): each name maps
+# to a program and its arguments, run as they are in the worker's folder (no
+# shell, so nothing is expanded or split). herdr reads this file from the shared
+# checkout at preflight and keeps the argv with the run, so a worker's commit
+# cannot change its own check. Clippy is not a check: `cargo clippy -p rmpc`
+# fails on older code.
+
+[checks]
+tests = ["cargo", "test", "-p", "rmpc"]
+
+[install]
+# After the cherry-pick, herdr installs master with this argv in the shared
+# checkout (release build, backup of the installed binary, install). `build_id`
+# prints the installed build's commit first, so a run cut off after its install
+# sees that it is done.
+command = ["scripts/rormpc_install.sh", "install"]
+build_id = ["scripts/rormpc_install.sh", "build-id"]

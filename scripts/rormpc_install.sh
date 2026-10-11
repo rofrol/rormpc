@@ -2,11 +2,14 @@
 # Install this checkout's release build as ~/.cargo/bin/rormpc, keeping the previous binary for rollback.
 set -euo pipefail
 
-usage="usage: rormpc_install.sh install|rollback|list|companions [--local] [--gap SECONDS]|status
+usage="usage: rormpc_install.sh install|rollback|list|build-id|companions [--local] [--gap SECONDS]|status
 
   install     build the release binary, back up the installed one, install the new one
   rollback    put back the most recent backup (the current binary becomes a backup too)
   list        show the installed build and the backups, newest first
+  build-id    print the installed build's commit first, then its version line (herdr todo run's [install]
+              build_id); fails when nothing is installed or the version names no commit. The version does not
+              show uncommitted changes, so a dirty build of a commit looks like a clean one
   companions  what rormpc's Hits pane, play counts and delete menu run, and services that work with it closed
               (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install at a pinned tag), musicdb
               update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
@@ -406,6 +409,12 @@ case "${1:-}" in
   list)
     [ -x "$installed" ] && echo "installed: $("$installed" version | head -1)"
     ls -1t "$backups" 2>/dev/null | sed 's/^/backup: /'
+    ;;
+  build-id)
+    [ -x "$installed" ] || { echo "no rormpc at $installed" >&2; exit 1; }
+    rev="$(revision_of "$installed")"
+    [ -n "$rev" ] || { echo "$installed version names no commit" >&2; exit 1; }
+    echo "$rev $("$installed" version | head -1)"
     ;;
   companions) shift; companions "$@" ;;
   status) status ;;

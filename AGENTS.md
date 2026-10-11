@@ -81,3 +81,10 @@ A file for [guiding AI coding agents](https://agents.md/).
 - One TODO coordinator owns rormpc and rormpc-tools: their TODO, workers, releases and installs (decided by the user
   on 2026-10-07; the session started with "rób TODO po kolei", herdr agent `todo-rormpc`). The music-mpd
   coordinator keeps music-data and sends rormpc requests to it as text; other sessions do not release or install.
+- The coordinator runs each item through `herdr todo run` with `--check tests` (`.herdr/checks.toml`:
+  `cargo test -p rmpc`); after the cherry-pick herdr installs master with `scripts/rormpc_install.sh install` and
+  reads the installed commit with its `build-id`. Clippy is not a check (`-p rmpc` fails on older code).
+- `herdr todo run` takes only a lowercase conventional commit subject: the type is one of `feat`, `fix`, `docs`,
+  `refactor`, `test`, `chore`, `perf`, `build`, `ci`, `style`, `revert`, the description does not start with a
+  capital. The area goes in the scope: `feat(rormpc): next and previous …`, `docs(todo): …`; `rormpc: …` is
+  refused.
