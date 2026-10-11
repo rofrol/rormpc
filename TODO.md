@@ -895,13 +895,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       reset) whose offset is saved per song with an undo; the automatic alignment comes with the transcription build
       (the same Whisper and demucs), MONTERO as its first test.
 
-- [ ] Replace "Sweet Nothing" (Calvin Harris ft. Florence Welch), a 4:29 official-video rip with extra video parts [t-is2eqcck]
+- [x] Replace "Sweet Nothing" (Calvin Harris ft. Florence Welch), a 4:29 official-video rip with extra video parts [t-is2eqcck]
       (bit.do--spotify2015/364--Calvin_Harris--Calvin_Harris_-_Sweet_Nothing_(Official_Video)_ft._Florence_Welch--17ozSeGw-fY--20120920.mp3),
       with the clean 3:29 track from the official "Calvin Harris - Topic" channel (https://youtu.be/TawoXhEN2tE),
       reported by the music-mpd session (passed on by the user 2026-10-11). Decided by the user 2026-10-11: replace
       (d-hj7az67n); not D.O.D & Calvin Harris - Sweet Nothing (2025 Edit) (d-dse2zosm). How: `yt-mp3-mb --yes URL`,
       then `musicdb versions same NEW OLD` (the video goes to the quarantine with an alias, its plays and likes
       follow the new file); the coordinator runs it (a library change the user decided).
+      Done by the coordinator 2026-10-11: downloaded as Singles/Calvin_Harris_feat._Florence_Welch--Sweet_Nothing--
+      TawoXhEN2tE--20140324.mp3 (3:28, MusicBrainz recording 4cf00d80-35b4-49d6-a050-68ca435e694b, "auto"); `musicdb
+      versions same` moved the like, wrote the alias and put the video rip in the quarantine (neither file had
+      lyrics); its last step, `musicdb.sync`, failed with HTTP 404 (the hourly `musicdb update` runs it again).
+      music-data's aliases.jsonl and likes.jsonl are left for the hourly export to commit.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
