@@ -864,6 +864,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       and once shuffle.json changes, log the projection's inputs for the skipped id (plan, history, requests,
       queue file); fix what it shows (Sol: decide whether Past should outrank Forecast; MiMo: one shuffle.json write
       per transition). The user restarts rormpc to rule out the old binary.
+- [ ] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move
+      badly for MONTERO (Call Me by Your Name), Lil Nas X"): find whether the .lrc timing or rormpc's scrolling is off.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
