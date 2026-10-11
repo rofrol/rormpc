@@ -821,6 +821,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       song (~10.5 h for the ~274 songs without lyrics); instrumentals detected by VAD on the stem (whisper writes
       "Thank you." there); stored as <song>.transcript.json, never as .lrc, shown in rormpc as machine-transcribed.
       Seven open choices in "Needs a decision" ("Transcribed lyrics:"); the build waits for them.
+      All seven decided by the user 2026-10-11: transcribe each new Omarchy Radio download automatically, and the ~274
+      library songs without lyrics once overnight; always separate the vocals; show a transcript that passed the
+      checks at once, labelled machine-transcribed; model large-v3 (not the measured turbo); a separate uv tool with an
+      inline-dependency script; one commercial API tried on the whole evaluation set as an upper bound (needs the
+      user's API key: a worker that has none reports it, never signs up).
 - [ ] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a
       play must not make the next run cold) and cache the chart matching (chart_candidates: name normalisation and
       matching of ~2000 chart rows), then measure again; `hits serve` only if the warm median is still over 0.15 s
@@ -1742,6 +1747,5 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11: large-v3 (d-crma4ykk), not the measured large-v3-turbo.
 - [x] Transcribed lyrics: Where do the heavy dependencies live?
       Decided by the user 2026-10-11: a separate uv tool with an inline-dependency script (d-5z76bdt3).
-- [ ] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
-      Options: no | yes, only the public radio tracks | yes, the whole evaluation set
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [x] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
+      Decided by the user 2026-10-11: yes, the whole evaluation set (d-j6gatiuc); it needs an API key the user has.
