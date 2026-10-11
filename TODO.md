@@ -4,51 +4,51 @@
 
 Triaged 2026-10-07 from the sections below; each item points at its section for the details.
 
-- [x] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the
+- [x] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the [t-2i7pvwhq]
       classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
-- [x] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a
+- [x] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a [t-2e5e552e]
       decision" which one to build ("Soon: playing-song indicator in Hits").
-- [x] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral
+- [x] Previous in the weighted shuffle: `shuffle prev` in mpd-player over the real playback history, neutral [t-bzr7nkwx]
       outcome, prev transitions logged for `musicdb import-skips`. Without the "restart in the first seconds" rule
       until it is decided ("Previous in the weighted shuffle"). Done in rormpc-tools 328cff3 (not released).
-- [x] Previous: rormpc's Previous and Hammerspoon's media key send `shuffle prev` to mpd-player (channel `rormpc`)
+- [x] Previous: rormpc's Previous and Hammerspoon's media key send `shuffle prev` to mpd-player (channel `rormpc`) [t-b3gjc7et]
       while it runs, `mpc prev` without it. Done: rormpc afc55ac, dotfiles 22e3b81 (Hammerspoon not reloaded). Both
       send it only when mpd-player is subscribed and its shuffle.json has `trail`, so until the rormpc-tools
       release they keep plain `mpc prev`. mpd-player's `playid` starts playback even when MPD was paused.
-- [x] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue
+- [x] Versions: "Delete this file…" on a Versions file row (copy → merge, other recording → delete), the Queue [t-zypmsrmj]
       `≋` marker, "Find versions…" with a key and Back to the Queue row ("Versions: delete a bad version…").
       Done in 9164204 (worker; checked on a scratch MPD without deleting or merging anything real).
-- [x] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file
+- [x] Versions: chromaprint comparison within a group, the "Same recording? audio match" suggestion, default file [t-jv3j5npa]
       to keep, rename "Remove duplicate entries" ("Versions: audio fingerprint finds copies").
       Done in rormpc 2b9b78c, rormpc-tools 21d17a0 (worker; not released).
-- [x] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting.
+- [x] Lyrics: Polish translation from tekstowo.pl next to the original, sidecar storage, layouts and highlighting. [t-254mj4wn]
       The LLM fallback waits for its decision below ("Lyrics: Polish translation next to the original").
       Done in rormpc 7e6b794, rormpc-tools 69d8201 (worker; tools not released: after v0.2.31).
-- [x] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item). Done in dacac50.
-- [x] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…"). Done (rormpc-tools 529e2da).
-- [x] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run
+- [x] Media keys: document mpd-now-playable in RORMPC.md ("Media keys and Now Playing", first item). Done in dacac50. [t-5jz2sazq]
+- [x] Mute: test a mute that spans an mpd-player gap silence on a scratch MPD ("Mute for…"). Done (rormpc-tools 529e2da). [t-6mosa7ei]
+- [x] Tests without CI: the missing rormpc-tools pytest cases and ro-listenbrainz-mpd listen-rule tests, run [t-wsuaycwe]
       locally ("Tests and GitHub Actions…", first two items).
       Done: rormpc-tools e354b97 (179 tests), ro-listenbrainz-mpd 862c08a (12 tests); no bugs found.
-- [x] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while
+- [x] Up next races: random off (entries skipped past end up before the current song) and mpd-player down while [t-bpeaqsb3]
       an Up next song plays ("Test report of 2026-10-06").
       Done in rormpc-tools 893091c (worker).
-- [x] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc
+- [x] Release rormpc-tools v0.2.32 (Polish lyrics translations, new tests, the Up next fix) and install rormpc [t-ovz4sp6u]
       from master (decided 2026-10-07; the coordinator does it).
       Done: v0.2.32 pushed and installed with `companions`, rormpc 53751e0 installed.
-- [x] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next
+- [x] Hits playing-song indicator, variant B: the playing row in `highlighted_item_style` and `▶0` in Next [t-i27yc5yb]
       (decided 2026-10-07; mockups and pitfalls in "Soon: playing-song indicator in Hits"). Done in 81c9248 (worker; not yet installed).
-- [x] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu)
+- [x] CI: GitHub Actions for rormpc-tools (pytest), ro-listenbrainz-mpd (`cargo build` + `cargo test` on Ubuntu) [t-ruly7mly]
       and the rormpc installer smoke test, plus `push` in rormpc's ci.yml; triggers as in "Tests and GitHub
       Actions…" (decided 2026-10-07; a worker writes them, the coordinator pushes). Done and pushed: rormpc-tools and
       ro-listenbrainz-mpd `test.yml` green on the first run; rormpc ci.yml runs on push (Build & Test green on
       Ubuntu and macOS; Formatter only on pull requests, decided by the user, the fork is not rustfmt-clean);
       `installer_smoke.yml` is manual (workflow_dispatch) until it passes once; `RORMPC_TOOLS_REF` / `RO_LB_REF`
       override the pinned tags.
-- [x] Installer on macOS: `rormpc_install.sh companions` silently fails to add the listen rule to a fresh
+- [x] Installer on macOS: `rormpc_install.sh companions` silently fails to add the listen rule to a fresh [t-al7sdhpj]
       scrobbler config (macOS awk rejects the newlines in `-v rule=...`; the `awk … && mv` hides it, prints "set
       the 90%-without-a-seek rule" anyway and leaves a .tmp file). Pass the rule with `\n` escapes, fail loudly,
       no .tmp left (found by the CI worker 2026-10-07; fix approved by the user). Done: the rule goes through ENVIRON.
-- [x] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed
+- [x] "Pause for…" replaces "Mute for…" (asked 2026-10-07: "I don't want Mute for at all, only Pause for"): a timed [t-7tk6ukdy]
       pause owned by mpd-player with a wall-clock deadline (works with rormpc closed, across sleep and restarts);
       at the deadline it resumes only if still paused by this timer; a play by anyone cancels the timer. Remove
       Mute for… (module, commands, menu items, slider countdown, docs) in the same change; reuse its deadline and
@@ -59,25 +59,25 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       serde alias until the dotfiles config says `"om": ShowPauseMenu` (switch it after installing). Known limits:
       play then pause on the same song while the daemon is down cannot be told apart and resumes; an MPD restart
       (new song ids) cancels the timer. Not installed yet.
-- [x] Release rormpc-tools v0.2.33 (Pause for…), install rormpc (Pause for…, Hits ▶0) and switch the dotfiles
+- [x] Release rormpc-tools v0.2.33 (Pause for…), install rormpc (Pause for…, Hits ▶0) and switch the dotfiles [t-ttktfa4d]
       config to `"om": ShowPauseMenu` (decided 2026-10-07: now; the coordinator does it).
       Done: v0.2.33 pushed and installed, rormpc d553c48 installed, dotfiles `om` → ShowPauseMenu (config loads).
-- [x] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue
+- [x] Keys pasted or sent in one batch with `/` go to the filter, not to normal-mode commands, in the Queue [t-fr3ow6in]
       filter and the ordinary filters (approved 2026-10-07; see the item under "Done: live Queue plan view"). Done in
       4257576 (worker): the key resolver sent the resolved action back through the app event channel, behind the
       keys already queued from the same batch; it now returns it and the event loop handles it before the next
       key. Checked on a scratch MPD (Queue and Directories filters, consume/single/random unchanged).
-- [x] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first
+- [x] Live playlists, first version (decided 2026-10-07): public YouTube playlists only, manual check, first [t-pa3ol6v2]
       import reviewed, batch accept; the prerequisite `yt-mp3-mb --batch --json` in dotfiles, the `liveplaylist`
       CLI, the rormpc URL modal and pane ("Live playlists: paste a playlist URL…"). Done (worker): rormpc-tools 9212507
       (`yt-mp3-mb --batch --json`), ffa991f..e7a6212 (`liveplaylist`), rormpc aef0abc (`Pane(LivePlaylists())`, the URL
       input from its Enter menu). Not tested: a real download from a live playlist (the one allowed live listing
       returned 0 items); the UI was checked on a scratch MPD with hand-made items. Needs a release and a
       `Pane(LivePlaylists())` tab in the user's config (snippet in RORMPC.md).
-- [x] Release rormpc-tools v0.2.34 (Live playlists), install rormpc (Live playlists pane, keys sent with `/`) and
+- [x] Release rormpc-tools v0.2.34 (Live playlists), install rormpc (Live playlists pane, keys sent with `/`) and [t-w6hhhinf]
       add a "Live playlists" tab after Playlists in the dotfiles config (decided 2026-10-07: now).
       Done: v0.2.34 pushed and installed, rormpc 1cb1b3b installed, dotfiles 9474d93 (tab + `gl`; the config loads).
-- [x] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided
+- [x] Lyrics: machine translation with Claude through the Anthropic API when tekstowo.pl has none (decided [t-o4qhbf6g]
       2026-10-07): line by line with the stanza as context, labelled "machine translation", the key from the
       user's rormpc-tools config (never in the repo); the model id from the claude-api reference.
       Changed 2026-10-07 (the user: "ask the claude CLI, the way pi does it"): no API key; it calls the Claude
@@ -88,7 +88,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       One live call on invented lyrics (4.4 s). Released 2026-10-07: v0.2.35 pushed and installed, rormpc 6474e92
       installed; dotfiles be85114 renumbers the digit keys (1 Hits … 0 Live playlists; gy Lyrics, gd Deleted,
       gf Search).
-- [x] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit,
+- [x] The tab bar does not fit and cannot scroll (user, 2026-10-07, screenshot: "the tabs do not fit, [t-jpdlezoo]
       and mouse scroll does nothing; also 3 jumps to Directories"). The bar cuts "Ver…" at the right edge
       (Hits, Queue, Up next, Shuffle, Directories, Artists, Album Artists, Albums, Playlists, Lyrics, Deleted,
       Ver…); the wheel over it should scroll it or the bar should wrap/shrink; the digit keys should match the
@@ -97,7 +97,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       changes the dotfiles keymap, a worker the bar. Done: dotfiles be85114 (digits), rormpc 7249c32 (worker): the bar
       scrolls the active tab into view, ‹ › mark hidden tabs, the wheel over the bar and a click on ‹ › scroll it
       without switching, a click hits the tab drawn there. Not installed yet.
-- [x] Asked 2026-10-07: "download the top 1% of music" (in Polish: "ściągnij top 1% muzyki"). Facts: Hits' Top %
+- [x] Asked 2026-10-07: "download the top 1% of music" (in Polish: "ściągnij top 1% muzyki"). Facts: Hits' Top % [t-qdbex3hq]
       is the share of a chart cohort (Billboard year-end, per year); `hits fetch` is a verified import queue for
       missing songs (rormpc: "Fetch missing…"). Scope decided 2026-10-07: Billboard year-end, all years, the top 1%
       of each year's chart, the missing songs through `hits fetch` (verified).
@@ -106,24 +106,24 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "no MusicBrainz match"), 7 failed (no YouTube result within 5 s of the chart recording's length: Macarena
       Bayside Boys Mix, Walk Like an Egyptian, Believe, Breathe, Happy, Low, Surfin' U.S.A.). Review: `hits fetch
       status`, or the Hits pane's "Fetch missing…".
-- [x] Asked 2026-10-07: "in Hits, all my playlists as a source" (in Polish: "w Hits jako źródło moje playlisty
+- [x] Asked 2026-10-07: "in Hits, all my playlists as a source" (in Polish: "w Hits jako źródło moje playlisty [t-udmkxp36]
       wszystkie"). Facts: Hits' Source cycles Billboard US / my charts / whole library / my likes / recommended.
       Done in rormpc-tools cd664bb (`hits --source playlists`), rormpc 9e56cc4 (Source "my playlists" after "whole
       library") (worker): every stored playlist's owned songs once, ranked like the library, the playlists in Why;
       generated playlists left out (GENERATED_PLAYLISTS: Hits/My charts/Library/Likes/Recommendations/My playlists
       labels, LB, Folder, Skipped, Not finished; Tag … and Live playlists count). Real MPD: 268 songs from 4
       playlists. Not released yet.
-- [x] Top 1% review (the user, 2026-10-07): accept the 21 "other recording of the same song" items (`hits fetch
+- [x] Top 1% review (the user, 2026-10-07): accept the 21 "other recording of the same song" items (`hits fetch [t-bfeuks3n]
       accept`), reject the 5 "different song" items (`hits fetch reject`: the staged file is deleted and the
       rejection stays in the fetch queue state, $XDG_STATE_HOME/rormpc-tools/fetch/queue.json, so `hits fetch
       add` never queues them again; `hits fetch clear` keeps rejected ones; `hits fetch retry KEY` undoes it).
       The 2 "no MusicBrainz match" items stay in review. Done (worker): 21 accepted into Hits/<decade>s, 5 rejected,
       2 in review (Love Will Keep Us Together, Shadow Dancing); the fetch queue: 39 ok, 7 failed, 5 rejected.
-- [x] Release rormpc-tools v0.2.36 (the "my playlists" Hits source) and install rormpc (decided 2026-10-07: now).
+- [x] Release rormpc-tools v0.2.36 (the "my playlists" Hits source) and install rormpc (decided 2026-10-07: now). [t-tt5krlur]
       Done: v0.2.36 pushed and installed, rormpc 22deb27 installed.
-- [x] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (approved 2026-10-07; from the
+- [x] Add `"o": TogglePlanView` to the Queue keymap in the dotfiles config (approved 2026-10-07; from the [t-px26n5bu]
       music-mpd coordinator: the plan view was installed without it). Done: dotfiles 5c46056; `o` opens the plan view.
-- [x] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a
+- [x] Leave evidence if the Previous forward jump repeats: MPD `log_level "verbose"` on the real MPD and a [t-fqlmsgoc]
       timestamped log line per media-key command in Hammerspoon (approved 2026-10-07; edit only, the user
       reloads Hammerspoon and restarts MPD). Done (worker): dotfiles 06fa6b7 logs each media-key event and mpc
       command to ~/.local/state/hammerspoon/media-keys.log (capped at 4000 lines); /opt/homebrew/etc/mpd/mpd.conf
@@ -132,7 +132,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       MPD (`brew services restart mpd`).
       Reverted 2026-10-08 (the user agreed): the cause was found (Karabiner), so mpd.conf was restored from the
       backup before MPD ever restarted with verbose logging.
-- [x] Media keys through Karabiner, not Hammerspoon (found 2026-10-07: Hammerspoon's systemDefined tap never sees
+- [x] Media keys through Karabiner, not Hammerspoon (found 2026-10-07: Hammerspoon's systemDefined tap never sees [t-ve5m6ji6]
       the MacBook's F7/F8/F9: Karabiner maps them to consumer keys from its virtual HID device, which go straight
       to Now Playing, so Previous went mpd-now-playable → MPD `previous` and counted a skip; the Input Monitoring
       permission did not change that). Decided by the user: a Karabiner complex modification catches F7/F8/F9
@@ -143,7 +143,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       log ~/.local/state/media-keys/media-keys.log), 8b466bb (Karabiner rule), 268c9c5 (Hammerspoon override
       removed); rormpc 6c430c6 (RORMPC.md). Verified with a real F7 on 2026-10-07 18:40: `shuffle prev` sent, mpd-player
       went back to the song that really played before, recorded as "back" (no skip), prev.jsonl "confirmed".
-- [x] Asked 2026-10-08: "can I see it in rormpc to decide? ask the models" (in Polish: "i mogę to jakoś zobaczyć
+- [x] Asked 2026-10-08: "can I see it in rormpc to decide? ask the models" (in Polish: "i mogę to jakoś zobaczyć [t-dh3qdczn]
       w rormpc, żeby zdecydować? pytaj modeli"), about the 2 top 1% downloads waiting in `hits fetch` review
       (Love Will Keep Us Together, Shadow Dancing; reason "no MusicBrainz match"). Facts: the Hits pane marks such
       rows `?` in the `✗` column, its menu has Accept / Reject the download, the details say why; the row is only
@@ -161,7 +161,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       candidate" skipping rejected video ids; "Open on YouTube". Consider: a tag edit while staged; accept failing
       when the staged file is gone. Today the two items can be heard with `mpv` on the staged files in
       ~/.local/state/rormpc-tools/fetch/staging/ and are best not accepted as they are.
-- [x] Review fetch downloads in rormpc (approved 2026-10-08, the whole design from the consultation): `hits fetch accept --as-chart KEY`
+- [x] Review fetch downloads in rormpc (approved 2026-10-08, the whole design from the consultation): `hits fetch accept --as-chart KEY` [t-fkmujm4p]
       (chart artist/title, YouTube source in a comment, no MBID; accept fails on a missing staged file; retry skips
       rejected video ids) in rormpc-tools; in the Hits pane a "Downloads (N to review)" list, expected vs
       downloaded details, Preview / Stop, Open on YouTube, Accept as the chart song, Accept with current tags,
@@ -171,9 +171,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       video ids skipped, accept fails on a missing file; Hits "Downloads (N to review)" first in the filter column,
       expected vs downloaded details, a shared preview player (rormpc_preview.rs, also used by Versions), and a
       retry race fixed (the worker starts only after the decision is written). Not released yet.
-- [x] Release rormpc-tools v0.2.37 (Downloads review) and install rormpc (decided 2026-10-08: now).
+- [x] Release rormpc-tools v0.2.37 (Downloads review) and install rormpc (decided 2026-10-08: now). [t-won3gm2v]
       Done: v0.2.37 pushed and installed, rormpc 059a876 installed.
-- [x] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc;
+- [x] Installer smoke test (decided 2026-10-09): the coordinator dispatches `installer_smoke.yml` on rofrol/rormpc; [t-gd6dbzxj]
       when it passes, a worker adds push to master, pull_request, a weekly schedule and release tags like the other
       workflows (and drops the "until it has passed once" note), the coordinator pushes. A failure is fixed first.
       First run 2026-10-09 (run 37990844352) failed in "Fresh user with a lingering systemd user session" after
@@ -189,7 +189,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Second run green (degraded user manager handled). Triggers added in 75cada9 (worker): push to master and pull_request
       with a paths filter on the installer and the workflow, release tags, weekly "47 5 * * 1"; pushed.
 
-- [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can
+- [x] Plan (asked 2026-10-09, design only): "there should be one combined view now: Queue, Hits, Shuffle. So I can [t-34iwvjvl]
       choose to prepare weighted. If I change the year in a filter as in Hits, a new list is prepared. If I turn
       weighted off, the normal view comes back. The things chosen in Hits, like year and genres, can be saved as a
       live list, like collections on Steam or in Calibre. Show visualizations. Ask the models." A worker consults
@@ -204,7 +204,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       ± set chips, scoped pins/exclusions, smart lists, 6 mockups; consult rounds 20261009-230419-b57c and
       20261009-230647-3341. Its 12 open choices are in "Needs a decision" ("Combined view:").
 
-- [x] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows
+- [x] Combined view, phase 1 (decided 2026-10-09, plans/combined-view.md): `hits` set chips (±, fixed rows [t-i2cikete]
       Billboard, my likes, my playlists, recommended), Rank by, Years of (default follows Rank by), CLI and Hits pane;
       `--source` kept as a shorthand; contract tests.
       Done in rormpc af62e2e, rormpc-tools 06ecfee (worker; pytest 261, cargo test 989; clippy shows only older
@@ -213,7 +213,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       position; "of N" counts the songs after the set algebra, before period and filters; Billboard with Years of
       other than chart reads every chart year (6,333 songs, ~0.8 s). The installed hits 0.2.37 rejects the new
       arguments: rormpc and rormpc-tools must be released and installed together.
-- [x] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else
+- [x] Combined view, phase 2: exceptions (pins and exclusions with a scope; default scope the open smart list, else [t-52rii5vk]
       library; any exclusion beats any pin, a pin beats `-` rules; hand edits in the queue are one-offs), CLI + log,
       marks and actions in Hits and Queue, "show excluded", the exceptions list; `hits hide` read as Billboard-scope
       exclusions.
@@ -225,11 +225,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       from the default ~/.cache/rormpc/hits/current.json, not a pane's configured path, and its rows show no ✚ ⊘
       marks; `hits except --file` needs the file in songs.jsonl (`musicdb identity sync` first); `list:ID` scopes
       wait for phase 4 (default_scope()).
-- [x] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc
+- [x] Release rormpc-tools v0.2.38 (phases 1 and 2: ± set chips, Rank by, Years of, exceptions) and install rormpc [t-o6yoho4z]
       from master (decided 2026-10-10: after phase 2; the coordinator does it as with earlier releases).
       Done 2026-10-10: v0.2.38 tagged and pushed (gated on pytest 277 + pyflakes), companions installed, rormpc
       fb6cb76 installed and pushed; the config loads. Restart running rormpc instances to use it.
-- [x] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends
+- [x] Combined view, plan addition (decided 2026-10-09: "only Play" among the browsing tabs): a worker extends [t-5fvst33c]
       plans/combined-view.md, after a consult round, with how Play covers what Artists/Album Artists, Albums,
       Directories, Playlists and Live playlists do today: play one album in track order, add one song or album
       without Apply (Play next / Append), edit a stored playlist's order and contents, review Live playlist
@@ -250,7 +250,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Browse › Lists, the Live inbox with multi-select and a badge, a new phase 3b after phase 3. Found in the code:
       a song appended to a queue holding a Hits source with weighted on is never drawn today (shuffle.py draws only
       from source.json's members). Open choices 13-20 are in "Needs a decision".
-- [x] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h`
+- [x] Combined view, phase 3: the Play pane (normal mode: queue with the filter column collapsed to one line, `h` [t-mnrl3wsr]
       opens it; weighted mode: plan projection), preview + Apply with the queue version check, confirmation only on a
       source kind change or more than 25% of the queue; the default config switches to Play, old panes stay.
       Done in rormpc e535666, rormpc-tools 49d85ae (worker; pytest 278, cargo test 1003; tested on a scratch MPD: preview,
@@ -264,7 +264,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       or not; Pane(Play()) has the hits command and ~/.cache/rormpc/hits/preview.json fixed; Enter in a preview row
       plays/appends it as in Hits; re-applying the same rules works only with that result on screen ("The queue
       already plays these filters"). Your config needs a Pane(Play()) tab to show it (choice 18).
-- [x] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources,
+- [x] Combined view, phase 4: smart lists (named "Smart list"): save, picker, load as preview, Previous sources, [t-xouyelmu]
       MPD export "Smart NAME" on by default; no freeze action.
       Done in rormpc b50c38b, rormpc-tools 66c37f4 (worker; pytest 300, cargo test 1011; tested on a scratch MPD: save and
       update, load as preview, Apply, rename, duplicate, delete, default pin scope, a blocked list, export after
@@ -279,7 +279,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       re-exports the list's saved rules even when the filters on screen differ; the first key after closing a
       modal can be lost when sent in one batch with Esc (seen with Esc then L; the modal closes through the event
       channel, see AGENTS.md). Not released.
-- [x] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with
+- [x] Combined view, phase 5: sets from tags, MPD playlists, Live playlists and smart lists through "+ set…", with [t-sakhxqgq]
       a cycle check.
 
       Done in rormpc b983fed, rormpc-tools 52df098 (worker; pytest 322, cargo test 1015; UI on a scratch MPD: picker
@@ -289,13 +289,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       chart songs only when the outer rules have chart rows too; the picker's count of a smart list is its last
       "Smart NAME" export (none before one); "× clear sets" also turns the fixed chips off (mockup 6); `set:list:ID`
       (a list used as a set) differs from `list:ID` (the open list). Not released.
-- [x] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its
+- [x] Installer smoke test: "Units are enabled and active" proves the programs run: each unit's MainPID and its [t-vrs32msa]
       executable, and a log line from it (decided 2026-10-09; a Type=simple unit is "active" with a missing binary).
       Done in 7303772 (worker; failing runs shown in an OrbStack VM with each program missing): the step
       waits for both daemons' MPD channel subscriptions (an idle event, at most 20 events of 60 s), checks each
       MainPID runs the installed program and runs `musicdb --version`. Also found: `is-active` with several units
       exited 0 when any one was active. Green on GitHub: run 38012260320.
-- [x] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or
+- [x] rormpc-tools: `musicdb update` reads `api_url` from the scrobbler config like the scrobbler, so a custom or [t-jridiu23]
       fake API URL is used for ListenBrainz (decided 2026-10-09); adjust the smoke test's musicdb step if its
       expected exit changes.
       Done in rormpc-tools 380f87f (worker; pytest 332 offline): every token call (validate, lookup, listens import,
@@ -303,13 +303,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       it; anonymous calls in hits.py stay on the public ListenBrainz; tests no longer read the real macOS config
       (~/Library/Application Support/listenbrainz-mpd). The smoke test's musicdb step now fails on "connection
       refused" from its fake api_url instead of "Token invalid" (its comment is outdated). Not released.
-- [x] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+- [x] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's [t-7odtbbdz]
       `status` and dependency hint (decided 2026-10-09).
 
       Done in rormpc c0caebc, rormpc-tools f90bf91 (worker; pytest 338): the four entry points print one line naming the
       missing program (ffmpeg, yt-dlp, fpcalc, mpc) with its brew/apt install and exit 1; `companions` stops without
       ffmpeg, `status` lists it, the apt hint includes it; the smoke test's musicdb comment updated. Not released.
-- [x] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the
+- [x] Scrobble status (asked 2026-10-09: "I also want to see in how many seconds the entry will be sent to the [t-kuqrbhgk]
       scrobbler, and what percent of the required percent is done, and whether it is still possible since the song
       was scrolled, e.g. to 20%, and a manual button to send it to the scrobbler. It has to take the information
       how many percent is needed to send to the scrobbler from the ro mpd listenbrainz daemon. Ask the models.")
@@ -328,12 +328,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       released: needs a ro-listenbrainz-mpd tag, RO_LB_TAG bump and `companions`. To see it, your theme needs
       `(kind: Property(Status(Scrobble)))` (RORMPC.md "Scrobble status"); oL works with your config already.
       Open choices are in "Needs a decision" ("Scrobble status:").
-- [x] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened
+- [x] Hits "my plays" rank leaves out the weighted shuffle's own picks with every Years of, not only with listened [t-67ushfwe]
       (decided 2026-10-10; rormpc-tools hits_rules.score and where `plays` is gathered; tests; RORMPC.md wording).
       Done in rormpc-tools 682387b, rormpc 376ec64 (worker; a new test fails on the old score for release, chart and
       rediscover): my plays and rediscover count plays without the shuffle's own picks; the Plays column still
       counts every play; "not lately" (days since the last play) is unchanged. Not released.
-- [x] Install hints (asked 2026-10-10: "a line with the brew or apt install command instead of a traceback - hmm.
+- [x] Install hints (asked 2026-10-10: "a line with the brew or apt install command instead of a traceback - hmm. [t-fbrj2tut]
       odd, this hardcoding. And what about Arch, Guix, Windows? I don't know myself. Ask the models."): decide after
       a consult round how rormpc-tools and the installer name a missing program (ffmpeg, yt-dlp, fpcalc, mpc) on
       macOS, Debian/Ubuntu, Arch, Guix and Windows, then change it.
@@ -354,7 +354,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Shepherd as unsupported. Unverified package names are footnoted (rsgain on Arch/Guix, fpcalc in Guix's
       chromaprint); the coordinator doubts Guix's "mpclient" for mpc (Guix may call it mpd-mpc): check on the
       Guix machine. Not released.
-- [x] Scrobble status follow-ups (decided 2026-10-10): the wording "62% counted · need 90% · in 1:24" (counted =
+- [x] Scrobble status follow-ups (decided 2026-10-10): the wording "62% counted · need 90% · in 1:24" (counted = [t-kk34m5dw]
       since the last seek; with a max-seconds cap lower than the fraction show the effective share, e.g. "need
       80%/4:00"; impossible: "no scrobble: seek to 20%; need 90%"; "no scrobble: song too short"; "scrobbling off";
       "scrobbled ✓"; "scrobbler not running"; Sol's table in the consult round), a "Send to ListenBrainz now" item in
@@ -366,7 +366,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       time (it takes that width even when empty) and loads with the installed rormpc. The menu item was not clicked
       in a live TUI. Not released. The daemon reports no "too short" or "rule off" state today (it has neither
       rule); rormpc shows those texts once it does.
-- [x] ro-listenbrainz-mpd remembers a sent listen (manual or automatic) across its own restart in the middle of a
+- [x] ro-listenbrainz-mpd remembers a sent listen (manual or automatic) across its own restart in the middle of a [t-k5z6ost3]
       song, in its SQLite database, so a later automatic listen of the same play is never sent twice (decided
       2026-10-10).
       Done in ro-listenbrainz-mpd d21d7a7 (worker; cargo test 27): a sent_listens table in the cache database (song id,
@@ -376,7 +376,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the daemon was down can look like a replay; a stop and restart of the same song then looks like the same
       play; enable_cache = false remembers nothing; a kill between sending and writing the row loses it. Not
       released.
-- [x] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the
+- [x] Combined view, phase 3b (decided 2026-10-09 "only Play", choices 13-20 decided 2026-10-10): Play absorbs the [t-nnfklbn2]
       browsing tabs (plans/combined-view.md "Play absorbs the browsing tabs", but with the user's layout: Browse in
       the left column as Filters | Browse, the playlist editor and the Live inbox as overlays); groupings Artists,
       Album artists (separate), Albums, Folders, Lists; P plays replacing the queue with Apply's confirmation rule,
@@ -393,30 +393,30 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Browse action (it writes ~/.cache/rormpc/hits/preview.json, the real one), Live multi-select with real items
       (unit test only). Noted: P's confirmation names the first song's file, not its title; t in the old browser
       tabs and in the queue now adds to Up next too. Not released.
-- [x] After phase 3b: release and install, and change your config like the new default (Play, Up next, Search plus
+- [x] After phase 3b: release and install, and change your config like the new default (Play, Up next, Search plus [t-ekdxwuli]
       Versions, Deleted, Lyrics; decided 2026-10-10; the coordinator does it).
       Done 2026-10-10: rormpc-tools v0.2.40 and ro-listenbrainz-mpd v2.6.0-ro.6 tagged and pushed (tests green),
       installer 76104b2, companions and rormpc 76104b2 installed; dotfiles e7b9272: tabs Play, Up next, Search,
       Versions, Deleted, Lyrics; digits 1-3 for them, 4-9 and 0 left to the built-in keys (Browse groupings, Live
       overlay), gs and gl removed, "P": PlayReplace in the navigation map; the config loads. Restart rormpc.
-- [x] (approved 2026-10-10 from Proposed) rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the
+- [x] (approved 2026-10-10 from Proposed) rormpc-tools README: describe `hits --set`, `--rank`, `--years-of`, `hits except` and `hits exceptions` (the [t-my7xykcn]
       phase 1 and 2 workers left it out of scope).
       Done in rormpc-tools f126481 (worker; README only, pushed).
-- [x] (approved 2026-10-10 from Proposed) AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to
+- [x] (approved 2026-10-10 from Proposed) AGENTS.md "Checking UI behaviour": a copy of the user's config for tests needs the themes/ directory next to [t-5wj2gkbl]
       it (reported by the phase 1 worker 2026-10-10).
       Done in 16d20f7 (worker).
-- [x] (approved 2026-10-10 from Proposed) The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have
+- [x] (approved 2026-10-10 from Proposed) The exceptions scope menu starts with the cursor on its title, not on the default scope (the fork's menus have [t-ur2lkhds]
       no unselectable header; phase 2 worker, 2026-10-10).
       Done in 00e6dfd (worker): MenuModal::start_at; tested.
-- [x] (approved 2026-10-10 from Proposed) Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked
+- [x] (approved 2026-10-10 from Proposed) Hits: a result file written with `-n 0` and no `--top` loads into the filter column with Top 1-10% ticked [t-3olzl6sl]
       (older bug, found by the phase 2 worker 2026-10-10).
       Already fixed by phase 4; a test added in e01f0cd (worker).
-- [x] Guix package names in the rormpc-tools dependency table (asked 2026-10-10: "check it yourself with the
+- [x] Guix package names in the rormpc-tools dependency table (asked 2026-10-10: "check it yourself with the [t-wke6bw2e]
       models"): verified in Guix's source (codeberg master): mpc is `mpd-mpc` (mpd.scm; Guix's `mpc` is the GNU MPC
       library), `chromaprint` ships fpcalc (mp3.scm, -DBUILD_TOOLS=ON), `rsgain` exists (audio.scm). Sol had all
       three right, MiMo was wrong on rsgain. Fixed in rormpc-tools c637b61 (worker, pushed); Arch's rsgain stays
       unverified.
-- [x] Deleted songs are not downloaded again (asked 2026-10-10: "important. when I delete a song from the library
+- [x] Deleted songs are not downloaded again (asked 2026-10-10: "important. when I delete a song from the library [t-7l4vfqk2]
       and ListenBrainz, it has to be recorded among the deleted, so that it is not downloaded again. ask the
       models"): a worker consults the models, checks what `musicdb delete` and the Deleted tab already record, and
       makes every downloader (hits fetch, yt-mp3-mb, liveplaylist, Versions) skip a deleted song.
@@ -431,7 +431,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       `yt-mp3-mb --allow-deleted`. Today's deletion, Beyoncé "Irreplaceable" (14:40, permanent, with history), is
       blocked by its video, recording and chart key. One old deletion (Bugi, Bugi (Dance RMX).mp3) has no id at all
       and blocks nothing. Not released.
-- [x] Weighted mode without the "unplanned" rows (asked 2026-10-10 with a screenshot: "what is the point of showing
+- [x] Weighted mode without the "unplanned" rows (asked 2026-10-10 with a screenshot: "what is the point of showing [t-ueyk5vwo]
       unplanned? ask the models"). Consulted (Sol 75b2c1f0, MiMo 8d2faf34): the rows give access to the pool, but
       "queue order" misleads (the shuffle never plays it) and a big source buries the forecast; both proposed a
       collapsed line. Decided by the user 2026-10-10: remove them entirely; the pool stays reachable through `/`
@@ -441,19 +441,19 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       view end at the forecast; a `/` match outside it shows after the forecast as a "·" row ("N · in the pool, not
       in the forecast") with Play now / Play next, pin/exclude and delete; J/K do not move it. `/` in the TUI was
       checked by a unit test only.
-- [x] Release rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab download
+- [x] Release rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab download [t-pjs4nypw]
       column, Hits ⌫ rows, scope-menu cursor, weighted view without unplanned rows) after the weighted-mode change
       (decided 2026-10-10; the coordinator does it).
       Done 2026-10-10: v0.2.41 tagged and pushed (tests green), installer 1372bce, companions and rormpc 1372bce
       installed and pushed; the config loads; `musicdb deletions` works. Restart rormpc.
-- [x] Rename the "Play" tab to "Music" (asked 2026-10-10 with a screenshot: "it looks like a button. another name? ask
+- [x] Rename the "Play" tab to "Music" (asked 2026-10-10 with a screenshot: "it looks like a button. another name? ask [t-mnd5vcib]
       the models"; Sol 0eb6ec94 and MiMo 2f26e04d both put Music first, Player second; decided by the user
       2026-10-10: Music): the tab label in the built-in default and assets/example_config.ron, SwitchToTab names,
       RORMPC.md and plans; the pane type Pane(Play()) stays (explicit configs keep loading); your config's tab and
       its "1" key too.
       Done in b75da20, dotfiles fd5e600 (worker; checked in a debug build with your config: the bar shows "Music").
       The label lives in your config, so a rormpc restart shows it with the installed binary too.
-- [x] Deleted becomes an overlay in Music (asked 2026-10-10: "why a separate Deleted tab and not inside Music? ask
+- [x] Deleted becomes an overlay in Music (asked 2026-10-10: "why a separate Deleted tab and not inside Music? ask [t-fhah4yiw]
       the models"; Sol 1092fd62: overlay like Live with a badge for failed steps only; MiMo aee8f69d: keep a tab;
       decided by the user 2026-10-10: an overlay in Music): the Deleted pane's table, restore/retry and download
       allow/block in an overlay opened with gd (and a click on its badge), the badge counting failed or unresolved
@@ -463,7 +463,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Incident: the dotfiles commit used ShowPlay(Deleted), which the installed rormpc did not know, so your config
       failed to load ("Unexpected variant named `Deleted`") until the coordinator installed rormpc 46c2a3a minutes
       later (running instances were not affected). Lesson queued for AGENTS.md.
-- [x] Remove the Up next tab; its last bits move into Music (asked 2026-10-10: "not needed at all. does it duplicate
+- [x] Remove the Up next tab; its last bits move into Music (asked 2026-10-10: "not needed at all. does it duplicate [t-gaxmdikq]
       Music? ask the models"; Sol 54478bdf and MiMo 3e4eecf6: yes, a duplicate; Music already has the ↑ rows with
       play now, J/K, Make next, remove). Missing in Music and to be added: a header row "Up next · N" between the
       playing song and the forecast in both modes, J/K/D/Make next bounded to that block (no moving a forecast row
@@ -474,11 +474,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the install): "Up next · N" header in both modes, J/K/D/Make next bounded to the requests, "Clear Up next (N)…"
       on the header (Enter, menu, D), the rejected-play error in Music's footer, 2 and gu = ShowPlay(UpNext); "New
       round" moved from the Up next tab's menu to Music's song and header menus.
-- [x] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only
+- [x] AGENTS.md: a change to the user's config (dotfiles) that uses a new action, pane or key name is committed only [t-5uihvffo]
       together with the install of a rormpc that knows it (the coordinator installs, then commits the config), never
       ahead of it (2026-10-10: ShowPlay(Deleted) broke loading the config until the install).
       Done in 29d7250 (worker).
-- [x] Media key Next lags (asked 2026-10-10: "the MacBook's Next media key works with some delay. ask the models"):
+- [x] Media key Next lags (asked 2026-10-10: "the MacBook's Next media key works with some delay. ask the models"): [t-ti4mv6c7]
       a worker measures where the time goes (Hammerspoon's handler, `shuffle next` / mpc next through mpd-player,
       MPD, mpd-now-playable), consults the models, and fixes the cause (no added waits; AGENTS.md "Added delay is a
       bug signal"); live tests with the media key on the user's MPD go to "Needs a decision" first.
@@ -489,7 +489,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       18-600 ms, mpc → MPD stop 20-30 ms, sometimes 90-430 ms: Karabiner's console user server has no launchd
       ProcessType, so its children are throttled and wait for CPU while agents run; mpc resolves "localhost" through
       mDNSResponder (up to 260 ms under load). Fix options in "Needs a decision".
-- [x] Restore Bon Jovi "Livin' on a Prayer" and make a full restore possible (asked 2026-10-10, next: "I deleted
+- [x] Restore Bon Jovi "Livin' on a Prayer" and make a full restore possible (asked 2026-10-10, next: "I deleted [t-lamy5upz]
       Jon Bon Jovi - Livin' on a Prayer. Restore it. And give a way to restore, together with the ListenBrainz
       stats. Ask the models"). Checked: deletion 20261010-162151-140--Bon_Jovi--Bon_Jovi_-_Livin__On_A_Prayer--
       lDK9QqIzhwk--20090617.mp3 at 16:21:51, permanent (the file is gone, not in the Trash), ListenBrainz listens
@@ -513,7 +513,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       downloads allowed; the 2026-10-06 16:35:51 listen waits for ListenBrainz to process its deletion. The hourly
       retry needs `musicdb update` from a release with `restore` (installed is 0.2.41): next release.
 
-- [x] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10
+- [x] Apply fails with "MpdError: Cannot execute command: 'add'. Detail: 'No such directory'" (reported 2026-10-10 [t-pdj4bzlw]
       with a screenshot: "error. to the TODO"): Music, Hits 1980-1989 top 1-10% "(modified)", weighted, round done,
       the queue left with 2 songs. Likely a file in the result that is no longer in MPD's database (e.g. a song
       deleted today, still in hits' cache or current.json) aborts the whole add; the screenshot was taken with the
@@ -532,7 +532,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Apply ("Preview outdated, recomputing…", Esc cancels). Released with rormpc-tools v0.2.42 (also `musicdb
       restore` for the hourly retry), installer 47e3363, rormpc 47e3363 installed. Noted: the status bar cut a long
       message after "in their order" (Proposed).
-- [x] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table
+- [x] The table shows an old result as if current (asked 2026-10-10 with a screenshot: no decade ticked, the table [t-fpcuvhmu]
       still only 1980-1989: "I don't understand why there is a year limit here when it is not selected in the UI.
       ask the models"). Checked: the rows were the previous result (Period 1980-1989, chart years) while a newer
       hits run (`--rank plays --years-of listened -n 0`, started for an intermediate click) ran for minutes; only a
@@ -552,13 +552,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       decade list silently sent 1980-1989; now it means all chart years (1959-now) and reads "Period: ‹All years›".
       "My plays" runs take 0.6-2.9 s here; the minutes came from queued old runs finishing one by one; the split is
       cached anyway (second run 0.001 s instead of 0.25 s).
-- [x] The filter column stays open in normal mode too (asked 2026-10-10 with a screenshot after `w` off: "the whole
+- [x] The filter column stays open in normal mode too (asked 2026-10-10 with a screenshot after `w` off: "the whole [t-u5f7g5q2]
       selection on the left disappeared. ask the models"; it was collapsed to one "Source: …" line by the plan's choice
       5). Consulted (Sol 8d6fdb94, MiMo 5e81fe67): both would keep it collapsed with a notice; MiMo's "filters only
       affect weighted playback" dismissed (Apply replaces the queue in both modes). Decided by the user 2026-10-10:
       always open, in both modes (`h` keeps moving focus between the column and the table; Browse B as now).
       Done in d802514 (worker; read-only check on the real MPD), rormpc 0bf908e installed.
-- [x] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the
+- [x] Download from https://radio.omarchy.org/ (asked 2026-10-10: "download https://radio.omarchy.org/. ask the [t-6jdipai6]
       models"). Earlier (2026-10-03) radio.omarchy.com did not resolve and the Live playlists plan said radio only if
       the station publishes a track history (ICY metadata brings ads and talk). A worker looks at what the site
       offers (a playlist, a track history API, a stream with metadata), consults the models, and builds it as a
@@ -576,7 +576,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Released 2026-10-10: rormpc-tools v0.2.43 (also the my-plays cache), installer and rormpc installed; the
       coordinator ran `liveplaylist add https://radio.omarchy.org/`: subscription omarchy-radio, 33 items pending
       your review in the Live overlay (0 / gl), MPD playlist "Omarchy Radio".
-- [x] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show
+- [x] Wrong release years (asked 2026-10-10: "Sweet Dreams (Are Made of This) released 21 January 1983. And we show [t-ax24akeu]
       2000. Investigate with the models. A repair plan for the whole library?"): a worker finds where 2000 comes from
       for that song (file tags: date vs originaldate, a compilation's date, MusicBrainz release vs recording first
       release, what rormpc and hits read), measures how many library songs show a compilation or reissue year
@@ -611,7 +611,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       work and artist within ±10 s), dry-run report, review, atomic writes keeping the old values, ~66 min at 1 req/s.
       The matcher now treats MusicBrainz's video flag like "(video)" and prefers an audio candidate (new downloads).
       Its 5 open choices are in "Needs a decision" ("Release years:").
-- [x] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view:
+- [x] Hover over the like heart no longer highlights it (asked 2026-10-10 with a screenshot of Music's weighted view: [t-xyvqib4m]
       "on hover the hearts don't light up like they used to, to show they can be clicked. ask the models"): a worker
       finds which change lost the hover highlight (the old Queue pane had it; Music / the plan projection may not
       pass hover state to the like column), consults the models on hover affordances for clickable cells in a TUI,
@@ -619,7 +619,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in 1c78f61 (worker, consulted Sol + MiMo; cargo test 1051), installed: under the mouse ♥ and ✗ are bold and
       underlined, an unrated song shows a dim underlined ♥; Queue, Hits and the weighted view (hover pinned to the
       song from the last paint, cleared on scroll; Browse draws no hearts).
-- [x] The forecast should always show 10 ahead (asked 2026-10-10 with a screenshot: -2, -1, 0 ▶ Eye of the Tiger,
+- [x] The forecast should always show 10 ahead (asked 2026-10-10 with a screenshot: -2, -1, 0 ▶ Eye of the Tiger, [t-qxldaudy]
       then nothing: "shouldn't there always be 10 ahead? ask the models"). Cause (checked): mpd-player's fill_plan
       draws only songs not heard in the current round; at the round's end it reports "round done: all N heard
       (shuffle newround starts another)" and plans nothing until a new round is started by hand (MPD's random keeps
@@ -639,7 +639,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       reason in the header; J/K do not swap across the round boundary. Limit: a source smaller than 10 cannot show
       several rounds (one MPD priority per queue entry, 12 h rest): the plan shows this round and at most the next
       one with the reason (in "Needs a decision"). ↻/≈ are not in the old Queue's ShuffleNext column.
-- [x] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›":
+- [x] Year range: "to" below "from" and no open ends (asked 2026-10-10 with a screenshot "from ‹ 2000 › to ‹ 1991 ›": [t-5asvphuo]
       "illogical that this is smaller than from. ask the models. Besides, no option to turn off either this or from?").
       Consulted (Sol 3f2a69ae, MiMo fb2e7e9b): clamp while stepping (from stops at to and back, equal years allowed;
       no push, no swap). Decided by the user 2026-10-10 (Sol's way): Space on a bound row toggles it, the year is
@@ -648,13 +648,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       an open-ended period.
       Done: rormpc fa87993, rormpc-tools c00c20f (worker); released v0.2.45 and installed 2026-10-10 (UI not
       checked live by the worker).
-- [x] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s
+- [x] Rename the radio's MPD playlist "Omarchy Radio" to "radio.omarchy.org" (decided 2026-10-10; `liveplaylist`'s [t-5rrypivb]
       rename or --name, the playlist file moved, the subscription updated).
       Done in rormpc-tools af44539 (worker): `liveplaylist rename ID NAME` moves the .m3u and records the name
       (refuses a taken name, undoes the move if the save fails); new radio subscriptions default to
       "radio.omarchy.org". Released in v0.2.46. The live rename of the user's subscription was blocked by the auto-mode
       classifier (see "Needs a decision").
-- [ ] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant,
+- [ ] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant, [t-vtmaq4gz]
       without apply. Work out with the models how to do it."): a worker studies how a filter change in the Music view
       reaches the table, the preview and the MPD queue today (Apply, preview.json, the weighted plan, the 3b
       decisions in plans/combined-view.md), consults the models on making every filter change take effect at once
@@ -723,13 +723,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (median / p90): billboard warm 0.104 / 0.111 s, warm after a play 0.129 / 0.144 s, cold 0.245 s; library by
       plays warm 0.132 s, after a play 0.344 s (measured under heavy load; to be measured again on a quiet machine).
       Below 0.15 s for billboard: `hits serve` is not built (the user's rule).
-- [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
+- [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd [t-ia6hx3xl]
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
       Done: rormpc-tools 165b8a1 (`liveplaylist check --kind omarchy --notify`), rormpc 40e9c85 (companions: a
       LaunchAgent at 10:00, a missed run follows on wake; systemd OnCalendar=daily, Persistent=true; a status line)
       (worker). Released v0.2.46 (with the rename command) and installed 2026-10-10; the first run: 0 new.
-- [x] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket
+- [x] Media keys through mpd-player (decided 2026-10-10, after the consult in "Media key Next lags"): a command socket [t-u2z73nhw]
       in mpd-player as the one control interface (next through the plan, previous through its history, toggle);
       the user's Karabiner F7/F8/F9 call it with send_user_command (no shell, mpc or DNS lookup per press; the
       dotfiles change goes in with the install, AGENTS.md "The user's config"); mpd-player registers as the macOS
@@ -769,14 +769,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Center tile (the user's test), MPRIS on a real Linux desktop (only a private bus on macOS). Rollback:
       `launchctl bootout gui/$UID/io.github.rofrol.rormpc.mpd-player-nowplaying`, delete its plist,
       `mpd-now-playable install-launchagent`.
-- [x] Installer: right after starting mpd-player-nowplaying, companions warned "mpd-player's Now Playing is
+- [x] Installer: right after starting mpd-player-nowplaying, companions warned "mpd-player's Now Playing is [t-34a4whpn]
       xpcproxy" (2026-10-11) although it was running a moment later: the check reads launchd's state while the job
       is still spawning. Wait for the observable running state (a pid and `state = running`) or report a real
       failure (the job exited), never a sleep (found while installing stage 2; installer only, one revert).
       Done in rormpc b8baf9b (worker): `launchd_started` waits for `state = running` with a pid, or a real
       failure (exited since the bootstrap, not loaded), at most 100 polls of launchctl 0.1 s apart (launchd has no
       event or blocking form for a spawn; the delay accepted by the coordinator). Linux has no such check.
-- [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:"
+- [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:" [t-j74galug]
       decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
       the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
       tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
@@ -810,12 +810,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       no-recording, 187 no-work); classes: video 51, dj-mix 27, version 21, rg-earlier 21, later 14, undated 21.
       Sweet Dreams (row 348) 2000 → 1983 high, Livin' on a Prayer (row 362) 1988 → 1986 high. Ready for the
       user's review in `gY`.
-- [x] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch
+- [x] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch [t-rkvdgpp6]
       proposal, so a swapped download shows from → to and why (found by the stage C worker 2026-10-11; today only
       the ">work" method suffix shows; logging only, one revert).
       Done in rormpc-tools 4d8c6da (worker): log.jsonl entries and --batch proposals carry "swap"; the
       "files" entries do not. Not released.
-- [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or
+- [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or [t-dmpfe6gj]
       something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
       timestamps into .lrc, language detection, cost per song), and plans or builds "Transcribe lyrics" for a song
@@ -831,17 +831,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       checks at once, labelled machine-transcribed; model large-v3 (not the measured turbo); a separate uv tool with an
       inline-dependency script; one commercial API tried on the whole evaluation set as an upper bound (needs the
       user's API key: a worker that has none reports it, never signs up).
-- [x] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a
+- [x] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a [t-jbqu432z]
       play must not make the next run cold) and cache the chart matching (chart_candidates: name normalisation and
       matching of ~2000 chart rows), then measure again; `hits serve` only if the warm median is still over 0.15 s
       (the user's rule, 2026-10-11).
-- [x] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
+- [x] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the [t-qjdzk34e]
       instant filtering stage 5 worker (2026-10-11). Cost: a small rormpc change, no build beyond the usual install.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
       Done in rormpc (worker, cherry-picked; installed 2026-10-11, 1091 tests): one "Load" button (Enter; `a` an
       alias without a button), Pick::Apply removed, the hints and the save dialog's export note updated. Found: the
       user's config has no `L` (SmartLists) binding in its queue keys, so the picker may be unreachable there.
-- [x] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
+- [x] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show [t-hewfzhd7]
       the whole text or wrap it, and keep it long enough to read.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
       Done in rormpc (worker, cherry-picked; installed 2026-10-11, 1100 tests): a message wider than the bar wraps
@@ -851,15 +851,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       its own time. Also: the user's config got `L` (SmartLists) in its queue keys (decided d-bjtovhts; dotfiles
       02d3ee1). Note: from 2026-10-11 15:10 a herdr hook limits this coordinator tab to an allowlist; later items go
       through `herdr todo run`.
-- [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle
+- [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle [t-o4a6x3xr]
       prev`, MPD `next`) when it is bound (raised by the stage 1 worker 2026-10-10): one control path; behaviour
       is the same today. Cost: a small rormpc change, no build beyond the usual install.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
-- [ ] Media keys: `pause` (key, Now Playing, MPRIS) while "Pause for…" holds the pause cancels the timer and stays
+- [ ] Media keys: `pause` (key, Now Playing, MPRIS) while "Pause for…" holds the pause cancels the timer and stays [t-il2f5mdd]
       paused (decided by the user 2026-10-11, d-h2in7kd6). rormpc-tools player/control.py `_pause`.
-- [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate
+- [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
       filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
-- [ ] Media key Next in Music, weighted (asked 2026-10-11: "I am in Music, weighted, I press the media Next, it goes
+- [ ] Media key Next in Music, weighted (asked 2026-10-11: "I am in Music, weighted, I press the media Next, it goes [t-a3axjgzk]
       to the next song, but the current one is not seen as the previous one, it is removed from the view. Ask the
       models."): find why the skipped song disappears from the plan view instead of showing as the last play.
       Checked 2026-10-11 (coordinator): afterwards the data is right: the skipped song (id 1893) is still queued with
@@ -874,7 +874,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       and once shuffle.json changes, log the projection's inputs for the skipped id (plan, history, requests,
       queue file); fix what it shows (Sol: decide whether Past should outrank Forecast; MiMo: one shuffle.json write
       per transition). The user restarts rormpc to rule out the old binary.
-- [ ] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move
+- [ ] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move [t-7cqbsitp]
       badly for MONTERO (Call Me by Your Name), Lil Nas X"): find whether the .lrc timing or rormpc's scrolling is off.
       Checked 2026-10-11 (coordinator): the file is the official video rip (189.8 s); LRCLIB entry 37216484 (chosen
       automatically, within 2 s) says 190 s but its lines run 0:06.77-2:13.72, the ~2:17 audio's timing, so every
@@ -897,17 +897,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
-- [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two
+- [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
       plays (`-2`, `-1`, dimmed), `0 ▶` current, `↑n` requests, all ten forecast slots, then an unselectable
       `unplanned · queue order` divider and the remaining songs in MPD order. Label the mode in the panel title.
-- [x] Preserve selection, scrolling and mouse targets by queue song ID across forecast refreshes; break ties
+- [x] Preserve selection, scrolling and mouse targets by queue song ID across forecast refreshes; break ties [t-6tkz6t5e]
       by MPD position. Disable Next-header sorting in this view. Filtering keeps the original turn numbers.
-- [x] Dim stale forecast numbers and show `stale · Xm` when the daemon is absent or its state is old.
-- [x] J/K reorder requests in the request section; in the forecast they request a version-checked slot swap
+- [x] Dim stale forecast numbers and show `stale · Xm` when the daemon is absent or its state is old. [t-7ftn7rfa]
+- [x] J/K reorder requests in the request section; in the forecast they request a version-checked slot swap [t-kv4kjvwe]
       from mpd-player, which alone writes priorities and publishes confirmation. Never move across section
       boundaries or move past/current/unplanned rows. Document patch lifetime and clear it when a patched
       song plays or leaves the queue, or the daemon draws a new forecast.
-- [x] Verify with `cargo test`, `uv run pytest`, `uvx pyflakes src`, and TUI tests only on a scratch MPD.
+- [x] Verify with `cargo test`, `uv run pytest`, `uvx pyflakes src`, and TUI tests only on a scratch MPD. [t-khiaasvh]
 
 Verified: `cargo test` (957 tests), `uv run pytest` (123 tests), pyflakes, and the TUI on a null-output scratch MPD
 (port 6650): 20 confirmed forecast swaps with the MPD queue order unchanged, past/current/request/forecast
@@ -915,16 +915,16 @@ sections, request J/K, a filter that keeps slot 10 and plays its ID, stale state
 59-second-old heartbeat while paused, `stale · 0m` at once when the daemon is killed (MPD sends no Subscription
 event on a client disconnect, so rormpc waits on the daemon's process exit), and fresh again after a restart.
 
-- [x] Approved and fixed 2026-10-07 (4257576): keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the
+- [x] Approved and fixed 2026-10-07 (4257576): keys that reach rormpc in the same input batch as `/` are resolved in normal mode (also in the [t-55qjjftx]
       ordinary Queue filter), so a paste or a scripted `send-keys / text` runs the letters as commands. Seen
       2026-10-07 on the scratch MPD (`c` turned consume on).
 
 ## Done: Hits works like Queue, Up next as its own tab (2026-10-06)
 
-- [x] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the
+- [x] Hits behaves like the Queue pane: e.g. Shift+C jumps to the currently playing song, if it is in the [t-3mrqx4hb]
       Hits table.
-- [x] Hits is the first tab.
-- [x] Up next is one top-level tab "Up next" (the menu action stays "Play next"), not a sub-tab of Hits and
+- [x] Hits is the first tab. [t-rvllo3go]
+- [x] Up next is one top-level tab "Up next" (the menu action stays "Play next"), not a sub-tab of Hits and [t-azdqvr3h]
       Queue (user decided 2026-10-06; Sol and MiMo: a view embedded twice means two cursors on one list). It
       lists the songs waiting in Up next: J/K reorder, remove, clear with a confirmation, Enter plays now; no
       "Play next" inside it. Hits and Queue get a key that opens it. Full plan: music-data TODO.md, entry
@@ -937,7 +937,7 @@ another key, and a later explicit successful play clears it. No playback retry o
 
 ## Soon: playing-song indicator in Hits (design only)
 
-- [x] Consult the models and prepare visual mockups of playing-song indicators in Hits (for example, a
+- [x] Consult the models and prepare visual mockups of playing-song indicators in Hits (for example, a [t-ue3ntd5o]
       `▶` beside `0` in the Next column). Show the variants to the user for review before implementing one.
 
 Mockups 2026-10-07 (consulted MiMo; GPT-6.1 Sol was at its usage limit). Today the playing song shows only `0` in
@@ -961,7 +961,7 @@ Next; the Queue paints its row in `highlighted_item_style` (#7aa0cd bold), the c
 
 ## Soon: missing film score / soundtrack genre
 
-- [x] Investigate why the film score / soundtrack genre is missing from songs such as "Cast Away Theme"
+- [x] Investigate why the film score / soundtrack genre is missing from songs such as "Cast Away Theme" [t-x7xs2ppp]
       by Alan Silvestri, and make that classification available in Hits genre filters.
 
 Done 2026-10-07 (rormpc-tools f2f26c0, not released yet): MusicBrainz has no soundtrack genre, only tags; Silvestri
@@ -984,12 +984,12 @@ volume set by anyone cancels the timer and stays; a stop or the end of the queue
 every second, also while paused. Tested on a scratch MPD: expiry, extend, unmute, custom `1h30`, `mpc volume`
 during the mute, stop, a restart past the deadline.
 
-- [x] Tested 2026-10-07 on a scratch MPD (rormpc-tools 529e2da pins it): a mute that spans an mpd-player gap silence.
+- [x] Tested 2026-10-07 on a scratch MPD (rormpc-tools 529e2da pins it): a mute that spans an mpd-player gap silence. [t-kfmmtztt]
       They leave each other alone: an expiry inside the silence restores the volume and stays paused until the gap
       presses play; a gap while muted pauses and resumes at volume 0 and the mute's deadline restores it later; a
       mute started during the silence works (a pause is not a stop).
-- [x] A queue replaced by Sources… may pass through a stop, which unmutes. Watch whether that happens in use.
-- [x] Maybe later: "Pause for…" (now that one daemon owns the gap, it no longer fights mpd-gap).
+- [x] A queue replaced by Sources… may pass through a stop, which unmutes. Watch whether that happens in use. [t-kmhfnth6]
+- [x] Maybe later: "Pause for…" (now that one daemon owns the gap, it no longer fights mpd-gap). [t-ydqho7yh]
 - Closed 2026-10-09: "Mute for…" was removed and "Pause for…" built instead (see "Next, in order").
 
 ## Test report of 2026-10-06 (scratch MPD, music-mpd-8e)
@@ -1000,9 +1000,9 @@ counts as played. The Queue menu keeps Weighted shuffle, Silence, Mute for… an
 "Clear queue…" asks first (Cancel is the default); Sources… leaves out empty playlists; menus are as wide as their
 longest label (within the terminal).
 
-- [x] Same race with random off: entries are moved after the current song, so skipping past them leaves them
+- [x] Same race with random off: entries are moved after the current song, so skipping past them leaves them [t-e37djosr]
       before it. Telling that apart from the user jumping to a later song needs more than positions; not done.
-- [x] mpd-player down while an Up next song plays: it stays waiting. After an MPD restart the re-found entries
+- [x] mpd-player down while an Up next song plays: it stays waiting. After an MPD restart the re-found entries [t-pokofslm]
       carry no priority yet, so "priority 0 = started" cannot be used at startup.
 
 Fixed 2026-10-07 (rormpc-tools 893091c): MPD resets a song's priority to 0 whenever it starts, random on or off, and a
@@ -1036,15 +1036,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both said "document first")
 Closed 2026-10-07 by the user: media keys stay as they are (mpd-now-playable, no helper, no Linux bridge,
 no Rust port); the unchecked points below were closed with it on 2026-10-09.
 
-- [x] Document it in RORMPC.md ("Media keys" section): what it is, the commands above, how to check it
+- [x] Document it in RORMPC.md ("Media keys" section): what it is, the commands above, how to check it [t-7udt3tch]
       (`launchctl print gui/$UID/me.00dani.mpd-now-playable`), the upgrade caveat, and that it is independent
       of rormpc.
-- [x] Do not fold it into `rormpc_install.sh install`: that script installs and rolls back the binary, and a
+- [x] Do not fold it into `rormpc_install.sh install`: that script installs and rolls back the binary, and a [t-7dcqfxzv]
       binary rollback must not touch the service. If a helper is still wanted, make it a separate opt-in
       subcommand (e.g. `rormpc_install.sh media-keys install|status|uninstall`) that only calls the tool's own
       `install-launchagent` / `uninstall-launchagent`, never writes its own plist, and refuses to run a second
       Now Playing source.
-- [x] Linux: MPD has no MPRIS of its own; a bridge exposes it on the session D-Bus. Options: this
+- [x] Linux: MPD has no MPRIS of its own; a bridge exposes it on the session D-Bus. Options: this [t-hmqhlfug]
       repository's `rmpcd` (Rust, MPRIS server via zbus, off by default: `config.mpris = true` in
       `~/.config/rmpcd/init.lua`; upstream calls rmpcd early stage), `mpd-mpris` (Go; Arch: `pacman -S
       mpd-mpris`, ships a systemd user unit: `systemctl --user enable --now mpd-mpris`) or `mpDris2`. Run
@@ -1059,7 +1059,7 @@ no Rust port); the unchecked points below were closed with it on 2026-10-09.
     not. Guix reportedly packages `mpdris2` (and recently `mpdris2-rs`): check with `guix show mpdris2
     mpdris2-rs` on the pinned channel. Otherwise package rmpcd in roguix-channel. Run it as a Guix Home
     Shepherd service (`home-shepherd-service-type`) and check that it lands on the Hyprland session's D-Bus.
-- [x] Extend rmpcd instead (asked 2026-10-07: "maybe extend the rmpc daemon? ask the models"). Consulted
+- [x] Extend rmpcd instead (asked 2026-10-07: "maybe extend the rmpc daemon? ask the models"). Consulted [t-r5nbxrzk]
       2026-10-07 (GPT-6.1 Sol, MiMo), both rank it last today: keep mpd-now-playable (+ mpd-mpris on Linux) first,
       a standalone crate second, rmpcd only as a deliberate commitment to run rmpcd (unused here, early-stage MPRIS,
       tokio + Lua + zbus; edits near its startup re-conflict on every upstream bump). If rmpcd: AppKit's
@@ -1069,7 +1069,7 @@ no Rust port); the unchecked points below were closed with it on 2026-10-09.
       prev` (mpd-now-playable's handler, or the port's), so every Previous walks the same history.
       Decided 2026-10-07 (the user): leave it as it is; no Bluetooth headphones or Now Playing widget are used to
       switch songs, so mpd-now-playable stays unchanged and rmpcd is not extended.
-- [x] Rust instead of the Python tool on macOS. Asked GPT-6.1 Sol and MiMo twice on 2026-10-03; both say keep
+- [x] Rust instead of the Python tool on macOS. Asked GPT-6.1 Sol and MiMo twice on 2026-10-03; both say keep [t-hnddajm5]
       mpd-now-playable (it works, 50 MB RSS is not a real cost), and if it is replaced, by a standalone port,
       not inside rmpcd (rmpcd is the Linux zbus/MPRIS daemon; a macOS stack in it doubles its platforms).
       - What there is to port: mpd-now-playable 1.6.2 (MIT) is ~1900 lines of Python, but the macOS part is
@@ -1105,9 +1105,9 @@ no Rust port); the unchecked points below were closed with it on 2026-10-09.
         through a second connection (a command worker), never the idle one.
       - Estimates from the models: a proof of concept in a day or two, as reliable as the Python tool in
         one to two weeks. Spike first: a launchd-started binary that receives play/pause and shows a title.
-- [x] Windows: no plan unless MPD on Windows is actually used (SMTC, e.g. via souvlaki; needs a hidden HWND with a
+- [x] Windows: no plan unless MPD on Windows is actually used (SMTC, e.g. via souvlaki; needs a hidden HWND with a [t-4be65hpj]
       message pump).
-- [x] Whatever is documented, check: works with rormpc closed, survives MPD restart and sleep/wake, clears
+- [x] Whatever is documented, check: works with rormpc closed, survives MPD restart and sleep/wake, clears [t-5hkpfm6j]
       stale metadata when playback stops, uninstall leaves MPD alone.
 
 ## Modals and the context menu: mouse
@@ -1126,23 +1126,23 @@ Reported 2026-10-03. Causes found in the code:
 
 Plan (asked GPT-6.1 Sol and MiMo on 2026-10-03; both agreed on the points below):
 
-- [x] Menu: hover selects the entry under the cursor, a single left click confirms it. One hit-test function shared by
+- [x] Menu: hover selects the entry under the cursor, a single left click confirms it. One hit-test function shared by [t-44dzvz5w]
       hover and click (headers, separators, borders, scrolling); a click on blank space never runs the selected entry.
       Redraw only when the selection changes.
-- [x] `Moved`: pass it on only while a modal that wants hover is open; drop it early otherwise, so motion causes no
+- [x] `Moved`: pass it on only while a modal that wants hover is open; drop it early otherwise, so motion causes no [t-a5ddt7ve]
       redraws or wakeups elsewhere. Check that nothing treats any mouse event as activity.
-- [x] Click-through: double clicks are synthesised from two left clicks, so once one click closes the menu the second
+- [x] Click-through: double clicks are synthesised from two left clicks, so once one click closes the menu the second [t-ki4qcclm]
       one arrives as `DoubleClick` on the pane underneath and can play/add a song. Reset the double-click tracker
       when a modal closes on a click (or swallow the next click at that position).
-- [x] Outside click: an opt-in per modal (e.g. `fn layout(&self, frame: Rect) -> Option<Rect>` computed the same way
+- [x] Outside click: an opt-in per modal (e.g. `fn layout(&self, frame: Rect) -> Option<Rect>` computed the same way [t-3xqdfi5o]
       as in `render`, no stored rect, so it is right before the first render and after a resize; `None` means "not
       dismissible"). Menu, select, info, keybinds, outputs, decoders: close (same path as Esc). Input: cancel like Esc,
       never submit. Confirm / destructive modals: never close on an outside click. Swallow the click and wheel events
       outside instead of passing them through.
-- [x] Backdrop: switch `modal_backdrop` to `Modifier::DIM` like herdr and enable it in the `roman` theme; decide
+- [x] Backdrop: switch `modal_backdrop` to `Modifier::DIM` like herdr and enable it in the `roman` theme; decide [t-5mu5o62z]
       whether the context menu dims (herdr does not). Popups must start from `Clear` or they inherit DIM. Check in
       Ghostty and kitty (`faint-opacity` / `dim_opacity` decide how strong it is) and with bold/reversed selections.
-- [x] Order: menu hover + single click with the click-through fix first, outside click second, backdrop last.
+- [x] Order: menu hover + single click with the click-through fix first, outside click second, backdrop last. [t-ccfiqjgp]
 
 Done 2026-10-03: `MouseEventKind::Moved`, `Section::item_at`, `Modal::area` (every modal except the confirmation
 one), `Ui::modal_click`; the menu ignores `DoubleClick`; `QueueFindModal::destroy` leaves insert mode. The context
@@ -1151,7 +1151,7 @@ TUI through herdr: hover highlight, one click opens "Show info", a double click 
 playing the row underneath, the backdrop cells carry DIM and the popup does not. Still to check by eye: how strong
 DIM looks in Ghostty.
 
-- [x] Hover lag reported 2026-10-03 (the user is not sure it is real). The user runs rormpc in a Ghostty quick
+- [x] Hover lag reported 2026-10-03 (the user is not sure it is real). The user runs rormpc in a Ghostty quick [t-nfpnkfhh]
       terminal, not in herdr, so the chain is rormpc frame pacing + Ghostty only. Measured by driving it through
       herdr (inject SGR motion, poll `herdr pane read --ansi`): highlight 14-40 ms after one motion event, 28-57 ms
       after a burst of 301, so no backlog. The 30 fps cap delays only renders closer than one frame apart
@@ -1169,33 +1169,33 @@ ask whether to add them. radio.omarchy.com did not resolve (DNS) on 2026-10-03, 
 
 Plan after asking GPT-6.1 Sol and MiMo (both agreed on the shape and the first version):
 
-- [x] Prerequisite: a non-interactive mode for dotfiles `yt-mp3-mb` (e.g. `--batch --json`): no prompts, prints
+- [x] Prerequisite: a non-interactive mode for dotfiles `yt-mp3-mb` (e.g. `--batch --json`): no prompts, prints [t-odozsiae]
       the produced paths and the unresolved matches as JSON, resumable without duplicate downloads. Uncertain
       matches stay "needs review" instead of being asked about inside a child process the TUI cannot answer.
-- [x] A new CLI in dotfiles (like `musicdb` / `hits`), e.g. `liveplaylist add|check|accept|reject|list --json`.
+- [x] A new CLI in dotfiles (like `musicdb` / `hits`), e.g. `liveplaylist add|check|accept|reject|list --json`. [t-nlr65hdi]
       It owns state, source adapters, matching, downloads and writing the MPD playlist; rormpc owns presentation
       and decisions only (a URL input modal and a "Live playlists" pane with accept / reject / accept all), runs
       it with argv (no shell), never blocks the UI thread, can cancel it. Progress as JSONL or a status file
       written atomically (temp + rename), as the Hits pane does.
-- [x] State per subscription in music-data (secrets outside it, logs/progress in ~/.cache): url, kind, MPD
+- [x] State per subscription in music-data (secrets outside it, logs/progress in ~/.cache): url, kind, MPD [t-ebce5ppk]
       playlist name, a stable target dir (not the playlist title, which can change), schema version, lock file.
       Per source item: the decision (pending/accepted/rejected, rejects are durable) separate from the job state
       (queued/downloading/needs_match/ready/failed), source position and last-seen time, the local path.
-- [x] Order lives in the .m3u (playlist_directory), not in `NNN` file names. Publish only ready files. Songs
+- [x] Order lives in the .m3u (playlist_directory), not in `NNN` file names. Publish only ready files. Songs [t-saehdg3c]
       already in the library are referenced, not downloaded again, but only on a confirmed recording match
       (MBID), never on a loose title match.
-- [x] Removals and reorders upstream: never delete local files and never infer a removal from a failed or partial
+- [x] Removals and reorders upstream: never delete local files and never infer a removal from a failed or partial [t-r67d6t3y]
       check (yt-dlp YouTube extraction breaks, bot checks, 403s); an id that reappears is reactivated.
-- [x] First version: public YouTube playlists only (`yt-dlp --flat-playlist -J` to list ids cheaply), manual
+- [x] First version: public YouTube playlists only (`yt-dlp --flat-playlist -J` to list ids cheaply), manual [t-tm6p4zkx]
       check, first import reviewed, batch accept. No timer: nobody answers "add these?" at 4 am; later a launchd
       check may only add pending items and notify.
-- [ ] Later, maybe, Spotify. Verified 2026-10-03 in Spotify's February 2026 migration guide: playlist items are
+- [ ] Later, maybe, Spotify. Verified 2026-10-03 in Spotify's February 2026 migration guide: playlist items are [t-i3kf2nsf]
       readable only for playlists the user owns or collaborates on (not arbitrary public URLs), Development Mode
       needs the app owner on Premium and allows 5 users; since Nov 2024 algorithmic and Spotify editorial
       playlists are off-limits to new apps. So: user OAuth (PKCE), own playlists only. Matching to YouTube: ISRC
       or artist + title + duration + version words, always reviewed, never the first `ytsearch` hit (covers,
       live, nightcore, loops); a YouTube rip often fails AcoustID, so "downloaded, unidentified" is a real state.
-- [ ] Radio: only if a station publishes a track history (an API or page); ICY metadata brings ads and DJ talk.
+- [ ] Radio: only if a station publishes a track history (an API or page); ICY metadata brings ads and DJ talk. [t-j2jzqsov]
       Out of scope until there is a concrete station to look at.
 
 ## Tests and GitHub Actions for rormpc, rormpc-tools and ro-listenbrainz-mpd
@@ -1208,21 +1208,21 @@ the launchd bootout/bootstrap race (error 5), missing libsqlite3-dev on Linux.
 
 Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI second):
 
-- [x] (tests done locally 2026-10-07, e354b97; the workflow waits for the CI decision) rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a
+- [x] (tests done locally 2026-10-07, e354b97; the workflow waits for the CI decision) rormpc-tools: pytest without network, on a temporary DB/data dir and mocked HTTP: invalid token and a [t-abkgrqxq]
       ListenBrainz outage still let `update` sync and export; play counts, and a local listen counted once with its
       ListenBrainz copy (same timestamp); skips import and the Skipped playlist; delete/undo with the journal;
       mpd-gap state transitions on a fake clock and fake MPD status. Workflow on Ubuntu, ~1-2 min.
-- [x] (tests done locally 2026-10-07, 862c08a; the workflow waits for the CI decision) ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule
+- [x] (tests done locally 2026-10-07, 862c08a; the workflow waits for the CI decision) ro-listenbrainz-mpd: `cargo build` on Ubuntu (catches the apt build dependencies), tests for the listen rule [t-5c5awwvf]
       (fraction, max seconds, uninterrupted: seek restarts, pause neutral) and the local log lines. ~2-4 min.
-- [ ] rormpc: installer smoke test on Ubuntu: fresh user, `loginctl enable-linger`, `XDG_RUNTIME_DIR` and the user
+- [ ] rormpc: installer smoke test on Ubuntu: fresh user, `loginctl enable-linger`, `XDG_RUNTIME_DIR` and the user [t-6vqhpuoq]
       D-Bus, MPD with a generated tone, fake token and API URL, `rormpc_install.sh companions`, then assert units and
       the musicdb timer are active, the listen_* lines are in the config and the token untouched, `status` output,
       a reinstall. The installer pins released tags, so a smoke test would pass on a broken branch: first add
       overrides (e.g. `RORMPC_TOOLS_REF`, `RO_LB_REF`, or reuse `--local` with checkouts) so CI tests the commit
       under test. ~5-8 min. This is what was done by hand in an OrbStack Ubuntu VM on 2026-10-03.
-- [x] (left out, decided by the user 2026-10-09) macOS: first a throwaway probe that `launchctl bootstrap gui/$UID` works on hosted runners, then the same
+- [x] (left out, decided by the user 2026-10-09) macOS: first a throwaway probe that `launchctl bootstrap gui/$UID` works on hosted runners, then the same [t-bdru7wdf]
       smoke test with launchd.
-- [x] Triggers: push to master, pull_request, workflow_dispatch, weekly schedule (toolchain, uv and runner-image
+- [x] Triggers: push to master, pull_request, workflow_dispatch, weekly schedule (toolchain, uv and runner-image [t-bnzdfzn6]
       drift; GitHub disables schedules after 60 days without repository activity), and on release tags. Add
       `push` to the upstream ci.yml here too.
 - Not automated: live ListenBrainz, MusicBrainz, Billboard and YouTube (OAuth) calls, and exact gap timing on
@@ -1230,7 +1230,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Versions: delete a bad version, find versions from the Queue
 
-- [x] Versions: delete a bad version, and find versions from the Queue (asked 2026-10-06: "in Versions I can't
+- [x] Versions: delete a bad version, and find versions from the Queue (asked 2026-10-06: "in Versions I can't [t-t7djeefl]
   delete a version of a song if I decide it is bad. Or in the Queue right-click find versions, or some marker on the
   song that versions exist"). Facts: Versions file rows offer Preview, Label and "Same recording: keep this file,
   merge the others…" (quarantine + aliases); deleting exists only in Queue/Hits ("Delete library file…", Ctrl-x:
@@ -1266,7 +1266,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Lyrics: Polish translation next to the original
 
-- [x] Asked 2026-10-07: show a Polish translation in the Lyrics tab, the original on the left and Polish on the
+- [x] Asked 2026-10-07: show a Polish translation in the Lyrics tab, the original on the left and Polish on the [t-suqwi72j]
       right, both left-aligned; what if there is no translation, the song is Polish, or in another language (e.g.
       Czech)? Facts: lyrics come only from LRCLIB (`musicdb lyrics`, `.lrc`/`.txt` + `index.json` in `lyrics_dir`),
       which has no translations; the pane shows one column, plain `.txt` scrolled by progress.
@@ -1305,7 +1305,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Previous in the weighted shuffle
 
-- [x] Asked 2026-10-07: with the weighted shuffle on, the Previous media key bounced between unrelated songs and
+- [x] Asked 2026-10-07: with the weighted shuffle on, the Previous media key bounced between unrelated songs and [t-po7ptgcs]
       each change was recorded as an early skip. Facts: Hammerspoon runs `mpc prev`; with random on, MPD's
       `previous` goes to the previous song in its own random order, not the one that played before; mpd-player
       records every change of song as finished / early (48 h rest) / late, and ro-listenbrainz-mpd logs the same
@@ -1348,7 +1348,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Versions: audio fingerprint finds copies
 
-- [x] Asked 2026-10-07 (screenshot): "Love Story (Disco Lines remix)" (official upload, 139 s) and "Love Story (Disco
+- [x] Asked 2026-10-07 (screenshot): "Love Story (Disco Lines remix)" (official upload, 139 s) and "Love Story (Disco [t-65ymtdhz]
       Lines full remix)" (a re-upload by a "Central Bass Boost" channel, 137 s) are not detected as a copy. Facts:
       they share a Versions group with no decision; dedupe only merges the same md5 or YouTube id; no MBIDs; the
       Queue's "Remove duplicate entries (N)" only finds the same file queued twice. fpcalc is already used by
@@ -1383,10 +1383,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Needs a decision
 
-- [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
+- [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in [t-4rtdcdqz]
       its first ~3 s? Decided 2026-10-07: no, Previous always goes back.
       Checked: Sol says leave it out (it fights walking back), MiMo says restart; the TODO marks it undecided.
-- [x] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch
+- [x] Previous: may an agent reproduce the burst with your Hammerspoon and mpd-now-playable pointed at a scratch [t-7szvmown]
       MPD, or will you test the fix live with the media keys? Answered 2026-10-07: "I pressed the back key and it jumped as if forward, in Weighted mode, the Shuffle tab"
       (rormpc open on the Shuffle view). Not reproduced; since `shuffle prev` (rormpc-tools 0.2.31) Previous no
       longer sends MPD `previous` in weighted mode once Hammerspoon has restarted with dotfiles 22e3b81. Watch
@@ -1398,113 +1398,113 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       `previous` the song left stays right after the current one with priority 0, so the next `next` replays it
       before the plan. The 00:15 forward jump was not reproduced.
       Checked: both talk to the real MPD on this Mac; AGENTS.md forbids playback tests on the user's MPD.
-- [x] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)? Decided 2026-10-07: Claude through the Anthropic API (queued in Next).
+- [x] Lyrics: which model and account should the machine-translation fallback use (the lyrics leave the machine)? Decided 2026-10-07: Claude through the Anthropic API (queued in Next). [t-oxpnfol4]
       Checked: the plan says "an LLM" without naming one; no API key for it is configured in rormpc-tools.
-- [x] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper? Answered 2026-10-07: "not sure; maybe extend the rmpc daemon (rmpcd)? ask the models" (consulted; decided: leave it as it is, no helper).
+- [x] Media keys: do you still want an opt-in `rormpc_install.sh media-keys install|status|uninstall` helper? Answered 2026-10-07: "not sure; maybe extend the rmpc daemon (rmpcd)? ask the models" (consulted; decided: leave it as it is, no helper). [t-iznpgwli]
       Checked: the plan makes it conditional ("if a helper is still wanted").
-- [x] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now? Closed 2026-10-07: the user chose to leave media keys as they are (keep mpd-now-playable).
+- [x] Media keys on Linux: set up a bridge (rmpcd, mpd-mpris) on Omarchy or Roguix now? Closed 2026-10-07: the user chose to leave media keys as they are (keep mpd-now-playable). [t-ytb5fnr5]
       Checked: needs those machines and a live test of the keys; nothing on this Mac to verify it.
-- [x] Start the Rust Now Playing port (`rormpc-now-playable`), or keep mpd-now-playable? Closed 2026-10-07: the user chose to leave media keys as they are (keep mpd-now-playable).
+- [x] Start the Rust Now Playing port (`rormpc-now-playable`), or keep mpd-now-playable? Closed 2026-10-07: the user chose to leave media keys as they are (keep mpd-now-playable). [t-ledvb2uw]
       Checked: Sol and MiMo both said keep the Python tool; the plan is complete if it is wanted.
-- [x] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc
+- [x] Live playlists: start building them (yt-mp3-mb batch mode in dotfiles, the `liveplaylist` CLI, the rormpc [t-ahsljup3]
       pane)? Decided 2026-10-07: yes, the first version (queued in Next).
       Checked: a multi-repository feature with downloads; the plan is agreed but not ordered.
-- [x] CI: push GitHub Actions workflows (rormpc-tools, ro-listenbrainz-mpd, rormpc installer smoke test, `push`
+- [x] CI: push GitHub Actions workflows (rormpc-tools, ro-listenbrainz-mpd, rormpc installer smoke test, `push` [t-yg2242o4]
       trigger in ci.yml)? Decided 2026-10-07: yes (queued in Next).
       Checked: they only matter once pushed to GitHub; the local tests are in "Next, in order".
-- [x] Mute: build "Pause for…"? Decided 2026-10-07: the user wants no "Mute for…" at all, only "Pause for…" (queued in Next).
+- [x] Mute: build "Pause for…"? Decided 2026-10-07: the user wants no "Mute for…" at all, only "Pause for…" (queued in Next). [t-tbcoe5mj]
       Checked: listed as "maybe later".
-- [x] Mute: has a queue replaced by Sources… unmuted you in use? Closed 2026-10-07: moot, "Mute for…" is being replaced by "Pause for…".
+- [x] Mute: has a queue replaced by Sources… unmuted you in use? Closed 2026-10-07: moot, "Mute for…" is being replaced by "Pause for…". [t-qpxqgpgu]
       Checked: only observable in your use; the code path passes through a stop, which unmutes.
-- [x] Does the modal DIM backdrop look right in Ghostty? Answered 2026-10-07: yes, it looks right.
+- [x] Does the modal DIM backdrop look right in Ghostty? Answered 2026-10-07: yes, it looks right. [t-7x4nu2lj]
       Checked: the DIM cells were verified through herdr; the strength in Ghostty needs your eyes.
-- [x] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)? Decided 2026-10-07: yes; done 2026-10-07 (rormpc-tools v0.2.31 pushed and installed with `companions`, rormpc 1a691fc installed, dotfiles 7e15624 adds `V` and the `≋` column; Hammerspoon picks up `shuffle prev` on its next restart).
+- [x] Release rormpc-tools (push main and tag v0.2.31, bump `RORMPC_TOOLS_TAG`, run `companions`)? Decided 2026-10-07: yes; done 2026-10-07 (rormpc-tools v0.2.31 pushed and installed with `companions`, rormpc 1a691fc installed, dotfiles 7e15624 adds `V` and the `≋` column; Hammerspoon picks up `shuffle prev` on its next restart). [t-rwa3xbsg]
       Checked: main is 6 commits ahead of origin (the plan view's mpd-player swaps, the soundtrack genre, `shuffle
       prev`); the installed tools are v0.2.30, so none of them works in the installed rormpc until a release.
-- [x] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)? Decided 2026-10-07: B (queued in Next).
+- [x] Hits playing-song indicator: build variant A, B (my pick), C or D (B with ⏸ when paused)? Decided 2026-10-07: B (queued in Next). [t-7xxrkifk]
       Checked: mockups and MiMo's ranking in "Soon: playing-song indicator in Hits"; Sol was at its usage limit.
-- [x] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme? Decided 2026-10-07: yes; done together with the release above.
+- [x] Install rormpc from master and add `"V": FindVersions` and the `≋` Versions() column to your config and theme? Decided 2026-10-07: yes; done together with the release above. [t-k4jbx4mj]
       Checked: the installed binary does not know either name, so adding them now would break loading the
       config; the exact lines are in "Versions: delete a bad version…".
-- [x] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master? Decided 2026-10-07: yes, after the Up next item (queued in Next).
+- [x] Release rormpc-tools v0.2.32 with the Polish lyrics translations and install rormpc from master? Decided 2026-10-07: yes, after the Up next item (queued in Next). [t-qqjebrcv]
       Checked: the Lyrics pane runs `musicdb lyrics translate`, which only exists in rormpc-tools after v0.2.31.
-- [x] Up next after an MPD restart: keep re-found entries waiting (a rare request plays twice), trust restored
+- [x] Up next after an MPD restart: keep re-found entries waiting (a rare request plays twice), trust restored [t-ftx32cmj]
       priorities when the queue's files look unchanged (can drop a request after an MPD crash), or match the
       scrobbler's listens.jsonl / skips.jsonl? Decided 2026-10-07: keep them waiting (a request may play twice, none is lost).
       Checked: the worker's analysis (MPD's state file restores priorities after a clean restart, but a replaced
       queue also starts at 0); it recommends keeping them waiting, which is what the code does now. Recorded
       earlier as the user's choice by mistake: that text was a Claude Code input suggestion in the worker's pane.
 
-- [x] CI: dispatch `installer_smoke.yml` on rofrol/rormpc once now and, when it passes, run it on push to master
+- [x] CI: dispatch `installer_smoke.yml` on rofrol/rormpc once now and, when it passes, run it on push to master [t-vcdynvn3]
       and weekly like the other workflows? Decided by the user 2026-10-09: yes (queued in Next).
       Options: run it once, then add push + weekly triggers | run it once, keep it manual | leave it
       Checked 2026-10-09: `gh run list -R rofrol/rormpc --workflow installer_smoke.yml` shows no run yet; ci.yml
       runs on push; rormpc-tools and ro-listenbrainz-mpd test.yml already have push, tags and a weekly schedule.
-- [x] CI on macOS: build the throwaway `launchctl bootstrap gui/$UID` probe on a hosted runner, then a launchd
+- [x] CI on macOS: build the throwaway `launchctl bootstrap gui/$UID` probe on a hosted runner, then a launchd [t-t6o7suqf]
       smoke test ("Tests and GitHub Actions…")? Decided by the user 2026-10-09: leave it.
       Options: leave it (the macOS install is exercised on this Mac at every release) | build the probe first
       Checked 2026-10-09: nothing for macOS exists in installer_smoke.yml; it is the last open CI plan point.
-- [x] Live playlists: test a real download with a public YouTube playlist you choose (the one live listing so far
+- [x] Live playlists: test a real download with a public YouTube playlist you choose (the one live listing so far [t-r6brdw3r]
       returned 0 items)? Decided by the user 2026-10-09: leave it until it is used.
       Options: you give a playlist URL and a worker tests it on a scratch MPD | leave it until you use it
       Checked 2026-10-09: the first version is released (v0.2.34) and checked only with hand-made items.
-- [x] Combined view: What is a saved filter set called in the UI? Decided by the user 2026-10-09: Smart list.
+- [x] Combined view: What is a saved filter set called in the UI? Decided by the user 2026-10-09: Smart list. [t-oyyvfsl2]
       Options: Smart list | Live list (your word) | Preset
       Checked: plans/combined-view.md "Open choices" (1); the first option is the plan's recommendation.
-- [x] Combined view: Does a filter change wait for Apply, or replace the queue at once? Decided by the user 2026-10-09: preview, Apply plays.
+- [x] Combined view: Does a filter change wait for Apply, or replace the queue at once? Decided by the user 2026-10-09: preview, Apply plays. [t-lz5gab5a]
       Options: Preview, Apply plays | Replace at once when weighted is on | Replace at once always
       Checked: plans/combined-view.md "Open choices" (2); the first option is the plan's recommendation.
-- [x] Combined view: When does Apply ask for a confirmation? Decided by the user 2026-10-09: only when the source kind changes or more than 25% of the queue goes.
+- [x] Combined view: When does Apply ask for a confirmation? Decided by the user 2026-10-09: only when the source kind changes or more than 25% of the queue goes. [t-uvxh36f4]
       Options: Only when the source kind changes or more than 25% of the queue goes | Always | Never
       Checked: plans/combined-view.md "Open choices" (3); the first option is the plan's recommendation.
-- [x] Combined view: What happens to the old Queue, Hits and Shuffle tabs? Decided by the user 2026-10-09: Play replaces them in the default config, the panes stay.
+- [x] Combined view: What happens to the old Queue, Hits and Shuffle tabs? Decided by the user 2026-10-09: Play replaces them in the default config, the panes stay. [t-yujuc6nl]
       Options: Play replaces them in the default config, the panes stay | Keep all four tabs | Remove the old panes
       Checked: plans/combined-view.md "Open choices" (4); the first option is the plan's recommendation.
-- [x] Combined view: Where is the filter column in normal mode? Decided by the user 2026-10-09: collapsed to one source line, h opens it.
+- [x] Combined view: Where is the filter column in normal mode? Decided by the user 2026-10-09: collapsed to one source line, h opens it. [t-k66v6n6t]
       Options: Collapsed to one source line, h opens it | Always open | Hidden
       Checked: plans/combined-view.md "Open choices" (5); the first option is the plan's recommendation.
-- [x] Combined view: Does a pin beat a `-` set or `-` genre? Decided by the user 2026-10-09: yes, an exception beats every rule (an exclusion still beats a pin).
+- [x] Combined view: Does a pin beat a `-` set or `-` genre? Decided by the user 2026-10-09: yes, an exception beats every rule (an exclusion still beats a pin). [t-we7smoub]
       Options: Yes, an exception beats every rule | No, a `-` rule beats pins (Sol) | Only a library-scope pin beats it
       Checked: plans/combined-view.md "Open choices" (6); the first option is the plan's recommendation.
-- [x] Combined view: What do a hand removal and a hand addition in the queue do by default? Decided by the user 2026-10-09: nothing lasting, pin/exclude only on + / -.
+- [x] Combined view: What do a hand removal and a hand addition in the queue do by default? Decided by the user 2026-10-09: nothing lasting, pin/exclude only on + / -. [t-aixzd3hn]
       Options: Nothing lasting, pin/exclude only on + / - | Ask each time | Always record an exception in the open smart list
       Checked: plans/combined-view.md "Open choices" (7); the first option is the plan's recommendation.
-- [x] Combined view: What is the default scope of a new pin or exclusion? Decided by the user 2026-10-09: the open smart list, else library.
+- [x] Combined view: What is the default scope of a new pin or exclusion? Decided by the user 2026-10-09: the open smart list, else library. [t-fcfzrzhs]
       Options: The open smart list, else library | Always library | The first + set
       Checked: plans/combined-view.md "Open choices" (8); the first option is the plan's recommendation.
-- [x] Combined view: Are smart lists exported as MPD playlists "Smart NAME"? Decided by the user 2026-10-09: yes, per list, on by default.
+- [x] Combined view: Are smart lists exported as MPD playlists "Smart NAME"? Decided by the user 2026-10-09: yes, per list, on by default. [t-kp7fyuch]
       Options: Yes, per list, on by default | Only when asked | Never
       Checked: plans/combined-view.md "Open choices" (9); the first option is the plan's recommendation.
-- [x] Combined view: Which sets get a fixed chip row? Decided by the user 2026-10-09: Billboard, my likes, my playlists, recommended; the rest via "+ set…".
+- [x] Combined view: Which sets get a fixed chip row? Decided by the user 2026-10-09: Billboard, my likes, my playlists, recommended; the rest via "+ set…". [t-763grm5f]
       Options: Billboard, my likes, my playlists, recommended; the rest via "+ set…" | Every tag and playlist as a row | Only Billboard
       Checked: plans/combined-view.md "Open choices" (10); the first option is the plan's recommendation.
-- [x] Combined view: Which years does Period filter by default? Decided by the user 2026-10-09: follow Rank by.
+- [x] Combined view: Which years does Period filter by default? Decided by the user 2026-10-09: follow Rank by. [t-lzrwsqqz]
       Options: Follow Rank by (chart, listened or release year) | Always release year | Always ask
       Checked: plans/combined-view.md "Open choices" (11); the first option is the plan's recommendation.
-- [x] Combined view: Is there a "freeze as static list" action? Decided by the user 2026-10-09: no, the MPD export is the static copy.
+- [x] Combined view: Is there a "freeze as static list" action? Decided by the user 2026-10-09: no, the MPD export is the static copy. [t-og7nah72]
       Options: No, the MPD export is the static copy | Yes, into a tag list | Yes, into an MPD playlist
       Checked: plans/combined-view.md "Open choices" (12); the first option is the plan's recommendation.
-- [x] Combined view: build it now, in the plan's five phases (plans/combined-view.md "Build order"), one worker per
+- [x] Combined view: build it now, in the plan's five phases (plans/combined-view.md "Build order"), one worker per [t-byft6qz6]
       phase with a release after each?
       Options: yes, all five phases in order | only phase 1 (± set chips, Rank by, Years of in Hits) first | not now
       Checked: all 12 open choices are decided (2026-10-09); every phase ships on its own.
       Decided by the user 2026-10-09: yes, all five phases in order (queued in Next).
-- [x] Installer smoke test: make "Units are enabled and active" prove the programs run (a Type=simple unit is
+- [x] Installer smoke test: make "Units are enabled and active" prove the programs run (a Type=simple unit is [t-5x7wdmxk]
       "active" even when its binary is missing; the first VM run passed it without rormpc-tools)?
       Options: yes, check each unit's MainPID/exec and a log line | leave it
       Checked: reported by the smoke-fix worker 2026-10-09; the later steps (listen, status) catch some of it.
       Decided by the user 2026-10-09: yes, check each unit's MainPID/exec and a log line (queued in Next).
-- [x] rormpc-tools: `musicdb update` ignores the scrobbler config's `api_url` and calls the real ListenBrainz (the
+- [x] rormpc-tools: `musicdb update` ignores the scrobbler config's `api_url` and calls the real ListenBrainz (the [t-foii52mn]
       smoke test's fake token gets "Token invalid", exit 1); make it use the same API URL?
       Options: yes, read api_url like the scrobbler | leave it, the test expects exit 1
       Checked: reported by the smoke-fix worker 2026-10-09.
       Decided by the user 2026-10-09: yes, read api_url like the scrobbler (queued in Next).
-- [x] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's
+- [x] Missing ffmpeg: a readable error in rormpc-tools instead of a traceback, and ffmpeg in the installer's [t-yw2piruo]
       `status` / dependency hint?
       Options: yes, both | only the installer hint | leave it
       Checked: reported by the smoke-fix worker 2026-10-09 (FileNotFoundError: 'ffmpeg' in a fresh VM).
       Decided by the user 2026-10-09: yes, both (queued in Next).
-- [x] Combined view: which browsing tabs stay once Play exists (asked 2026-10-09: "with Play, are Artists, Albums,
+- [x] Combined view: which browsing tabs stay once Play exists (asked 2026-10-09: "with Play, are Artists, Albums, [t-3ij6nebz]
       Directories, Playlists, Live playlists still needed?")?
       Options: keep Albums, Live playlists, Playlists, Search; merge Artists + Album Artists into one; Directories
       off the tab bar with a key | the same, but Playlists only behind the L picker | keep all tabs as they are
@@ -1517,66 +1517,66 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-09: "only Play" (none of the offered options): Artists, Album Artists, Albums,
       Directories, Playlists and Live playlists leave the tab bar; their tasks move into Play (queued in Next as a
       plan addition before phase 3). Search, Up next, Lyrics, Deleted and Versions were not part of the question.
-- [x] Release rormpc-tools v0.2.38 and install rormpc with phase 1 (± set chips, Rank by, Years of) now, or after
+- [x] Release rormpc-tools v0.2.38 and install rormpc with phase 1 (± set chips, Rank by, Years of) now, or after [t-ph5bjtp3]
       more phases?
       Options: now (the installed Hits keeps working only with matching tools) | after phase 2 | after phase 3
       Checked: rormpc af62e2e needs hits ≥ the new tools; the installed 0.2.37 rejects --set/--rank/--years-of.
       Decided by the user 2026-10-10: after phase 2 (queued in Next right after phase 2).
-- [x] Hits "my plays" rank: with Years of release it counts every play, with Years of listened it leaves out the
+- [x] Hits "my plays" rank: with Years of release it counts every play, with Years of listened it leaves out the [t-vn2wpfkg]
       weighted shuffle's own picks (as the old sources did); make both the same?
       Options: both leave out the shuffle's own picks | both count every play | keep it as it is
       Checked: reported by the phase 1 worker 2026-10-10 (hits_rules.score).
       Decided by the user 2026-10-10: both leave out the shuffle's own picks ("probably"; queued in Next).
-- [x] Add `"+": PinSong` and `"-": ExcludeSong` to the queue keybinds in your dotfiles rormpc config? Closed 2026-10-10 by the coordinator: the question was wrong; your config does not set `clear`, so the built-in keys (+, - since afcb9be) merge with yours and already work. Your config
+- [x] Add `"+": PinSong` and `"-": ExcludeSong` to the queue keybinds in your dotfiles rormpc config? Closed 2026-10-10 by the coordinator: the question was wrong; your config does not set `clear`, so the built-in keys (+, - since afcb9be) merge with yours and already work. Your config [t-xruvl3bd]
       has its own queue keymap, so the new keys do nothing there until added; the Queue menu's "Pin in Hits
       results…" / "Exclude from Hits results…" work without them.
       Options: yes, the coordinator adds both | other keys (name them) | no, the menu is enough
       Checked: assets/example_config.ron binds them (afcb9be); ~/.config/rormpc/config.ron line ~140 has an explicit
       queue map without them; neither key is bound there.
-- [x] Combined view: Where do Browse and Live go inside Play? Decided by the user 2026-10-10: Browse in the left column (Filters | Browse), the playlist editor and Live as overlays (Sol's layout, not the plan's recommendation).
+- [x] Combined view: Where do Browse and Live go inside Play? Decided by the user 2026-10-10: Browse in the left column (Filters | Browse), the playlist editor and Live as overlays (Sol's layout, not the plan's recommendation). [t-wyqtzdky]
       Options: full-width bodies Queue | Browse | Live, B and the digits switch (reuses the browsers unchanged) | Browse in the left column, editor and Live as overlays (Sol) | right-pane modes Sources | Queue | Live (MiMo)
       Checked: plans/combined-view.md "Open choices" (13); the first option is the plan's recommendation.
-- [x] Combined view: Does `P` (play an album, folder, artist or playlist, replacing the queue) ask for a confirmation? Decided by the user 2026-10-10: Apply's rule (source kind change or more than 25% of the queue).
+- [x] Combined view: Does `P` (play an album, folder, artist or playlist, replacing the queue) ask for a confirmation? Decided by the user 2026-10-10: Apply's rule (source kind change or more than 25% of the queue). [t-lc7xn3ho]
       Options: Apply's rule: only on a source kind change or more than 25% of the queue | never, Previous sources undoes it | always
       Checked: plans/combined-view.md "Open choices" (14); the first option is the plan's recommendation.
-- [x] Combined view: A song appended (`a`) to a queue holding a Hits source while weighted is on: what happens to it? Decided by the user 2026-10-10: it joins the source's files and the round, the source shows "+N added".
+- [x] Combined view: A song appended (`a`) to a queue holding a Hits source while weighted is on: what happens to it? Decided by the user 2026-10-10: it joins the source's files and the round, the source shows "+N added". [t-j6my7vij]
       Options: it joins the source's files and the round, the source shows "+N added" | it becomes an Up next request | it stays outside the round (today: never drawn)
       Checked: plans/combined-view.md "Open choices" (15); the first option is the plan's recommendation.
-- [x] Combined view: Stored playlist editor: immediate edits or a save buffer? Decided by the user 2026-10-10: immediate MPD edits as today, a confirmation before deleting a whole playlist.
+- [x] Combined view: Stored playlist editor: immediate edits or a save buffer? Decided by the user 2026-10-10: immediate MPD edits as today, a confirmation before deleting a whole playlist. [t-t6uiz7e6]
       Options: immediate MPD edits as today, a confirmation before deleting a whole playlist | edit a copy, explicit Save and Discard
       Checked: plans/combined-view.md "Open choices" (16); the first option is the plan's recommendation.
-- [x] Combined view: Keys for Browse? Decided by the user 2026-10-10: the worker designs them for the left-column layout after the plan's pattern (P play, t play next, a append), checked against your config.
+- [x] Combined view: Keys for Browse? Decided by the user 2026-10-10: the worker designs them for the left-column layout after the plan's pattern (P play, t play next, a append), checked against your config. [t-twt35smc]
       Options: B body, [ ] grouping, P play replacing the queue, t play next, digits 5..9 groupings and 0/gl Live | the same without the digits | other keys
       Checked: plans/combined-view.md "Open choices" (17); the first option is the plan's recommendation.
-- [x] Combined view: Change your own ~/.config/rormpc/config.ron (explicit tabs and digits) when phase 3b ships? Decided by the user 2026-10-10: yes, the coordinator mirrors the new default (Play, Up next, Search plus Versions, Deleted, Lyrics).
+- [x] Combined view: Change your own ~/.config/rormpc/config.ron (explicit tabs and digits) when phase 3b ships? Decided by the user 2026-10-10: yes, the coordinator mirrors the new default (Play, Up next, Search plus Versions, Deleted, Lyrics). [t-vca5bprt]
       Options: yes, the coordinator mirrors the new default (Play, Up next, Search plus Versions, Deleted, Lyrics; digits to ShowPlay) | keep your tabs | remove only the six tabs, keep your digits
       Checked: plans/combined-view.md "Open choices" (18); the first option is the plan's recommendation.
-- [x] Combined view: An unapplied preview when a Browse action changes the queue? Decided by the user 2026-10-10: the preview stays, its counts are recomputed, Apply judges the confirmation then.
+- [x] Combined view: An unapplied preview when a Browse action changes the queue? Decided by the user 2026-10-10: the preview stays, its counts are recomputed, Apply judges the confirmation then. [t-qq7djvph]
       Options: the preview stays, its counts are recomputed, Apply judges the confirmation then (Sol) | the preview is dropped with a note (MiMo)
       Checked: plans/combined-view.md "Open choices" (19); the first option is the plan's recommendation.
-- [x] Combined view: Artists and Album artists in Browse? Decided by the user 2026-10-10: two separate groupings.
+- [x] Combined view: Artists and Album artists in Browse? Decided by the user 2026-10-10: two separate groupings. [t-s6iei64h]
       Options: two separate groupings (MiMo; the code has both) | one grouping with a toggle
       Checked: plans/combined-view.md "Open choices" (20); the first option is the plan's recommendation.
-- [x] Scrobble status: What does "62% of 50%" mean? Answered 2026-10-10: "62% listened. required 90%. ask the models" (consult, then decide). Consulted (Sol 8ca9ba0f, MiMo 2bf1c6a3): "listened" is not honest under the uninterrupted rule. Decided by the user 2026-10-10: "62% counted · need 90% · in 1:24" (queued in Next).
+- [x] Scrobble status: What does "62% of 50%" mean? Answered 2026-10-10: "62% listened. required 90%. ask the models" (consult, then decide). Consulted (Sol 8ca9ba0f, MiMo 2bf1c6a3): "listened" is not honest under the uninterrupted rule. Decided by the user 2026-10-10: "62% counted · need 90% · in 1:24" (queued in Next). [t-2du6g3na]
       Options: progress toward the required share (62% of the way to the threshold, as built) | the share of the song heard ("31% of 50%")
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [x] Scrobble status: Which key sends to ListenBrainz now? Decided by the user 2026-10-10: oL plus an item in the Queue menu for the playing song (queued in Next).
+- [x] Scrobble status: Which key sends to ListenBrainz now? Decided by the user 2026-10-10: oL plus an item in the Queue menu for the playing song (queued in Next). [t-ec262gyd]
       Options: oL (as built) | oL plus an item in the Queue menu for the playing song | another key
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [x] Scrobble status: When does a manual send ask for a confirmation? Decided by the user 2026-10-10: when the rule is not met yet (as built).
+- [x] Scrobble status: When does a manual send ask for a confirmation? Decided by the user 2026-10-10: when the rule is not met yet (as built). [t-4ig3kaur]
       Options: when the rule is not met yet (as built) | always | never
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [x] Scrobble status: Which timestamp does a manual send carry after a seek under the uninterrupted rule? Decided by the user 2026-10-10: the seek (as built).
+- [x] Scrobble status: Which timestamp does a manual send carry after a seek under the uninterrupted rule? Decided by the user 2026-10-10: the seek (as built). [t-vlzn7sp7]
       Options: the seek (as built, the same as an automatic listen) | the song's start
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [x] Scrobble status: Should the scrobbler remember a send across its own restart in the middle of a song (today a later automatic listen could go a second time)?
+- [x] [t-tmx6yi4w] Scrobble status: Should the scrobbler remember a send across its own restart in the middle of a song (today a later automatic listen could go a second time)?
       Options: leave it (rare) | store it in the daemon's SQLite database
       Decided by the user 2026-10-10: store it in the daemon's SQLite database (queued in Next).
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [x] Scrobble status: Add Status(Scrobble) to your theme in dotfiles? Decided by the user 2026-10-10: next to the progress bar, before the time (queued in Next; the coordinator edits the theme).
+- [x] Scrobble status: Add Status(Scrobble) to your theme in dotfiles? Decided by the user 2026-10-10: next to the progress bar, before the time (queued in Next; the coordinator edits the theme). [t-hobwuxhg]
       Options: next to the progress bar, before the time | in the header | no
       Checked: reported by the scrobble status worker 2026-10-10; the first option is what was built or recommended.
-- [x] Release now: rormpc-tools v0.2.39 (smart lists, named sets, api_url, missing-program errors, my plays rank,
+- [x] Release now: rormpc-tools v0.2.39 (smart lists, named sets, api_url, missing-program errors, my plays rank, [t-j7pbp2wc]
       Play's round key), a ro-listenbrainz-mpd tag (scrobble status), bump both tags in the installer, run
       `companions`, install rormpc (Play, smart lists, scrobble status)?
       Options: yes, now | after phase 3b | not yet
@@ -1588,12 +1588,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       installer 12c4876 pins both, companions installed, rormpc 12c4876 installed and pushed; dotfiles b6720d3 adds
       the Play tab first (1 Play, 2 Hits, 3 Queue, 4 Up next, 5 Shuffle, 6-9 browsers, 0 Playlists; Live playlists
       by gl); the config loads. Restart running rormpc instances.
-- [x] Install hints: how does a missing program's message name the install? Decided by the user 2026-10-10: always a generic line + a docs link (Sol).
+- [x] Install hints: how does a missing program's message name the install? Decided by the user 2026-10-10: always a generic line + a docs link (Sol). [t-ebrhnj6i]
       Options: detect the OS and print the one matching command (brew, apt, pacman, guix), generic line + docs link
       otherwise (MiMo) | always a generic line + a docs link to the per-manager table (Sol) | keep brew + apt
       Checked: consult round 2026-10-10 (see the "Install hints" item in Next); you run macOS, Omarchy (Arch) and
       Guix.
-- [x] MPD (asked 2026-10-10: "do I have the impression that this MPD daemon, to which files have to be sent again
+- [x] MPD (asked 2026-10-10: "do I have the impression that this MPD daemon, to which files have to be sent again [t-kcdinapa]
       and again, is very limiting? ask the models to analyze, not change"): plan a change, or keep things as they are?
       Options: keep MPD as is; only fix the cheap self-inflicted parts later (e.g. the round draws from queue ∩
       source, so hand-appended songs count) | plan option (a): mpd-player owns what plays next, MPD keeps only the
@@ -1621,29 +1621,29 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (MiMo also suggested polling `listclients`: dismissed, MPD has no such command.) Fourth option added below.
       Decided by the user 2026-10-10: keep MPD, only cheap fixes (the main one, appended songs joining the round,
       is done in phase 3b); no fork, no short-queue rebuild.
-- [x] Deleted songs: should an undo of a deletion also leave a "restored" event in the log, for history (today the
+- [x] Deleted songs: should an undo of a deletion also leave a "restored" event in the log, for history (today the [t-dctwvze7]
       journal record just disappears with its block)?
       Options: no, as it is | yes, append "restored" to deletions/allowed.jsonl
       Checked: MiMo's point in the deleted-songs consult round 2026-10-10; the worker left it as it is.
       Asked 2026-10-10; the user did not understand it ("I delete something and you write restored?"): it is about
       undoing a deletion (Ctrl-y); explained in plain text, recommended to leave it as it is.
       Decided by the user 2026-10-10: leave it as it is.
-- [x] Deleted songs: should deleting only a duplicate (another file of the recording stays) block the whole
+- [x] Deleted songs: should deleting only a duplicate (another file of the recording stays) block the whole [t-z2lxe7ho]
       recording too?
       Options: only that file's YouTube video (as built) | the whole recording
       Checked: the deleted-songs worker 2026-10-10.
       Decided by the user 2026-10-10: only that file's YouTube video (as built).
-- [x] Release now: rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab
+- [x] Release now: rormpc-tools v0.2.41 (deleted songs never downloaded again) and install rormpc (Deleted tab [t-vqzg2efo]
       download column, Hits ⌫ rows, the scope-menu cursor)?
       Options: yes, now (the block only works once installed) | together with the weighted-mode change
       Checked: tests green; installed are tools 0.2.40 and rormpc 76104b2.
       Decided by the user 2026-10-10: after the weighted-mode change, one release (queued in Next).
-- [x] Forecast across rounds: when a round ends, start the next one automatically, or keep starting rounds by hand?
+- [x] [t-s6vvhvta] Forecast across rounds: when a round ends, start the next one automatically, or keep starting rounds by hand?
       Options: automatic: the next round starts when one ends, the forecast shows its songs marked "next round"
       (Sol) | by hand as now, the forecast shows the next round's picks dimmed as provisional (MiMo)
       Checked: consult round 2026-10-10 (see "The forecast should always show 10 ahead" in Next).
       Decided by the user 2026-10-10: automatic, the next round starts when one ends (Sol).
-- [x] Media key lag: which fix?
+- [x] [t-47mq65ez] Media key lag: which fix?
       Options: plan it whole: an mpd-player command socket, Karabiner send_user_command, and mpd-player as the Now
       Playing / MPRIS provider installed by rormpc_install.sh (replacing mpd-now-playable) | only the socket +
       Karabiner for this Mac | only 127.0.0.1 in ~/scripts/mpd-media-key now (a stopgap)
@@ -1660,69 +1660,69 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       for users without Karabiner, mpd-player registers as the Now Playing provider (macOS) / MPRIS player (Linux)
       using the same commands, installed by rormpc_install.sh; 127.0.0.1 in the script is only a stopgap.
       (MiMo's "prev sends both mpc prev and shuffle prev" was dismissed: the script sends one of them.)
-- [x] Restore: a re-downloaded file whose audio MD5 differs from the deleted one (a new encode of the same video)?
+- [x] [t-didszvcn] Restore: a re-downloaded file whose audio MD5 differs from the deleted one (a new encode of the same video)?
       Options: restore it and note the difference (as built) | keep it in staging for a decision | restore only identical audio
       Checked: the restore worker 2026-10-10.
       Decided by the user 2026-10-10: restore it and note the difference (as built).
-- [x] Restore: when the tagger does not recognise the re-download, write MBID, artist and title from the journal?
+- [x] [t-tacsoont] Restore: when the tagger does not recognise the re-download, write MBID, artist and title from the journal?
       Options: yes, from the journal (as built; the same video was recognised before) | keep it in staging for a decision
       Checked: the restore worker 2026-10-10.
       Decided by the user 2026-10-10: yes, from the journal (as built).
-- [x] Radio: Should Omarchy Radio be checked on a schedule? Decided by the user 2026-10-10: a daily conditional GET that only adds pending items and notifies (queued in Next).
+- [x] Radio: Should Omarchy Radio be checked on a schedule? Decided by the user 2026-10-10: a daily conditional GET that only adds pending items and notifies (queued in Next). [t-etpilz4j]
       Options: manual check only, as today (Sol) | a daily conditional GET that only adds pending items and notifies (MiMo)
       Checked: the radio worker 2026-10-10: the site changes rarely (last push 2026-10-07); an unchanged check costs one 304.
-- [x] Radio: Which MPD playlist name for the station? Answered 2026-10-10: "omarchy.radio.org" (the site is radio.omarchy.org: asked which one is meant). Decided by the user 2026-10-10: "radio.omarchy.org" (queued in Next).
+- [x] Radio: Which MPD playlist name for the station? Answered 2026-10-10: "omarchy.radio.org" (the site is radio.omarchy.org: asked which one is meant). Decided by the user 2026-10-10: "radio.omarchy.org" (queued in Next). [t-35gfgmhs]
       Options: "Omarchy Radio" (from playlist.json, the default) | "Live Radio Omarchy"
       Checked: the radio worker 2026-10-10: YouTube subscriptions are named after the playlist title; --name overrides it.
-- [x] Radio: Fetch a radio track's lyrics (/tracks/lyrics/<file>.lrc) into lyrics_dir? Answered 2026-10-10: "extract them with whisper or something? see ~/scripts/yt-wh" (queued in Next).
+- [x] Radio: Fetch a radio track's lyrics (/tracks/lyrics/<file>.lrc) into lyrics_dir? Answered 2026-10-10: "extract them with whisper or something? see ~/scripts/yt-wh" (queued in Next). [t-iwlmeuuo]
       Options: later, once a track has lyrics | now, one extra request per track
       Checked: the radio worker 2026-10-10: no track in today's playlist.json has a lyrics field.
-- [x] Radio: Detect an MP3 replaced under the same file name on the station? Decided by the user 2026-10-10: no, accept the limitation.
+- [x] Radio: Detect an MP3 replaced under the same file name on the station? Decided by the user 2026-10-10: no, accept the limitation. [t-jpcjeixe]
       Options: no, accept the limitation (rare) | a HEAD per accepted track on check, comparing its ETag
       Checked: the radio worker 2026-10-10: the playlist.json ETag does not change when only an MP3 is replaced.
-- [x] Release years: Which year do the views show? Decided by the user 2026-10-10: TDOR (original release), TDRC kept per recording.
+- [x] Release years: Which year do the views show? Decided by the user 2026-10-10: TDOR (original release), TDRC kept per recording. [t-zi36ueif]
       Options: TDOR (original release), TDRC kept per recording | TDRC = TDOR = the original release, as today | TDOR, and TDRC only for versions
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): every view reads TDRC today; MPD exposes TDOR as `originaldate`.
-- [x] Release years: May high-confidence rows be applied without row-by-row review? Decided by the user 2026-10-10: no, review every row.
+- [x] Release years: May high-confidence rows be applied without row-by-row review? Decided by the user 2026-10-10: no, review every row. [t-gipr7rh2]
       Options: yes, earlier-only same-length rows with a matching release-group year | no, review every row | yes, every earlier proposal
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 12 of 15 high rows right in the sample, the other 3 off by one year; earlier-only proposals 25 of 28 right or closer.
-- [x] Release years: Where is the review done? Decided by the user 2026-10-10: a rormpc "Years to review" view.
+- [x] Release years: Where is the review done? Decided by the user 2026-10-10: a rormpc "Years to review" view. [t-g3mcydg4]
       Options: the Markdown report with --accept/--reject ids | a rormpc "Years to review" view | both, the view later
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): an earlier review of undated files used the report-and-ids flow.
-- [x] Release years: Should a video match with no audio alternative be swapped to the audio recording through the work on download? Decided by the user 2026-10-10: yes, look the work up and swap to the same-length audio recording.
+- [x] Release years: Should a video match with no audio alternative be swapped to the audio recording through the work on download? Decided by the user 2026-10-10: yes, look the work up and swap to the same-length audio recording. [t-5y3q7ir4]
       Options: yes, look the work up and swap to the same-length audio recording | send it to review instead | keep the video recording and fix only the year
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): at least 24 of 60 earlier video matches had an audio alternative; the rest need a work lookup.
-- [x] Release years: What happens to files without any MusicBrainz work link? Decided by the user 2026-10-10: ask for an MBID through the picker.
+- [x] Release years: What happens to files without any MusicBrainz work link? Decided by the user 2026-10-10: ask for an MBID through the picker. [t-ttkklnsa]
       Options: keep the current year, list only suspect classes | clear the year when it is a video recording's | ask for an MBID through the picker
       Checked: rormpc-tools docs/release-years-plan.md (2026-10-10): 46 of 189 sampled recordings have no work relationship.
-- [x] Forecast on a source smaller than 10 songs: show the rest of this round and the next one with the reason (as Decided by the user 2026-10-10: as built.
+- [x] Forecast on a source smaller than 10 songs: show the rest of this round and the next one with the reason (as Decided by the user 2026-10-10: as built. [t-5sxhjovy]
       built), or add a display-only preview of later rounds?
       Options: as built (one MPD priority per queue entry; a played song rests ≥ 12 h) | a display-only preview of
       later rounds without MPD priorities | duplicate entries in the queue (changes your queue)
       Checked: the forecast worker 2026-10-10.
-- [x] Media keys: Now Playing on macOS: a second process, an in-daemon provider, or a Swift helper? Decided by the user 2026-10-10: a second process with its own launchd agent.
+- [x] Media keys: Now Playing on macOS: a second process, an in-daemon provider, or a Swift helper? Decided by the user 2026-10-10: a second process with its own launchd agent. [t-vgmdwrnc]
       Options: a second process from the same package with its own launchd agent (both models) | inside the mpd-player daemon on a CoreFoundation loop | a small Swift helper
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [x] Media keys: When should the provider claim Now Playing? Decided by the user 2026-10-10: on the first MPD play after it starts, then the true state.
+- [x] Media keys: When should the provider claim Now Playing? Decided by the user 2026-10-10: on the first MPD play after it starts, then the true state. [t-vhlbg34j]
       Options: on the first MPD play after it starts, then the true state (paused stays paused) | at startup as Playing like mpd-now-playable (takes the slot from a browser) | only while MPD plays
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [x] Media keys: May a worker stop your mpd-now-playable for about 15 minutes for a Control Center test on a scratch MPD? Decided by the user 2026-10-10: no, the user runs that test after the install.
+- [x] Media keys: May a worker stop your mpd-now-playable for about 15 minutes for a Control Center test on a scratch MPD? Decided by the user 2026-10-10: no, the user runs that test after the install. [t-elg66ftq]
       Options: no, you run that test after the install | yes, the worker stops it and starts it again
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [x] Media keys: Next (key, Now Playing, MPRIS) while you have paused MPD: play the next song, or stay paused on it? Decided by the user 2026-10-10: play it.
+- [x] Media keys: Next (key, Now Playing, MPRIS) while you have paused MPD: play the next song, or stay paused on it? Decided by the user 2026-10-10: play it. [t-wzebwbr5]
       Options: play it, as Previous already does | stay paused, as MPD's own next does
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [x] Media keys: Keep the old Karabiner shell script after the rule moves to send_user_command? Decided by the user 2026-10-10: delete it with the switch.
+- [x] Media keys: Keep the old Karabiner shell script after the rule moves to send_user_command? Decided by the user 2026-10-10: delete it with the switch. [t-hdsvqnfy]
       Options: keep it as a manual fallback for a week, then delete | delete it with the switch
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [x] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in? Decided by the user 2026-10-10: on by default, warn when another MPD MPRIS bridge runs.
+- [x] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in? Decided by the user 2026-10-10: on by default, warn when another MPD MPRIS bridge runs. [t-bqrzg3rl]
       Options: on by default, warn when another MPD MPRIS bridge runs | opt-in with `mpd-player --mpris`
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [x] Radio rename: the worker's `uv run liveplaylist rename omarchy-radio radio.omarchy.org` on your library was
+- [x] Radio rename: the worker's `uv run liveplaylist rename omarchy-radio radio.omarchy.org` on your library was [t-l2luj3wm]
       Decided by the user 2026-10-11: the coordinator runs the rename (d-ku6vswnr).
       Done by the coordinator 2026-10-11: `liveplaylist rename omarchy-radio radio.omarchy.org`; MPD lists
       "radio.omarchy.org", no "Omarchy Radio" left.
-- [x] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
+- [x] [t-dipotnvv] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
       Asked 2026-10-11; the user did not know what removing a song from the source means and said "ultimately there
       is to be only one folder"; asked again in plain words, the user answered: "but there will be no sources any
       more. There is to be one folder. So what is the source then? YouTube playlists or radio.omarchy.org? Ask the
@@ -1750,52 +1750,52 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11, against both models: a hand removal from the queue is lasting (d-6xjfvyp3),
       and lasting removals go to a separate Banned list, like Deleted but the file stays on disk (d-x3g5wgkv).
       Banned songs never come back through filters or the shuffle; the Banned list restores them; z undoes a ban.
-- [x] Banned: what happens in ListenBrainz when a song is banned?
+- [x] [t-u7mcb2xp] Banned: what happens in ListenBrainz when a song is banned?
       Decided by the user 2026-10-11: nothing; listens stay, no feedback (d-a7xehj4c).
-- [x] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
+- [x] [t-lpowr4tg] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
       Decided by the user 2026-10-11: at once; the old source is the first undo entry (d-s6fcqo5u).
-- [x] Instant filtering: In weighted mode, what does the table show while filtering?
+- [x] [t-ofvymmok] Instant filtering: In weighted mode, what does the table show while filtering?
       Decided by the user 2026-10-11: the forecast, with the counts in the header and a rows ⇄ plan toggle for the
       full result (d-eaccjsts).
-- [x] Instant filtering: Which keys undo and redo a filter change?
+- [x] [t-cqi53tl3] Instant filtering: Which keys undo and redo a filter change?
       Decided by the user 2026-10-11: z undo, Shift+Z redo, as in the ki editor (d-7x5qkzms).
-- [x] Instant filtering: `z` is the user's global ToggleRepeat; where do z / Z undo and redo filter changes?
+- [x] [t-4eyutus4] Instant filtering: `z` is the user's global ToggleRepeat; where do z / Z undo and redo filter changes?
       Decided by the user 2026-10-11: z / Z everywhere, ToggleRepeat moves to r ("repeat na r?", d-3wvtn5zn). Open:
       r is Rate() in the navigation keys of the user's config; see the question below.
-- [x] Instant filtering: r is Rate() in the lists' navigation keys; with ToggleRepeat on r, where does Rate go?
+- [x] [t-sf7al4v4] Instant filtering: r is Rate() in the lists' navigation keys; with ToggleRepeat on r, where does Rate go?
       Decided by the user 2026-10-11: Rate moves to y, r is ToggleRepeat (d-bcn65ven, d-wsmj4hvj).
       Options: Rate moves to a free key, e.g. y (name it) | Repeat goes to a free key instead and Rate keeps r | r is repeat only outside lists
       Checked: ~/.config/rormpc/config.ron navigation "r": Rate(), "R": AddRandom; rmpc/src/ui/mod.rs handle_action
       gives the pane the key first and claims the global binding only after, so a global r would toggle repeat
       almost nowhere (2026-10-11). Free single keys: B E F H I L M O Q S T W y.
-- [x] Instant filtering: A filter with 0 owned songs?
+- [x] [t-jusw7yz7] Instant filtering: A filter with 0 owned songs?
       Decided by the user 2026-10-11: the upcoming songs go, it stops after the playing song (Sol; d-sy7ma764).
-- [x] Instant filtering: When does Previous sources record a rule set, now that every click applies?
+- [x] [t-blsr4dqn] Instant filtering: When does Previous sources record a rule set, now that every click applies?
       Decided by the user 2026-10-11: when the rule set is left, or once a song of it has played (d-m7t2ldzp).
-- [x] Instant filtering: Should a round count a song as heard only after a scrobble-qualifying play instead of on start (Sol)?
+- [x] [t-iyyq2is3] Instant filtering: Should a round count a song as heard only after a scrobble-qualifying play instead of on start (Sol)?
       Decided by the user 2026-10-11: yes, heard only after a scrobble-qualifying play ("as in scrobble"), in step 1
       (d-yxxlysnq).
-- [x] Instant filtering: Keep `hits` warm beyond the cached library index?
+- [x] [t-rezfoev3] Instant filtering: Keep `hits` warm beyond the cached library index?
       Decided by the user 2026-10-11: only if the end-to-end time after the cache is over 0.15 s (d-ed7ivr5u).
-- [x] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
+- [x] [t-ccwpr5yr] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
       Decided by the user 2026-10-11: cancel the timer and stay paused (d-h2in7kd6); queued in "Next, in order".
-- [x] Release years: About 166 files have no recording MBID at all ("needs MBID", class no-recording); should the
+- [x] Release years: About 166 files have no recording MBID at all ("needs MBID", class no-recording); should the [t-kbrwabr2]
       Decided by the user 2026-10-11: list them under a separate filter, off by default (d-bzidm3vs); queued in "Next, in order".
-- [x] Release years: When you pick a recording MBID for a file in the picker, should it also rewrite the file's
+- [x] Release years: When you pick a recording MBID for a file in the picker, should it also rewrite the file's [t-mk3klt4c]
       Decided by the user 2026-10-11: yes, the picked recording also rewrites the file's UFID (d-hkqe4mfl).
-- [x] Release years: A video match whose work has same-length audio recordings, none on an official Album, Single
+- [x] Release years: A video match whose work has same-length audio recordings, none on an official Album, Single [t-ygvgseeh]
       Decided by the user 2026-10-11: swap, as built (d-6bdujk63).
-- [x] Transcribed lyrics: Transcribe new Omarchy Radio downloads automatically, or only on request?
+- [x] [t-g3benoav] Transcribed lyrics: Transcribe new Omarchy Radio downloads automatically, or only on request?
       Decided by the user 2026-10-11: automatically after each radio download (d-k5ct3563).
-- [x] Transcribed lyrics: Run the whole library's songs without lyrics (about 274, about 10 hours of CPU)?
+- [x] [t-nrrenexw] Transcribed lyrics: Run the whole library's songs without lyrics (about 274, about 10 hours of CPU)?
       Decided by the user 2026-10-11: yes, once overnight (d-ofgw3a5v).
-- [x] Transcribed lyrics: May a single-song `--current` request skip vocal separation to answer in about 20 s instead of about 2 min?
+- [x] [t-pcvo242u] Transcribed lyrics: May a single-song `--current` request skip vocal separation to answer in about 20 s instead of about 2 min?
       Decided by the user 2026-10-11: no, always separate the vocals (d-ihaam37d).
-- [x] Transcribed lyrics: Show a transcript that passed the checks at once, or only after the user accepts it?
+- [x] [t-lpkmaejb] Transcribed lyrics: Show a transcript that passed the checks at once, or only after the user accepts it?
       Decided by the user 2026-10-11: show at once with the machine-transcribed label (d-m3sz7ubx).
-- [x] Transcribed lyrics: Default Whisper model?
+- [x] [t-t3l657ag] Transcribed lyrics: Default Whisper model?
       Decided by the user 2026-10-11: large-v3 (d-crma4ykk), not the measured large-v3-turbo.
-- [x] Transcribed lyrics: Where do the heavy dependencies live?
+- [x] [t-gm7vuxkv] Transcribed lyrics: Where do the heavy dependencies live?
       Decided by the user 2026-10-11: a separate uv tool with an inline-dependency script (d-5z76bdt3).
-- [x] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
+- [x] [t-a66m24n7] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
       Decided by the user 2026-10-11: yes, the whole evaluation set (d-j6gatiuc); it needs an API key the user has.
