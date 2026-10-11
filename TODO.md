@@ -668,6 +668,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       All choices decided by the user 2026-10-11 (the "Instant filtering:" and "Banned:" entries in "Needs a
       decision"), with two additions: a hand removal from the queue bans the song into a separate Banned list (file
       kept, ListenBrainz untouched), and Rate moves to y so r can be ToggleRepeat and z / Z undo / redo everywhere.
+      Stage 1 (plan step 1 and the round rules) done in rormpc-tools f060ad8 (worker): rounds keyed by source.json's
+      `source_id` (older files keep the rules_hash key), `heard` kept across member changes, a song is heard only
+      after a scrobble-qualifying play (played time, checked on MPD's idle events and the heartbeat, no timer);
+      Banned: `banned.jsonl` in the data repo, `musicdb ban|unban|ban --undo|banned --json`, `hits` drops banned
+      songs after the ranks (counts.banned), mpd-player never plans one. Released in v0.2.50 and installed
+      2026-10-11 (547 tests pass). The plan's `removed` field is obsolete: a hand removal bans (the user's decision).
+      Found at the install: the listen rule is hard-coded to ro-listenbrainz-mpd's defaults (0.5 / 240 s), but the
+      user's scrobbler config says listen_fraction 0.9, no cap, uninterrupted (a seek restarts the count); "as in
+      scrobble" means the user's rule, so mpd-player reads the scrobbler's config (next item, stage 1b).
+      Noted: mpd-player matches bans by file path only (hits also by YouTube id / MBID); the one-folder migration
+      (music-data) must rewrite banned.jsonl's paths with the others.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
