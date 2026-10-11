@@ -11,7 +11,8 @@
 //! CLI offers no candidate list) and runs `musicdb years --mbid ID MBID` in the background; the row comes back
 //! computed from the pick, undecided. Applying an accepted pick also writes it into the file's recording tag (UFID /
 //! `MUSICBRAINZ_TRACKID`, even when the year holds; decided by the user 2026-10-11), and Roll back… restores it.
-//! h/l switch the decision filter; the menu (Enter) also filters by confidence and class.
+//! h/l switch the decision filter; the menu (Enter) also filters by confidence and class. Files without a recording
+//! MBID (class `no-recording`) show only under their own menu filter, off by default (decided by the user 2026-10-11).
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -177,6 +178,12 @@ impl YearRow {
     fn rewrites_recording(&self) -> Option<(Option<&str>, &str)> {
         let pick = self.mbid_override.as_deref()?;
         (self.file_mbid.as_deref() != Some(pick)).then_some((self.file_mbid.as_deref(), pick))
+    }
+
+    /// A file without a `MusicBrainz` recording MBID (class `no-recording`, rormpc-tools 0.2.54): listed only under
+    /// its own filter (decided by the user 2026-10-11). A pick replaces the class, so the row joins the others.
+    fn no_recording(&self) -> bool {
+        self.classes.iter().any(|c| c == "no-recording")
     }
 
     fn confidence_key(&self) -> &str {
@@ -424,17 +431,23 @@ struct Filter {
     /// high, review, none
     confidence: Option<String>,
     class: Option<String>,
+    /// on: only the files without a recording MBID; off (the default): every other row
+    no_recording: bool,
 }
 
 impl Filter {
     fn matches(&self, r: &YearRow) -> bool {
-        (self.decision == DecisionFilter::All || r.decision == self.decision.label())
+        r.no_recording() == self.no_recording
+            && (self.decision == DecisionFilter::All || r.decision == self.decision.label())
             && self.confidence.as_ref().is_none_or(|c| r.confidence_key() == c)
             && self.class.as_ref().is_none_or(|c| r.classes.contains(c))
     }
 
     fn describe(&self) -> String {
         let mut out = self.decision.label().to_owned();
+        if self.no_recording {
+            out.push_str(" · no recording MBID");
+        }
         if let Some(c) = &self.confidence {
             let _ = write!(out, " · confidence {c}");
         }
@@ -450,7 +463,7 @@ fn summary(rows: &[YearRow]) -> String {
     let count = |f: &dyn Fn(&YearRow) -> bool| rows.iter().filter(|r| f(r)).count();
     format!(
         "{} rows · {} undecided · {} accepted · {} rejected · {} applied · {} high · {} review · {} need an MBID · {} \
-         picked",
+         picked · {} without a recording MBID",
         rows.len(),
         count(&|r| r.decision == "undecided"),
         count(&|r| r.decision == "accepted"),
@@ -460,7 +473,23 @@ fn summary(rows: &[YearRow]) -> String {
         count(&|r| r.confidence.as_deref() == Some("review")),
         count(&|r| r.wants_pick()),
         count(&|r| r.mbid_override.is_some()),
+        count(&|r| r.no_recording()),
     )
+}
+
+/// The menu's filter counts: classes and confidences over the rows on the same side of the "no recording MBID"
+/// filter as `no_recording` (the hidden side never counts), and how many files have no recording MBID.
+fn filter_counts(rows: &[YearRow], no_recording: bool) -> (BTreeMap<String, usize>, BTreeMap<String, usize>, usize) {
+    let mut classes: BTreeMap<String, usize> = BTreeMap::new();
+    let mut confidences: BTreeMap<String, usize> = BTreeMap::new();
+    for r in rows.iter().filter(|r| r.no_recording() == no_recording) {
+        // the class has its own filter entry
+        for c in r.classes.iter().filter(|c| *c != "no-recording") {
+            *classes.entry(c.clone()).or_default() += 1;
+        }
+        *confidences.entry(r.confidence_key().to_owned()).or_default() += 1;
+    }
+    (classes, confidences, rows.iter().filter(|r| r.no_recording()).count())
 }
 
 /// State shared with the background `musicdb` runs and the menu's callbacks.
@@ -787,14 +816,7 @@ impl YearsPane {
         let job_p = Arc::clone(&self.job);
         let (job_d, job_f, job_c) = (Arc::clone(&self.job), Arc::clone(&self.job), Arc::clone(&self.job));
         let filter = self.filter.clone();
-        let mut classes: BTreeMap<String, usize> = BTreeMap::new();
-        let mut confidences: BTreeMap<String, usize> = BTreeMap::new();
-        for r in &self.report.rows {
-            for c in &r.classes {
-                *classes.entry(c.clone()).or_default() += 1;
-            }
-            *confidences.entry(r.confidence_key().to_owned()).or_default() += 1;
-        }
+        let (classes, confidences, no_recording) = filter_counts(&self.report.rows, filter.no_recording);
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
                 if let Some((id, picked)) = pick {
@@ -848,6 +870,12 @@ impl YearsPane {
                     pick(&mut section, format!("{mark} Show {}", d.label()), Filter { decision: d, ..filter.clone() });
                 }
                 let mark = |on: bool| if on { "●" } else { " " };
+                // the other side's classes and confidences differ: switching sides clears those filters
+                pick(
+                    &mut section,
+                    format!("{} No recording MBID ({no_recording})", mark(filter.no_recording)),
+                    Filter { no_recording: !filter.no_recording, confidence: None, class: None, ..filter.clone() },
+                );
                 pick(
                     &mut section,
                     format!("{} Any confidence", mark(filter.confidence.is_none())),
@@ -1230,7 +1258,8 @@ mod tests {
         assert!(rep.rows[2].locked().is_some_and(|w| w.contains("Roll back")));
         assert_eq!(
             summary(&rep.rows),
-            "3 rows · 2 undecided · 1 accepted · 0 rejected · 1 applied · 1 high · 1 review · 1 need an MBID · 0 picked"
+            "3 rows · 2 undecided · 1 accepted · 0 rejected · 1 applied · 1 high · 1 review · 1 need an MBID · 0 picked \
+             · 1 without a recording MBID"
         );
     }
 
@@ -1326,15 +1355,44 @@ mod tests {
     fn filters_by_decision_confidence_and_class() {
         let rep = report();
         let ids = |f: &Filter| rep.rows.iter().filter(|r| f.matches(r)).map(|r| r.id).collect::<Vec<_>>();
-        assert_eq!(ids(&Filter::default()), [1, 2]); // undecided first
+        // undecided first; #2 has no recording MBID: only under its own filter, off by default
+        assert_eq!(ids(&Filter::default()), [1]);
         assert_eq!(ids(&Filter { decision: DecisionFilter::Accepted, ..Filter::default() }), [3]);
-        assert_eq!(ids(&Filter { decision: DecisionFilter::All, ..Filter::default() }), [1, 2, 3]);
-        let none = Filter { decision: DecisionFilter::All, confidence: Some("none".to_owned()), class: None };
-        assert_eq!(ids(&none), [2]);
-        let class = Filter { decision: DecisionFilter::All, confidence: None, class: Some("rg-earlier".to_owned()) };
+        assert_eq!(ids(&Filter { decision: DecisionFilter::All, ..Filter::default() }), [1, 3]);
+        let none = Filter { decision: DecisionFilter::All, confidence: Some("none".to_owned()), ..Filter::default() };
+        assert!(ids(&none).is_empty());
+        let class = Filter { decision: DecisionFilter::All, class: Some("rg-earlier".to_owned()), ..Filter::default() };
         assert_eq!(ids(&class), [3]);
+        let no_recording = Filter { no_recording: true, ..Filter::default() };
+        assert_eq!(ids(&no_recording), [2]);
+        assert_eq!(ids(&Filter { decision: DecisionFilter::Accepted, ..no_recording.clone() }), Vec::<u64>::new());
+        assert_eq!(ids(&Filter { confidence: Some("none".to_owned()), ..no_recording.clone() }), [2]);
+        assert_eq!(no_recording.describe(), "undecided · no recording MBID");
         assert_eq!(DecisionFilter::Undecided.step(true), DecisionFilter::Accepted);
         assert_eq!(DecisionFilter::Undecided.step(false), DecisionFilter::All);
+    }
+
+    #[test]
+    fn the_menu_counts_only_the_side_of_the_no_recording_filter_shown() {
+        let mut rows = report().rows;
+        // a second file without a recording MBID, and #2 after a pick: it joins the other rows
+        rows.push(YearRow { id: 4, classes: vec!["no-recording".to_owned(), "no-work".to_owned()], ..rows[1].clone() });
+        let counts = |m: &BTreeMap<String, usize>| m.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>();
+        let pair = |k: &str, v: usize| (k.to_owned(), v);
+        let (classes, confidences, no_recording) = filter_counts(&rows, false);
+        assert_eq!(counts(&classes), [pair("rg-earlier", 1), pair("version", 1), pair("video", 1)]);
+        assert_eq!(counts(&confidences), [pair("high", 1), pair("review", 1)]);
+        assert_eq!(no_recording, 2);
+        let (classes, confidences, no_recording) = filter_counts(&rows, true);
+        assert_eq!(counts(&classes), [pair("no-work", 1)]); // the class itself is the filter, not an entry
+        assert_eq!(counts(&confidences), [pair("none", 2)]);
+        assert_eq!(no_recording, 2);
+        let picked: YearRow = serde_json::from_str(PICKED).expect("a row");
+        rows[1] = picked;
+        let (classes, confidences, no_recording) = filter_counts(&rows, false);
+        assert_eq!(classes.get("keeps-year"), Some(&1));
+        assert_eq!(confidences.get("none"), Some(&1));
+        assert_eq!(no_recording, 1);
     }
 
     #[test]

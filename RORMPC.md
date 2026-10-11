@@ -506,7 +506,7 @@ The release years to review (rormpc-tools `docs/release-years-plan.md`, stage B)
 (ShowPlay(Years)). It reads `musicdb years --json`, the report `musicdb years --dry-run` writes (version 1; another
 version or a musicdb without `years` is said in the panel): one row per file whose shown year (OriginalDate, else
 Date) would change or that is suspect. The top line counts the rows (undecided, accepted, rejected, applied, high,
-review, needing an MBID, picked); the table shows the decision (`✓` accepted, `✗` rejected, `✓✓` applied), the row id, the
+review, needing an MBID, picked, without a recording MBID); the table shows the decision (`✓` accepted, `✗` rejected, `✓✓` applied), the row id, the
 file, the current and proposed TDRC / TDOR, the rule, the confidence and a short evidence line (the suspect
 classes and the source release); the details (beside the table on a wide panel, under it on a narrow one) show
 the whole evidence, the date source, the release, its release-group date and the recording's own first release.
@@ -519,8 +519,14 @@ Every row is reviewed (decided by the user 2026-10-10, no automatic apply):
 | `D` | reject (`--reject`); on rows already rejected: undecide |
 | Space / Ctrl-Space | mark the row and move on / invert the marks of the shown rows; `a` and `D` act on the marked rows |
 | `h` / `l` | decision filter: undecided (the default), accepted, rejected, all |
-| Enter | the menu: Pick the recording (MBID)…; accept, reject, undecide; Apply accepted…; Roll back…; filters by decision, confidence, class |
+| Enter | the menu: Pick the recording (MBID)…; accept, reject, undecide; Apply accepted…; Roll back…; filters by decision, no recording MBID, confidence, class |
 | Esc | clears the marks, then closes the panel |
+
+Files without a MusicBrainz recording MBID (class `no-recording`, rormpc-tools 0.2.54) are listed only under their
+own filter, off by default (decided by the user 2026-10-11): the menu's "No recording MBID (N)" switches between them
+and the other rows (it clears the confidence and class filters, which differ between the two), the decision filter
+still applies, and the menu's confidence and class counts cover only the side shown. Once a recording is picked for
+such a file, its row loses the class and joins the other rows.
 
 Marks stay only on the rows the filter shows. "Apply accepted…" confirms, then runs `musicdb years --apply` in the
 background (only files whose audio and date tags are what the report saw; the old values go to
