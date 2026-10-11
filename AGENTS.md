@@ -78,9 +78,14 @@ A file for [guiding AI coding agents](https://agents.md/).
 
 ## Coordination
 
-- One TODO coordinator owns rormpc and rormpc-tools: their TODO, workers, releases and installs (decided by the user
-  on 2026-10-07; the session started with "rób TODO po kolei", herdr agent `todo-rormpc`). The music-mpd
-  coordinator keeps music-data and sends rormpc requests to it as text; other sessions do not release or install.
+- One TODO coordinator per git repository (herdr's rule; decided by the user on 2026-10-12, d-33kat4ps, replacing
+  the 2026-10-07 shared coordinator): herdr agent `todo-rormpc` owns rormpc only: its TODO, workers, releases and
+  installs. rormpc-tools has its own space, coordinator and `TODO.md`. The music-mpd coordinator keeps music-data
+  and sends rormpc requests to it as text; other sessions do not release or install.
+- Cross-repository work goes as a plain message to the rormpc-tools coordinator, which decides, queues it in its own
+  TODO and replies "landed <tag>". The consuming rormpc item waits in rormpc's `TODO.md` as "Waiting on
+  rormpc-tools" until then. rormpc-tools owns its releases (bump, tag, push); `scripts/rormpc_install.sh` pins its
+  tag, and that tag is the contract between the repositories.
 - The coordinator runs each item through `herdr todo run` with `--check tests` (`.herdr/checks.toml`:
   `cargo test -p rmpc`); after the cherry-pick herdr installs master with `scripts/rormpc_install.sh install` and
   reads the installed commit with its `build-id`. Clippy is not a check (`-p rmpc` fails on older code).
