@@ -415,6 +415,11 @@ pub enum QueueActionsFile {
     /// rormpc: Play's Browse: the previous / next grouping (Artists, Album artists, Albums, Folders, Lists)
     PreviousGrouping,
     NextGrouping,
+    /// rormpc: Lyrics shows the playing song's synced lines this many milliseconds later (negative: earlier),
+    /// saved in its .lrc as the [offset:] tag
+    ShiftLyrics(i64),
+    /// rormpc: Lyrics drops the song's shift (the .lrc as fetched)
+    ResetLyricsShift,
     Delete,
     DeleteAll,
     Play,
@@ -446,6 +451,8 @@ pub enum QueueActions {
     ToggleBrowse,
     PreviousGrouping,
     NextGrouping,
+    ShiftLyrics(i64),
+    ResetLyricsShift,
     Delete,
     DeleteAll,
     Play,
@@ -472,6 +479,8 @@ impl TryFrom<QueueActionsFile> for QueueActions {
             QueueActionsFile::ToggleBrowse => Ok(QueueActions::ToggleBrowse),
             QueueActionsFile::PreviousGrouping => Ok(QueueActions::PreviousGrouping),
             QueueActionsFile::NextGrouping => Ok(QueueActions::NextGrouping),
+            QueueActionsFile::ShiftLyrics(ms) => Ok(QueueActions::ShiftLyrics(ms)),
+            QueueActionsFile::ResetLyricsShift => Ok(QueueActions::ResetLyricsShift),
             QueueActionsFile::Delete => Ok(QueueActions::Delete),
             QueueActionsFile::DeleteAll => Ok(QueueActions::DeleteAll),
             QueueActionsFile::Play => Ok(QueueActions::Play),
@@ -522,6 +531,13 @@ impl ToDescription for QueueActions {
             QueueActions::ToggleBrowse => "Music's left column: Filters or Browse (Music)".into(),
             QueueActions::PreviousGrouping => "Browse: the previous grouping (Music)".into(),
             QueueActions::NextGrouping => "Browse: the next grouping (Music)".into(),
+            QueueActions::ShiftLyrics(ms) => format!(
+                "Show the song's synced lyrics {:.1} s {} (saved in its .lrc; Lyrics)",
+                ms.unsigned_abs() as f64 / 1000.0,
+                if *ms < 0 { "earlier" } else { "later" }
+            )
+            .into(),
+            QueueActions::ResetLyricsShift => "Undo the song's lyrics shift (the .lrc as fetched; Lyrics)".into(),
             QueueActions::Delete => "Remove song under cursor from the queue".into(),
             QueueActions::DeleteAll => "Clear current queue".into(),
             QueueActions::Play => "Play song under cursor".into(),

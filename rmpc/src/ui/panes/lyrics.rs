@@ -7,13 +7,16 @@ use ratatui::{
 
 use super::Pane;
 use crate::{
-    config::{keys::CommonAction, theme::properties::Alignment},
+    config::{
+        keys::{CommonAction, QueueActions},
+        theme::properties::Alignment,
+    },
     ctx::{Ctx, LyricsResult},
     shared::{
         ext::duration::DurationExt,
         keys::ActionEvent,
         lrc::{Lrc, LrcOffset},
-        macros::status_error,
+        macros::{status_error, status_info},
         mpd_query::run_status_update,
     },
     ui::{
@@ -38,6 +41,11 @@ pub struct LyricsPane {
     show_polish: bool,
     /// rormpc: `musicdb lyrics translate` runs
     fetching: bool,
+    /// rormpc: the playing song's .lrc, which keeps its shift
+    lrc_path: Option<std::path::PathBuf>,
+    /// rormpc: that .lrc's shift in milliseconds, positive meaning later
+    /// (its `[offset:]` tag negated)
+    shift_ms: i64,
     initialized: bool,
     last_requested_line_idx: usize,
 }
@@ -51,6 +59,8 @@ impl LyricsPane {
             line_ids: Vec::new(),
             show_polish: false,
             fetching: false,
+            lrc_path: None,
+            shift_ms: 0,
             initialized: false,
             last_requested_line_idx: 0,
         }
@@ -60,6 +70,8 @@ impl LyricsPane {
         self.current_lyrics = None;
         self.translation = None;
         self.line_ids.clear();
+        self.lrc_path = None;
+        self.shift_ms = 0;
 
         let lrc = ctx.find_lrc()?;
         self.fallback = None;
@@ -72,7 +84,10 @@ impl LyricsPane {
         };
 
         if let LyricsResult::Lrc(path) | LyricsResult::Index(path) = &result {
-            let (texts, ids) = crate::shared::lrc::timed_line_ids(&std::fs::read_to_string(path)?);
+            let content = std::fs::read_to_string(path)?;
+            self.lrc_path = Some(path.clone());
+            self.shift_ms = crate::shared::lrc::shift_ms(&content);
+            let (texts, ids) = crate::shared::lrc::timed_line_ids(&content);
             if ids.len() == lrc.lines.len() {
                 self.line_ids = ids;
                 self.translation = rormpc_lyrics::translation(ctx, texts, false);
@@ -80,6 +95,43 @@ impl LyricsPane {
         }
         self.current_lyrics = Some(lrc);
         Ok(())
+    }
+
+    /// rormpc: moves the playing song's lyrics to `shift_ms` and saves it in
+    /// its .lrc, then reloads them.
+    fn set_shift(&mut self, shift_ms: i64, ctx: &Ctx) -> Result<()> {
+        let Some(path) = &self.lrc_path else {
+            status_info!("No synced .lrc to shift for this song");
+            return Ok(());
+        };
+        if let Err(err) = crate::shared::lrc::write_shift(path, shift_ms) {
+            status_error!("Lyrics shift: {err:#}");
+            return Ok(());
+        }
+        if let Err(err) = self.update_lyrics(ctx) {
+            status_error!("Failed to load lyrics file: '{err}'");
+        }
+        self.last_requested_line_idx = 0;
+        ctx.render()?;
+        Ok(())
+    }
+
+    /// rormpc: "lyrics +12.4 s · =: reset" in the bottom row while the song's
+    /// lyrics are shifted. Returns the area left above it.
+    fn render_shift(&self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Rect {
+        if self.shift_ms == 0 || area.height < 3 {
+            return area;
+        }
+        let mut status = format!("lyrics {}", crate::shared::lrc::format_shift(self.shift_ms));
+        if let Some(key) =
+            binding(&ctx.config.keybinds.queue, |a| matches!(a, QueueActions::ResetLyricsShift))
+        {
+            status = format!("{status} · {key}: reset");
+        }
+        let [body, status_area] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
+        rormpc_lyrics::render_status(frame, status_area, &status);
+        body
     }
 
     /// rormpc: the status row and, with a translation, both columns (or the
@@ -187,6 +239,7 @@ fn align_text(text: Text, alignment: Alignment) -> Text {
 
 impl Pane for LyricsPane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
+        let area = self.render_shift(frame, area, ctx);
         let Some(area) = self.render_translation(frame, area, ctx) else {
             return Ok(());
         };
@@ -323,6 +376,15 @@ impl Pane for LyricsPane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        // rormpc: the keys that shift the song's synced lyrics
+        match event.claim_queue().cloned() {
+            Some(QueueActions::ShiftLyrics(ms)) => {
+                return self.set_shift(self.shift_ms.saturating_add(ms), ctx);
+            }
+            Some(QueueActions::ResetLyricsShift) => return self.set_shift(0, ctx),
+            Some(_) => event.abandon(),
+            None => {}
+        }
         // rormpc: Enter looks the Polish translation up, h/l switches original
         // / translation in a narrow pane
         let Some(tr) = &self.translation else { return Ok(()) };
@@ -340,5 +402,77 @@ impl Pane for LyricsPane {
             None => {}
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use ratatui::{Terminal, backend::TestBackend};
+    use rmpc_mpd::commands::{Song, State, metadata_tag::MetadataTag};
+    use rstest::rstest;
+
+    use super::LyricsPane;
+    use crate::{
+        config::keys::QueueActions,
+        ctx::Ctx,
+        shared::keys::ActionEvent,
+        tests::fixtures::ctx,
+        ui::panes::Pane,
+    };
+
+    const FETCHED: &str = "[ar:A]\n[ti:T]\n[re:lrclib.net #1]\n[00:01.00]one\n[00:03.00]two\n";
+
+    fn queue(action: QueueActions) -> ActionEvent {
+        ActionEvent::from(Arc::new(vec![action.into()]))
+    }
+
+    fn screen(pane: &mut LyricsPane, ctx: &Ctx) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+        terminal.draw(|frame| pane.render(frame, frame.area(), ctx).unwrap()).unwrap();
+        terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect()
+    }
+
+    #[rstest]
+    fn keys_shift_the_song_in_its_lrc_and_reset_restores_it(mut ctx: Ctx) {
+        let dir = std::env::temp_dir().join(format!("rormpc-lyrics-pane-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("a")).unwrap();
+        let lrc = dir.join("a/song.lrc");
+        std::fs::write(&lrc, FETCHED).unwrap();
+
+        let mut config = (*ctx.config).clone();
+        config.lyrics_dir = Some(dir.to_string_lossy().into_owned());
+        ctx.config = Arc::new(config);
+        let metadata = HashMap::from([
+            ("artist".to_owned(), MetadataTag::from("A".to_owned())),
+            ("title".to_owned(), MetadataTag::from("T".to_owned())),
+        ]);
+        ctx.current_song = Some(Song { file: "a/song.mp3".into(), metadata, ..Default::default() });
+        ctx.status.state = State::Play;
+
+        let mut pane = LyricsPane::new(&ctx);
+        pane.before_show(&ctx).unwrap();
+        assert!(!screen(&mut pane, &ctx).contains("lyrics +"));
+
+        pane.handle_action(&mut queue(QueueActions::ShiftLyrics(500)), &mut ctx).unwrap();
+        pane.handle_action(&mut queue(QueueActions::ShiftLyrics(500)), &mut ctx).unwrap();
+        pane.handle_action(&mut queue(QueueActions::ShiftLyrics(-100)), &mut ctx).unwrap();
+        let written = std::fs::read_to_string(&lrc).unwrap();
+        assert_eq!(written, FETCHED.replace("[00:01.00]", "[offset:-900]\n[00:01.00]"));
+        assert_eq!(pane.current_lyrics.as_ref().unwrap().lines[0].time.as_millis(), 1900);
+        assert!(screen(&mut pane, &ctx).contains("lyrics +0.9 s · =: reset"));
+
+        // a new pane (a restart) reads the shift back from the file
+        let mut again = LyricsPane::new(&ctx);
+        again.before_show(&ctx).unwrap();
+        assert_eq!(again.shift_ms, 900);
+
+        pane.handle_action(&mut queue(QueueActions::ResetLyricsShift), &mut ctx).unwrap();
+        assert_eq!(std::fs::read_to_string(&lrc).unwrap(), FETCHED);
+        assert!(!screen(&mut pane, &ctx).contains("lyrics +"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

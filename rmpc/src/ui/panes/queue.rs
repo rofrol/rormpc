@@ -1624,6 +1624,10 @@ impl Pane for QueuePane {
                 QueueActions::ToggleBrowse | QueueActions::PreviousGrouping | QueueActions::NextGrouping => {
                     event.abandon();
                 }
+                // rormpc: the Lyrics pane's keys
+                QueueActions::ShiftLyrics(_) | QueueActions::ResetLyricsShift => {
+                    event.abandon();
+                }
             }
         } else if let Some(action) = event.claim_common().map(|v| v.to_owned()) {
             match action {

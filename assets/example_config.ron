@@ -158,6 +158,11 @@
             "B":          ToggleBrowse, // rormpc: Play's left column, Filters or Browse
             "[":          PreviousGrouping, // rormpc: Browse's grouping (Artists, Album artists, Albums, Folders, Lists)
             "]":          NextGrouping,
+            "}":          ShiftLyrics(100), // rormpc: Lyrics: the song's lines 0.1 s later, kept in its .lrc
+            "{":          ShiftLyrics(-100),
+            ")":          ShiftLyrics(500),
+            "(":          ShiftLyrics(-500),
+            "=":          ResetLyricsShift, // rormpc: the .lrc as fetched
             "M":          SelectAlbum(),
             "X":          Shuffle,
         },

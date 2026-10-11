@@ -2,6 +2,7 @@ mod index;
 mod lrc_parser;
 mod lyrics;
 pub mod lyricsfile_parser;
+mod rormpc_shift;
 
 use std::{path::PathBuf, time::Duration};
 
@@ -9,6 +10,7 @@ use anyhow::{Context, Result, bail};
 pub use index::LrcIndex;
 pub use lyrics::{Lrc, LrcMetadata};
 pub(crate) use lrc_parser::timed_line_ids;
+pub(crate) use rormpc_shift::{format_shift, shift_ms, write_shift};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct LrcOffset {

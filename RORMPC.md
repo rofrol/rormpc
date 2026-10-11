@@ -717,6 +717,25 @@ split verses) is aligned by stanza and gets no highlight on its side. Below 100 
 and h/l switches between the original and the translation. The translation lives in `<song stem>.pl.json` next to
 the lyrics; `musicdb lyrics lang FILE CODE` overrides the detected language (`pl`: no translation).
 
+Synced lyrics timed for another cut of the song (MONTERO's file is the official video, LRCLIB's lines are timed for
+the shorter audio, so every line comes early) can be shifted in the Lyrics pane, and the shift is remembered per
+song:
+
+| Key | Map | Action |
+|---|---|---|
+| `}` / `{` | queue | `ShiftLyrics(100)` / `ShiftLyrics(-100)`: the lines 0.1 s later / earlier |
+| `)` / `(` | queue | `ShiftLyrics(500)` / `ShiftLyrics(-500)`: 0.5 s later / earlier |
+| `=` | queue | `ResetLyricsShift`: back to the `.lrc` as fetched |
+
+While the shift is not zero the bottom row says so ("lyrics +12.4 s · =: reset"). It is saved in the song's own
+`.lrc` as its `[offset:]` tag (written to a temporary file and renamed over it, every other line kept byte for byte),
+so it survives restarts and rereads and needs no file of its own; rmpc's parser already honours the tag. The LRC
+convention counts the tag the other way round: a positive `[offset:]` shows the lines earlier, so "+12.4 s" (later)
+is stored as `[offset:-12400]`. Reset removes the tag; files from LRCLIB carry none, so that is the file as fetched
+(an `[offset:]` that came with the file shows as a shift and reset drops it too). Fetching the song's lyrics again
+(`musicdb lyrics`, "Choose lyrics…") replaces the file and with it the shift. The global `lyrics_offset` from the
+config still adds on top. `.lyricsfile.yaml` lyrics cannot be shifted.
+
 ```ron
 lyrics_dir: "~/.local/share/rormpc-tools/lyrics",
 enable_lyrics_hot_reload: true,

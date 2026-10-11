@@ -198,6 +198,12 @@ impl Default for KeyConfigFile {
             (s().char('B'),                       Q::ToggleBrowse),
             (s().char('['),                       Q::PreviousGrouping),
             (s().char(']'),                       Q::NextGrouping),
+            // rormpc: Lyrics: the song's synced lines later / earlier, kept in its .lrc ([offset:])
+            (s().char('}'),                       Q::ShiftLyrics(100)),
+            (s().char('{'),                       Q::ShiftLyrics(-100)),
+            (s().char(')'),                       Q::ShiftLyrics(500)),
+            (s().char('('),                       Q::ShiftLyrics(-500)),
+            (s().char('='),                       Q::ResetLyricsShift),
             (s().char('M'),                       Q::SelectAlbum()),
             (s().char('X'),                       Q::Shuffle),
         ]);
