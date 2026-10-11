@@ -506,7 +506,7 @@ The release years to review (rormpc-tools `docs/release-years-plan.md`, stage B)
 (ShowPlay(Years)). It reads `musicdb years --json`, the report `musicdb years --dry-run` writes (version 1; another
 version or a musicdb without `years` is said in the panel): one row per file whose shown year (OriginalDate, else
 Date) would change or that is suspect. The top line counts the rows (undecided, accepted, rejected, applied, high,
-review, needing an MBID); the table shows the decision (`✓` accepted, `✗` rejected, `✓✓` applied), the row id, the
+review, needing an MBID, picked); the table shows the decision (`✓` accepted, `✗` rejected, `✓✓` applied), the row id, the
 file, the current and proposed TDRC / TDOR, the rule, the confidence and a short evidence line (the suspect
 classes and the source release); the details (beside the table on a wide panel, under it on a narrow one) show
 the whole evidence, the date source, the release, its release-group date and the recording's own first release.
@@ -515,20 +515,29 @@ Every row is reviewed (decided by the user 2026-10-10, no automatic apply):
 
 | Key | Action |
 |---|---|
-| `a` | accept (`musicdb years --accept ID...`); on rows already accepted: undecide (`--undecide`) |
+| `a` | accept (`musicdb years --accept ID...`); on rows already accepted: undecide (`--undecide`); on a row that needs an MBID: the MBID picker |
 | `D` | reject (`--reject`); on rows already rejected: undecide |
 | Space / Ctrl-Space | mark the row and move on / invert the marks of the shown rows; `a` and `D` act on the marked rows |
 | `h` / `l` | decision filter: undecided (the default), accepted, rejected, all |
-| Enter | the menu: accept, reject, undecide; Apply accepted…; Roll back…; filters by decision, confidence, class |
+| Enter | the menu: Pick the recording (MBID)…; accept, reject, undecide; Apply accepted…; Roll back…; filters by decision, confidence, class |
 | Esc | clears the marks, then closes the panel |
 
 Marks stay only on the rows the filter shows. "Apply accepted…" confirms, then runs `musicdb years --apply` in the
 background (only files whose audio and date tags are what the report saw; the old values go to
 `years-backup.jsonl` first; `mpc update` afterwards) and shows what it wrote and skipped. "Roll back #ID…" (on an
 applied row) and "Roll back every file's newest apply…" run `musicdb years --rollback [ID...]` the same way.
-Rows that need an MBID (no MusicBrainz recording in the tags, or no work relationship) are dimmed and read-only
-with the note "MBID picker comes next" (meanwhile `musicdb years --mbid ID MBID`); applied rows are read-only until
-rolled back. The panel reloads when opened, after each decision, apply or rollback, and when MPD's database changes.
+Rows that need an MBID (no MusicBrainz recording in the tags, or no work relationship) are dimmed until a recording
+is picked for them (stage B2). The MBID picker (`a` on such a row, or "Pick the recording (MBID)…" in the menu on any
+row not applied, for a wrongly matched recording too; one row at a time) asks for a MusicBrainz recording URL
+(`https://musicbrainz.org/recording/<MBID>`) or a bare MBID; a release or work URL, or anything else, is refused with a
+note (`musicdb years` offers no candidate list to choose from). It runs `musicdb years --mbid ID MBID` in the
+background; the row comes back computed from the pick, undecided, marked "picked" with the new proposal (or the year
+held), and is accepted and applied as any other. A pick MusicBrainz does not know (`recording-not-found`) cannot be
+accepted. Applying an accepted pick also writes it into the file's recording tag (ID3 UFID "http://musicbrainz.org",
+FLAC/Ogg `MUSICBRAINZ_TRACKID`: what MPD and the scrobbler read), even when the year holds (decided by the user
+2026-10-11); the details show the tag it replaces, Apply accepted… says how many rows rewrite it, its result lists the
+old and new tag, and Roll back… restores it. A file whose recording tag changed since the pick is skipped. Applied
+rows are read-only until rolled back. The panel reloads when opened, after each decision, apply or rollback, and when MPD's database changes.
 
 What the views read: the Year column of the theme and the album browser show OriginalDate (TDOR, the song's original
 release), falling back to Date. The album browser does it with `artists: (album_date_tags: [OriginalDate, Date])`

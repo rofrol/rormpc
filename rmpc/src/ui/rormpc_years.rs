@@ -6,7 +6,11 @@
 //! undecided (`musicdb years --accept/--reject/--undecide ID...`); Space marks rows and the keys act on the marked
 //! ones. "Apply accepted…" (`musicdb years --apply`) and "Roll back…" (`--rollback [ID...]`) run in the background
 //! after a confirmation and show their result; the writing, its checks and the backup stay in rormpc-tools.
-//! Rows that need an MBID (no `MusicBrainz` recording or work) are read-only here until the MBID picker comes.
+//! Rows that need an MBID (no `MusicBrainz` recording or work) get the MBID picker (stage B2): `a` on such a row, or
+//! "Pick the recording…" in the menu on any row not applied, asks for a `MusicBrainz` recording URL or MBID (the
+//! CLI offers no candidate list) and runs `musicdb years --mbid ID MBID` in the background; the row comes back
+//! computed from the pick, undecided. Applying an accepted pick also writes it into the file's recording tag (UFID /
+//! `MUSICBRAINZ_TRACKID`, even when the year holds; decided by the user 2026-10-11), and Roll back… restores it.
 //! h/l switch the decision filter; the menu (Enter) also filters by confidence and class.
 
 use std::{
@@ -33,7 +37,7 @@ use crate::{
     shared::{
         events::AppEvent,
         keys::ActionEvent,
-        macros::{modal, status_error, status_info},
+        macros::{modal, status_error, status_info, status_warn},
         mouse_event::{MouseEvent, MouseEventKind},
     },
     ui::{
@@ -41,6 +45,7 @@ use crate::{
         dirstack::DirState,
         modals::{
             confirm_modal::{Action, ConfirmModal},
+            input_modal::InputModal,
             menu::modal::MenuModal,
         },
         panes::{Pane, deleted},
@@ -138,18 +143,40 @@ struct YearRow {
     /// when `--apply` wrote the row
     #[serde(default)]
     applied: Option<String>,
+    /// the file's recording tag when `--mbid` picked one (null: the file has none); `--apply` writes the pick over it
+    #[serde(default)]
+    file_mbid: Option<String>,
 }
 
 impl YearRow {
-    /// Read-only here: rows that need an MBID (the picker comes next) and rows already written (Roll back… first).
+    /// Read-only here: rows that need an MBID and have no pick yet (the picker first) and rows already written
+    /// (Roll back… first).
     fn locked(&self) -> Option<&'static str> {
-        if self.needs_mbid {
-            Some("needs an MBID: the MBID picker comes next (meanwhile `musicdb years --mbid ID MBID`)")
-        } else if self.applied.is_some() {
+        if self.applied.is_some() {
             Some("already applied: Roll back… (menu) first")
+        } else if self.wants_pick() {
+            Some("needs an MBID: a or Enter → Pick the recording… (a MusicBrainz recording URL or MBID)")
         } else {
             None
         }
+    }
+
+    /// A row that needs an MBID and has none picked yet.
+    fn wants_pick(&self) -> bool {
+        self.needs_mbid && self.mbid_override.is_none()
+    }
+
+    /// Whether `--accept` takes the row (rormpc-tools `acceptable`): a proposal, or a recording picked by hand that
+    /// `MusicBrainz` knows (its tag is written even when the year holds).
+    fn acceptable(&self) -> bool {
+        self.proposed.is_some()
+            || self.mbid_override.is_some() && !self.classes.iter().any(|c| c == "recording-not-found")
+    }
+
+    /// The picked recording when applying the row rewrites the file's recording tag: (old tag, pick).
+    fn rewrites_recording(&self) -> Option<(Option<&str>, &str)> {
+        let pick = self.mbid_override.as_deref()?;
+        (self.file_mbid.as_deref() != Some(pick)).then_some((self.file_mbid.as_deref(), pick))
     }
 
     fn confidence_key(&self) -> &str {
@@ -159,8 +186,10 @@ impl YearRow {
     /// The table's short evidence: the suspect classes and the source release.
     fn short_evidence(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
-        if self.needs_mbid {
-            parts.push("needs MBID · MBID picker comes next".to_owned());
+        if let Some(pick) = &self.mbid_override {
+            parts.push(format!("picked {}", short(pick)));
+        } else if self.needs_mbid {
+            parts.push("needs MBID · a: pick".to_owned());
         }
         let classes: Vec<&str> =
             self.classes.iter().map(String::as_str).filter(|c| !(self.needs_mbid && *c == "no-work")).collect();
@@ -188,6 +217,59 @@ fn dates_cell(d: Option<&Dates>) -> String {
         Some(d) => format!("{} / {}", v(d.tdrc.as_ref()), v(d.tdor.as_ref())),
         None => "–".to_owned(),
     }
+}
+
+/// An MBID's first 8 characters, as rormpc-tools shows them.
+fn short(mbid: &str) -> &str {
+    mbid.get(..8).unwrap_or(mbid)
+}
+
+/// The recording MBID in what was pasted into the picker: a bare MBID or a `MusicBrainz` recording URL
+/// (`https://musicbrainz.org/recording/<MBID>`, with or without a trailing path or query), lowercased as
+/// `musicdb years --mbid` checks it. Other entity URLs (a release, a work) are said as such.
+fn parse_mbid(input: &str) -> Result<String, String> {
+    let text = input.trim();
+    let is_mbid = |s: &str| {
+        s.len() == 36
+            && s.char_indices().all(|(i, c)| if [8, 13, 18, 23].contains(&i) { c == '-' } else { c.is_ascii_hexdigit() })
+    };
+    if is_mbid(text) {
+        return Ok(text.to_ascii_lowercase());
+    }
+    let path = text.split(['?', '#']).next().unwrap_or_default();
+    let mut parts = path.split('/').filter(|p| !p.is_empty()).skip_while(|p| !p.contains("musicbrainz.org"));
+    if parts.next().is_none() {
+        return Err(format!("not a MusicBrainz recording URL or MBID: {text}"));
+    }
+    match (parts.next(), parts.next()) {
+        (Some("recording"), Some(id)) if is_mbid(id) => Ok(id.to_ascii_lowercase()),
+        (Some("recording"), _) => Err(format!("no recording MBID in this URL: {text}")),
+        (Some(kind), _) => Err(format!("a {kind} URL, not a recording: open the recording on MusicBrainz and paste its URL")),
+        (None, _) => Err(format!("no recording MBID in this URL: {text}")),
+    }
+}
+
+/// `musicdb years --mbid ID MBID`
+fn mbid_args(id: u64, mbid: &str) -> Vec<String> {
+    vec!["years".to_owned(), "--mbid".to_owned(), id.to_string(), mbid.to_owned()]
+}
+
+/// `--mbid` output (the row computed again from the pick) as the status line.
+fn picked_message(id: u64, mbid: &str, json: &str) -> String {
+    let mut text = format!("Years: #{id} picked {}", short(mbid));
+    if let Ok(r) = serde_json::from_str::<YearRow>(json.trim()) {
+        match &r.proposed {
+            Some(p) => {
+                let _ = write!(text, " · proposed {}", dates_cell(Some(p)));
+            }
+            None if r.classes.iter().any(|c| c == "recording-not-found") => {
+                text.push_str(" · MusicBrainz does not know this recording: it cannot be accepted");
+            }
+            None => text.push_str(" · no new year"),
+        }
+        text.push_str(" · undecided: a accepts (applying writes the recording tag)");
+    }
+    text
 }
 
 fn parse_report(json: &str) -> Result<Report, String> {
@@ -251,10 +333,18 @@ fn toggled(key: Decision, rows: &[&YearRow]) -> Decision {
 
 /// `--apply` / `--rollback` output as the result dialog's text.
 fn outcome_message(verb: &str, json: &str) -> String {
+    /// the recording tag an apply of a pick (or its rollback) rewrote; null: none
+    #[derive(Deserialize)]
+    struct Recording {
+        old: Option<String>,
+        new: Option<String>,
+    }
     #[derive(Deserialize)]
     struct Done {
         id: u64,
         file: String,
+        #[serde(default)]
+        recording: Option<Recording>,
     }
     #[derive(Deserialize)]
     struct Skipped {
@@ -276,6 +366,10 @@ fn outcome_message(verb: &str, json: &str) -> String {
     let mut text = format!("{verb} {} {}.", out.applied.len(), rows(out.applied.len()));
     for d in &out.applied {
         let _ = write!(text, "\n  #{} {}", d.id, d.file);
+        if let Some(rec) = &d.recording {
+            let tag = |m: Option<&String>| m.map_or("none", |m| short(m)).to_owned();
+            let _ = write!(text, " · recording tag {} → {}", tag(rec.old.as_ref()), tag(rec.new.as_ref()));
+        }
     }
     if !out.skipped.is_empty() {
         let _ = write!(text, "\n\nSkipped {} {}:", out.skipped.len(), rows(out.skipped.len()));
@@ -355,7 +449,8 @@ impl Filter {
 fn summary(rows: &[YearRow]) -> String {
     let count = |f: &dyn Fn(&YearRow) -> bool| rows.iter().filter(|r| f(r)).count();
     format!(
-        "{} rows · {} undecided · {} accepted · {} rejected · {} applied · {} high · {} review · {} need an MBID",
+        "{} rows · {} undecided · {} accepted · {} rejected · {} applied · {} high · {} review · {} need an MBID · {} \
+         picked",
         rows.len(),
         count(&|r| r.decision == "undecided"),
         count(&|r| r.decision == "accepted"),
@@ -363,7 +458,8 @@ fn summary(rows: &[YearRow]) -> String {
         count(&|r| r.applied.is_some()),
         count(&|r| r.confidence.as_deref() == Some("high")),
         count(&|r| r.confidence.as_deref() == Some("review")),
-        count(&|r| r.needs_mbid),
+        count(&|r| r.wants_pick()),
+        count(&|r| r.mbid_override.is_some()),
     )
 }
 
@@ -384,6 +480,8 @@ struct Job {
     filter: Option<Filter>,
     decide: Option<Decision>,
     confirm: Option<Confirm>,
+    /// the row whose recording to pick (the menu's "Pick the recording…")
+    pick: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -462,7 +560,7 @@ impl YearsPane {
 
     /// Take what the background runs and the menu left. Returns whether a load runs, its error and what runs.
     fn refresh(&mut self, ctx: &Ctx) -> (bool, Option<String>, Option<&'static str>) {
-        let (fresh, reload, loading, error, busy, result, filter, decide, confirm) = {
+        let (fresh, reload, loading, error, busy, result, filter, decide, confirm, pick) = {
             let mut j = self.job.lock().expect("years job lock");
             (
                 j.report.take(),
@@ -474,6 +572,7 @@ impl YearsPane {
                 j.filter.take(),
                 j.decide.take(),
                 j.confirm.take(),
+                j.pick.take(),
             )
         };
         if reload {
@@ -509,6 +608,9 @@ impl YearsPane {
             Some(Confirm::Rollback(ids)) => self.confirm_rollback(ctx, ids),
             None => {}
         }
+        if let Some(id) = pick {
+            self.pick(ctx, id);
+        }
         (loading, error, busy)
     }
 
@@ -531,18 +633,27 @@ impl YearsPane {
         if targets.is_empty() {
             return;
         }
+        if let [one] = targets.as_slice()
+            && key == Decision::Accepted
+            && one.applied.is_none()
+            && one.wants_pick()
+        {
+            let id = one.id;
+            self.pick(ctx, id);
+            return;
+        }
         let (open, locked): (Vec<&YearRow>, Vec<&YearRow>) = targets.into_iter().partition(|r| r.locked().is_none());
         let decision = if key == Decision::Undecided { key } else { toggled(key, &open) };
         let (ok, no_proposal): (Vec<&YearRow>, Vec<&YearRow>) =
-            open.into_iter().partition(|r| decision != Decision::Accepted || r.proposed.is_some());
+            open.into_iter().partition(|r| decision != Decision::Accepted || r.acceptable());
         let mut notes = Vec::new();
         if let [one] = locked.as_slice() {
             notes.push(format!("#{} {}", one.id, one.locked().unwrap_or_default()));
         } else if !locked.is_empty() {
-            notes.push(format!("{} rows left out (need an MBID or already applied)", locked.len()));
+            notes.push(format!("{} rows left out (need an MBID picked or already applied)", locked.len()));
         }
         if !no_proposal.is_empty() {
-            notes.push(format!("{} rows have no proposal to accept", no_proposal.len()));
+            notes.push(format!("{} rows have no proposal or known picked recording to accept", no_proposal.len()));
         }
         let ids: Vec<u64> = ok.iter().map(|r| r.id).collect();
         if !notes.is_empty() {
@@ -557,20 +668,31 @@ impl YearsPane {
     }
 
     fn confirm_apply(&self, ctx: &Ctx) {
-        let n = self
+        let todo: Vec<&YearRow> = self
             .report
             .rows
             .iter()
-            .filter(|r| r.decision == "accepted" && r.proposed.is_some() && r.applied.is_none())
-            .count();
+            .filter(|r| r.decision == "accepted" && (r.proposed.is_some() || r.mbid_override.is_some()) && r.applied.is_none())
+            .collect();
+        let n = todo.len();
         if n == 0 {
             status_info!("No accepted rows waiting to be applied");
             return;
         }
+        let picks = todo.iter().filter(|r| r.rewrites_recording().is_some()).count();
+        let recording = if picks == 0 {
+            String::new()
+        } else {
+            format!(
+                "\n\n{picks} of them also get the picked recording written into the file's recording tag (ID3 UFID / \
+                 MUSICBRAINZ_TRACKID, what MPD and the scrobbler read), even where the year holds; what is keyed by \
+                 the old recording follows the new one."
+            )
+        };
         let message = format!(
-            "Write the years of {n} accepted row{}?\n\nOnly files whose audio and date tags are what the report saw \
-             are written (a changed file is skipped and listed). The old values go to years-backup.jsonl first; \
-             Roll back… puts them back. MPD is updated afterwards.",
+            "Write the years of {n} accepted row{}?{recording}\n\nOnly files whose audio, date tags and recording \
+             tag are what the report saw are written (a changed file is skipped and listed). The old values go to \
+             years-backup.jsonl first; Roll back… puts them back. MPD is updated afterwards.",
             if n == 1 { "" } else { "s" }
         );
         let job = Arc::clone(&self.job);
@@ -590,13 +712,13 @@ impl YearsPane {
 
     fn confirm_rollback(&self, ctx: &Ctx, ids: Vec<u64>) {
         let message = if ids.is_empty() {
-            "Roll back the newest apply of every file?\n\nEach file gets back the date tags the apply replaced, \
-             only while it still has what the apply wrote. The rows go back to undecided."
+            "Roll back the newest apply of every file?\n\nEach file gets back the date tags (and the recording tag) \
+             the apply replaced, only while it still has what the apply wrote. The rows go back to undecided."
                 .to_owned()
         } else {
             format!(
-                "Roll back {}?\n\nThe file gets back the date tags the apply replaced, only while it still has what \
-                 the apply wrote. The row goes back to undecided.",
+                "Roll back {}?\n\nThe file gets back the date tags (and the recording tag) the apply replaced, only \
+                 while it still has what the apply wrote. The row goes back to undecided.",
                 ids.iter().map(|i| format!("#{i}")).collect::<Vec<_>>().join(", ")
             )
         };
@@ -616,12 +738,53 @@ impl YearsPane {
         modal!(ctx, ConfirmModal::builder().ctx(ctx).message(vec![message]).action(Action::CustomButtons { buttons }).build());
     }
 
+    /// The MBID picker: ask for the recording row `id`'s file is, then `musicdb years --mbid ID MBID` in the
+    /// background; the reloaded row is computed from the pick and undecided.
+    fn pick(&self, ctx: &Ctx, id: u64) {
+        let Some(row) = self.report.rows.iter().find(|r| r.id == id) else {
+            return;
+        };
+        if row.applied.is_some() {
+            status_info!("#{id} already applied: Roll back… (menu) first");
+            return;
+        }
+        let have = if row.mbid_override.is_some() { "picked" } else { "in the tags" };
+        match row.mbid_override.as_ref().or(row.mbid.as_ref()) {
+            Some(m) => status_info!("#{id} {}: recording {have} {m}", row.file),
+            None => status_info!("#{id} {}: no recording in the tags", row.file),
+        }
+        let job = Arc::clone(&self.job);
+        modal!(
+            ctx,
+            InputModal::new(ctx)
+                .title("Pick the recording: applying writes it into the file's recording tag")
+                .input_label("MusicBrainz recording URL or MBID:")
+                .confirm_label("Pick")
+                .initial_value(row.mbid_override.clone().unwrap_or_default())
+                .on_confirm(move |ctx, value| {
+                    match parse_mbid(value) {
+                        Ok(mbid) => run_then_reload(ctx, &job, mbid_args(id, &mbid), None, move |out| {
+                            picked_message(id, &mbid, out)
+                        }),
+                        Err(err) => status_warn!("{err}"),
+                    }
+                    Ok(())
+                })
+        );
+    }
+
     fn open_menu(&self, ctx: &Ctx) {
         let targets = self.targets();
         let n = targets.len();
         let open = targets.iter().filter(|r| r.locked().is_none()).count();
         let applied: Vec<u64> = targets.iter().filter(|r| r.applied.is_some()).map(|r| r.id).collect();
         let what = if self.marked.is_empty() { "this row".to_owned() } else { format!("{n} marked rows") };
+        // one row at a time: the picker names the recording of the row under the cursor (or the one marked row)
+        let pick = match targets.as_slice() {
+            [one] if one.applied.is_none() => Some((one.id, one.mbid_override.is_some())),
+            _ => None,
+        };
+        let job_p = Arc::clone(&self.job);
         let (job_d, job_f, job_c) = (Arc::clone(&self.job), Arc::clone(&self.job), Arc::clone(&self.job));
         let filter = self.filter.clone();
         let mut classes: BTreeMap<String, usize> = BTreeMap::new();
@@ -634,6 +797,13 @@ impl YearsPane {
         }
         let menu = MenuModal::new(ctx)
             .list_section(ctx, move |mut section| {
+                if let Some((id, picked)) = pick {
+                    let label = if picked { "Pick another recording (MBID)…" } else { "Pick the recording (MBID)…" };
+                    section.add_item(label, move |_| {
+                        job_p.lock().expect("years job lock").pick = Some(id);
+                        Ok(())
+                    });
+                }
                 if open > 0 {
                     for (label, d) in
                         [("Accept", Decision::Accepted), ("Reject", Decision::Rejected), ("Undecide", Decision::Undecided)]
@@ -742,6 +912,13 @@ impl YearsPane {
             let by_hand = if r.mbid_override.is_some() { " (picked by hand)" } else { "" };
             lines.push(field("Recording", format!("{m}{by_hand}")));
         }
+        if let Some((old, pick)) = r.rewrites_recording() {
+            let what = if r.applied.is_some() { "Applying wrote" } else { "Applying writes" };
+            lines.push(field(
+                "Recording tag",
+                format!("{what} {pick} over {} (UFID / MUSICBRAINZ_TRACKID; Roll back… restores it)", old.unwrap_or("none")),
+            ));
+        }
         if let Some(d) = &r.detail {
             if let Some(rel) = &d.release {
                 lines.push(field(
@@ -773,7 +950,10 @@ impl YearsPane {
         let hint = match r.locked() {
             Some(why) => why.to_owned(),
             None if r.proposed.is_some() => "a accept · D reject · again: undecide · Enter menu".to_owned(),
-            None => "no proposal: D reject keeps the year · Enter menu".to_owned(),
+            None if r.acceptable() => {
+                "the year holds: a accept writes the picked recording tag · D reject · Enter menu".to_owned()
+            }
+            None => "no proposal: D reject keeps the year · Enter menu: pick the recording".to_owned(),
         };
         lines.push(Line::from(Span::styled(hint, dim)));
         lines
@@ -1043,14 +1223,63 @@ mod tests {
         assert_eq!(dates_cell(r.proposed.as_ref()), "2000 / 1983-01-04");
         assert_eq!(r.short_evidence(), "video · Single \"Song\"");
         assert_eq!(r.locked(), None);
-        assert!(rep.rows[1].locked().is_some_and(|w| w.contains("MBID picker comes next")));
-        assert_eq!(rep.rows[1].short_evidence(), "needs MBID · MBID picker comes next · no-recording");
+        assert!(rep.rows[1].locked().is_some_and(|w| w.contains("Pick the recording")));
+        assert!(rep.rows[1].wants_pick() && !rep.rows[1].acceptable());
+        assert_eq!(rep.rows[1].short_evidence(), "needs MBID · a: pick · no-recording");
         assert_eq!(dates_cell(rep.rows[1].proposed.as_ref()), "–");
         assert!(rep.rows[2].locked().is_some_and(|w| w.contains("Roll back")));
         assert_eq!(
             summary(&rep.rows),
-            "3 rows · 2 undecided · 1 accepted · 0 rejected · 1 applied · 1 high · 1 review · 1 need an MBID"
+            "3 rows · 2 undecided · 1 accepted · 0 rejected · 1 applied · 1 high · 1 review · 1 need an MBID · 0 picked"
         );
+    }
+
+    /// Row 2 after `musicdb years --mbid 2 <MBID>` (rormpc-tools 0.2.54 `set_mbid`): computed from the pick, with the
+    /// file's recording tag the apply checks and rewrites (`file_mbid`, null: none).
+    const PICKED: &str = r#"{"file": "rip/b.flac", "md5": "m", "mbid": "0f5e2d4c-1111-2222-3333-444455556666",
+        "current": {"TDRC": "1999", "TDOR": null, "DATE_SOURCE": null, "DATE_RULE": null}, "proposed": null,
+        "rule": null, "confidence": null, "classes": ["keeps-year"], "evidence": "the picked recording gives the same year",
+        "detail": null, "needs_mbid": false, "id": 2, "song_id": null,
+        "mbid_override": "0f5e2d4c-1111-2222-3333-444455556666", "decision": "undecided", "decided": null,
+        "applied": null, "file_mbid": null}"#;
+
+    #[test]
+    fn a_picked_row_is_open_and_applying_it_rewrites_the_recording_tag() {
+        let r: YearRow = serde_json::from_str(PICKED).expect("a row");
+        assert_eq!(r.locked(), None);
+        assert!(!r.wants_pick() && r.acceptable());
+        assert_eq!(r.rewrites_recording(), Some((None, "0f5e2d4c-1111-2222-3333-444455556666")));
+        assert_eq!(r.short_evidence(), "picked 0f5e2d4c · keeps-year");
+        // a pick MusicBrainz does not know cannot be accepted (rormpc-tools `acceptable`)
+        let unknown = YearRow { classes: vec!["recording-not-found".to_owned()], needs_mbid: true, ..r.clone() };
+        assert!(!unknown.acceptable() && unknown.locked().is_none());
+        // the pick is already the file's tag: nothing to rewrite
+        let same = YearRow { file_mbid: r.mbid_override.clone(), ..r.clone() };
+        assert_eq!(same.rewrites_recording(), None);
+        assert_eq!(
+            picked_message(2, "0f5e2d4c-1111-2222-3333-444455556666", PICKED),
+            "Years: #2 picked 0f5e2d4c · no new year · undecided: a accepts (applying writes the recording tag)"
+        );
+        assert_eq!(picked_message(2, "0f5e2d4c-1111", "boom"), "Years: #2 picked 0f5e2d4c");
+    }
+
+    #[rstest]
+    #[case("0F5E2D4C-1111-2222-3333-444455556666", Ok("0f5e2d4c-1111-2222-3333-444455556666"))]
+    #[case("  https://musicbrainz.org/recording/0f5e2d4c-1111-2222-3333-444455556666  ", Ok("0f5e2d4c-1111-2222-3333-444455556666"))]
+    #[case("musicbrainz.org/recording/0f5e2d4c-1111-2222-3333-444455556666/edits?x=1", Ok("0f5e2d4c-1111-2222-3333-444455556666"))]
+    #[case("https://beta.musicbrainz.org/recording/0f5e2d4c-1111-2222-3333-444455556666#x", Ok("0f5e2d4c-1111-2222-3333-444455556666"))]
+    #[case("https://musicbrainz.org/release/0f5e2d4c-1111-2222-3333-444455556666", Err("a release URL"))]
+    #[case("https://musicbrainz.org/recording/0f5e2d4c", Err("no recording MBID"))]
+    #[case("0f5e2d4c-1111-2222-3333-44445555666", Err("not a MusicBrainz recording URL or MBID"))]
+    #[case("0f5e2d4c_1111-2222-3333-444455556666", Err("not a MusicBrainz recording URL or MBID"))]
+    #[case("https://example.com/recording/0f5e2d4c-1111-2222-3333-444455556666", Err("not a MusicBrainz"))]
+    #[case("", Err("not a MusicBrainz"))]
+    fn the_picker_takes_a_recording_url_or_mbid(#[case] input: &str, #[case] want: Result<&str, &str>) {
+        match (parse_mbid(input), want) {
+            (Ok(got), Ok(want)) => assert_eq!(got, want),
+            (Err(got), Err(want)) => assert!(got.contains(want), "{got}"),
+            (got, want) => panic!("{input:?}: {got:?}, want {want:?}"),
+        }
     }
 
     #[test]
@@ -1074,6 +1303,12 @@ mod tests {
         assert_eq!(rollback_args(&[3]), ["years", "--rollback", "3"]);
         assert_eq!(LOAD_ARGS, ["years", "--json"]);
         assert_eq!(APPLY_ARGS, ["years", "--apply"]);
+        assert_eq!(mbid_args(2, "0f5e2d4c-1111-2222-3333-444455556666"), [
+            "years",
+            "--mbid",
+            "2",
+            "0f5e2d4c-1111-2222-3333-444455556666"
+        ]);
     }
 
     #[test]
@@ -1129,6 +1364,10 @@ mod tests {
             "restored": {}}], "skipped": []}"#;
         assert_eq!(outcome_message("Rolled back", back), "Rolled back 2 rows.\n  #1 a.mp3\n  #2 b.mp3");
         assert_eq!(outcome_message("Applied", "not json"), "Applied: not json");
+        // an applied pick (rormpc-tools 0.2.54): the recording tag it rewrote
+        let pick = r#"{"applied": [{"id": 2, "file": "rip/b.flac", "new": {}, "recording": {"old": null,
+            "new": "0f5e2d4c-1111-2222-3333-444455556666", "rekeyed": {}}}], "skipped": []}"#;
+        assert_eq!(outcome_message("Applied", pick), "Applied 1 row.\n  #2 rip/b.flac · recording tag none → 0f5e2d4c");
     }
 
     fn song(tags: &[(&str, &str)]) -> Song {
