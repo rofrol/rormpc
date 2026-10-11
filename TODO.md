@@ -1618,7 +1618,16 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       off-source). Already in the plan: rounds survive filter clicks (source_id).
       Options: Left out until the next Play of an album or playlist, "Omitted: N" with restore, z undoes it | Lasting exclusion, the same as - | It comes back on the next filter click
       Asked 2026-10-11 again; the user answered: "if permanent, there would be two lists: deleted and banned? Banned
-      still on disk and in ListenBrainz? Ask the models." (round below).
+      still on disk and in ListenBrainz? Ask the models." Round 20261011-115011-5f47 (Sol a0bd9992, MiMo 4432b4d8,
+      both useful) agree: no separate "banned" list. Three verbs: thumbs-down = less (weight 0.1, stays), the planned
+      whole-library exclusion ⊘ = never (file stays on disk, ListenBrainz listens stay, no automatic LB "hate",
+      listed under "show excluded (N)", undone with z), delete = gone (Deleted panel, Ctrl-y). A hand removal from
+      the queue is a session-only omission, never a lasting decision. They differ on its lifetime: Sol until rormpc
+      closes or an album/playlist is played (announced "Temporary omissions cleared"); MiMo until rormpc closes or the
+      user restores it, never cleared by playing an album. Consider (Sol): move hits-hidden.jsonl into
+      Billboard-scoped exclusions; an excluded song played on purpose plays once. Consider (MiMo): name them
+      Less · Never · Gone in the UI.
+      Options: Until rormpc closes or you restore it (MiMo) | Until rormpc closes or an album/playlist is played (Sol) | Lasting (an exclusion)
       Options: Remembered for this source (`removed`), cleared when the source is left; `-` stays the lasting exclusion | It becomes an exclusion scoped to the source (Sol) | Nothing: the next filter change brings it back
       Checked: plans/instant-filtering.md (2026-10-10).
 - [x] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
