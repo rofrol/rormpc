@@ -900,6 +900,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Decided by the user 2026-10-11 (d-g7ttw73b): now, the suspicious-entry flag and nudge keys (±0.1 / ±0.5 s,
       reset) whose offset is saved per song with an undo; the automatic alignment comes with the transcription build
       (the same Whisper and demucs), MONTERO as its first test.
+      Nudge keys done 2026-10-12 (5ff3403, installed and pushed by the run) through herdr todo run r-mmkbts5b (worker; reviewed by the coordinator): in the Lyrics pane
+      `}` / `{` shift the lines 0.1 s later / earlier, `)` / `(` 0.5 s, `=` resets; the shift is written into the song's
+      .lrc as its `[offset:]` header tag (atomically, other lines byte for byte; rmpc's convention: a positive tag means
+      earlier, so "+12.4 s later" is `[offset:-12400]`), the global lyrics_offset adds on top; the pane shows
+      "lyrics +X s · =: reset". Refetching the lyrics overwrites the file and drops the shift. Not tried live (the sandbox
+      cannot bind MPD's port). Still open in this item: the suspicious-entry flag (rormpc-tools) and the automatic alignment
+      (with the transcription work).
 
 - [x] Replace "Sweet Nothing" (Calvin Harris ft. Florence Welch), a 4:29 official-video rip with extra video parts [t-is2eqcck]
       (bit.do--spotify2015/364--Calvin_Harris--Calvin_Harris_-_Sweet_Nothing_(Official_Video)_ft._Florence_Welch--17ozSeGw-fY--20120920.mp3),
