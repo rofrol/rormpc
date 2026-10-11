@@ -814,6 +814,20 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       song (~10.5 h for the ~274 songs without lyrics); instrumentals detected by VAD on the stem (whisper writes
       "Thank you." there); stored as <song>.transcript.json, never as .lrc, shown in rormpc as machine-transcribed.
       Seven open choices in "Needs a decision" ("Transcribed lyrics:"); the build waits for them.
+- [ ] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
+      instant filtering stage 5 worker (2026-10-11). Cost: a small rormpc change, no build beyond the usual install.
+      Decided by the user 2026-10-11: approved (d-bzzoexao).
+- [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
+      the whole text or wrap it, and keep it long enough to read.
+      Decided by the user 2026-10-11: approved (d-bzzoexao).
+- [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle
+      prev`, MPD `next`) when it is bound (raised by the stage 1 worker 2026-10-10): one control path; behaviour
+      is the same today. Cost: a small rormpc change, no build beyond the usual install.
+      Decided by the user 2026-10-11: approved (d-bzzoexao).
+- [ ] Media keys: `pause` (key, Now Playing, MPRIS) while "Pause for…" holds the pause cancels the timer and stays
+      paused (decided by the user 2026-10-11, d-h2in7kd6). rormpc-tools player/control.py `_pause`.
+- [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate
+      filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
@@ -1301,15 +1315,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
-- [ ] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
-      instant filtering stage 5 worker (2026-10-11). Cost: a small rormpc change, no build beyond the usual install.
-
-- [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
-      the whole text or wrap it, and keep it long enough to read.
-- [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle
-      prev`, MPD `next`) when it is bound (raised by the stage 1 worker 2026-10-10): one control path; behaviour
-      is the same today. Cost: a small rormpc change, no build beyond the usual install.
-
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in
@@ -1647,10 +1652,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Media keys: Linux MPRIS: on by default whenever a session bus is present, or opt-in? Decided by the user 2026-10-10: on by default, warn when another MPD MPRIS bridge runs.
       Options: on by default, warn when another MPD MPRIS bridge runs | opt-in with `mpd-player --mpris`
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
-- [ ] Radio rename: the worker's `uv run liveplaylist rename omarchy-radio radio.omarchy.org` on your library was
-      blocked by the auto-mode classifier; will you run it yourself after the next release?
-      Options: you run `liveplaylist rename omarchy-radio radio.omarchy.org` after the release | allow the coordinator to run it after the release
-      Checked: rormpc-tools af44539 (2026-10-10); nothing else names the old playlist (config, sets, smart lists).
+- [x] Radio rename: the worker's `uv run liveplaylist rename omarchy-radio radio.omarchy.org` on your library was
+      Decided by the user 2026-10-11: the coordinator runs the rename (d-ku6vswnr).
 - [x] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
       Asked 2026-10-11; the user did not know what removing a song from the source means and said "ultimately there
       is to be only one folder"; asked again in plain words, the user answered: "but there will be no sources any
@@ -1706,13 +1709,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       (d-yxxlysnq).
 - [x] Instant filtering: Keep `hits` warm beyond the cached library index?
       Decided by the user 2026-10-11: only if the end-to-end time after the cache is over 0.15 s (d-ed7ivr5u).
-- [ ] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
-      Options: cancel the timer and stay paused | leave it, the timer resumes at its deadline (today)
-      Checked: rormpc-tools f4120da player/control.py `_pause` (2026-10-11).
-- [ ] Release years: About 166 files have no recording MBID at all ("needs MBID", class no-recording); should the
-      Years to review view list them for the picker?
-      Options: list them under a separate filter, off by default | list them with the rest | leave them out
-      Checked: rormpc-tools b758320 years.py, the stage A worker's count (2026-10-11).
+- [x] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
+      Decided by the user 2026-10-11: cancel the timer and stay paused (d-h2in7kd6); queued in "Next, in order".
+- [x] Release years: About 166 files have no recording MBID at all ("needs MBID", class no-recording); should the
+      Decided by the user 2026-10-11: list them under a separate filter, off by default (d-bzidm3vs); queued in "Next, in order".
 - [ ] Release years: When you pick a recording MBID for a file in the picker, should it also rewrite the file's
       MusicBrainz recording tag (UFID, which the scrobbler sends as recording_mbid)?
       Options: yes, the picked recording is what the file is | no, only the year's source changes
