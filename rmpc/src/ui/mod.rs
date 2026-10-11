@@ -93,6 +93,7 @@ pub mod rormpc_browse;
 pub mod rormpc_playlists;
 pub mod rormpc_sets;
 pub mod rormpc_smartlists;
+pub mod rormpc_status;
 pub mod rormpc_tags;
 pub mod rormpc_undo;
 pub mod rormpc_upnext;
@@ -204,10 +205,14 @@ impl<'ui> Ui<'ui> {
                 .render_widget(Block::default().style(Style::default().bg(bg_color)), frame.area());
         }
 
+        let mut status_bar = None; // rormpc: where a long status message grows from
         self.layout.for_each_pane_custom_data(
             self.area,
             &mut *frame,
             &mut |pane, pane_area, block, block_area, bg_color, frame| {
+                if pane.pane == PaneType::ProgressBar {
+                    status_bar = Some(pane_area);
+                }
                 match self.panes.get_mut(&pane.pane, ctx)? {
                     Panes::TabContent => {
                         active_tab_call!(self, ctx, render(frame, pane_area, ctx))?;
@@ -239,6 +244,10 @@ impl<'ui> Ui<'ui> {
             },
             ctx,
         )?;
+
+        if let Some(bar) = status_bar {
+            rormpc_status::render_overflow(frame, bar, ctx);
+        }
 
         // rormpc: Music's filters act from any tab (`z` / `Z`): its pane takes their results while hidden too
         let play_shown = ctx.config.tabs.tabs.get(&ctx.active_tab).is_some_and(|t| t.panes.panes_iter().any(|p| p.pane == PaneType::Play));

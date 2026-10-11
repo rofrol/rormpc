@@ -1,4 +1,3 @@
-use std::time::Duration;
 
 use crossbeam::channel::Sender;
 use flexi_logger::{FileSpec, FlexiLoggerError, LoggerHandle};
@@ -93,11 +92,10 @@ impl flexi_logger::writers::LogWriter for StatusBarWriter {
         _now: &mut flexi_logger::DeferredNow,
         record: &log::Record,
     ) -> std::io::Result<()> {
-        match self.tx.send(AppEvent::Status(
-            format!("{}", record.args()),
-            record.level().into(),
-            Duration::from_secs(5),
-        )) {
+        let message = format!("{}", record.args());
+        // rormpc: shown as long as it takes to read (upstream: the same 5 s for every message)
+        let timeout = crate::ui::rormpc_status::reading_time(&message);
+        match self.tx.send(AppEvent::Status(message, record.level().into(), timeout)) {
             Ok(v) => Ok(v),
             Err(err) => Err(std::io::Error::other(err)),
         }
