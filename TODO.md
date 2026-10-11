@@ -841,9 +841,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Done in rormpc (worker, cherry-picked; installed 2026-10-11, 1091 tests): one "Load" button (Enter; `a` an
       alias without a button), Pick::Apply removed, the hints and the save dialog's export note updated. Found: the
       user's config has no `L` (SmartLists) binding in its queue keys, so the picker may be unreachable there.
-- [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
+- [x] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
       the whole text or wrap it, and keep it long enough to read.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
+      Done in rormpc (worker, cherry-picked; installed 2026-10-11, 1100 tests): a message wider than the bar wraps
+      over the full width (the bar grows upward, up to 4 rows, over what is above it while shown) and stays
+      clamp(2 s + columns / 15, 5 s, 20 s) (rmpc/src/ui/rormpc_status.rs `reading_time`; its `delay:` labels are
+      a person's reading time, not a wait for an event: agreed by the coordinator). `rormpc remote status -t` keeps
+      its own time. Also: the user's config got `L` (SmartLists) in its queue keys (decided d-bjtovhts; dotfiles
+      02d3ee1). Note: from 2026-10-11 15:10 a herdr hook limits this coordinator tab to an allowlist; later items go
+      through `herdr todo run`.
 - [ ] rormpc's own Next and Previous through mpd-player's command socket instead of the MPD channel (`shuffle
       prev`, MPD `next`) when it is bound (raised by the stage 1 worker 2026-10-10): one control path; behaviour
       is the same today. Cost: a small rormpc change, no build beyond the usual install.
