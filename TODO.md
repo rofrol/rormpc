@@ -1617,6 +1617,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       click, the problem asked about) and "the playing song is yanked" (the plan already keeps it, marked
       off-source). Already in the plan: rounds survive filter clicks (source_id).
       Options: Left out until the next Play of an album or playlist, "Omitted: N" with restore, z undoes it | Lasting exclusion, the same as - | It comes back on the next filter click
+      Asked 2026-10-11 again; the user answered: "if permanent, there would be two lists: deleted and banned? Banned
+      still on disk and in ListenBrainz? Ask the models." (round below).
       Options: Remembered for this source (`removed`), cleared when the source is left; `-` stays the lasting exclusion | It becomes an exclusion scoped to the source (Sol) | Nothing: the next filter change brings it back
       Checked: plans/instant-filtering.md (2026-10-10).
 - [x] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
@@ -1630,6 +1632,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11: z / Z everywhere, ToggleRepeat moves to r ("repeat na r?", d-3wvtn5zn). Open:
       r is Rate() in the navigation keys of the user's config; see the question below.
 - [ ] Instant filtering: r is Rate() in the lists' navigation keys; with ToggleRepeat on r, where does Rate go?
+      Decided by the user 2026-10-11: Rate moves to another key, r is ToggleRepeat (d-bcn65ven); which key is still
+      open (y suggested).
       Options: Rate moves to a free key, e.g. y (name it) | Repeat goes to a free key instead and Rate keeps r | r is repeat only outside lists
       Checked: ~/.config/rormpc/config.ron navigation "r": Rate(), "R": AddRandom; rmpc/src/ui/mod.rs handle_action
       gives the pane the key first and claims the global binding only after, so a global r would toggle repeat
