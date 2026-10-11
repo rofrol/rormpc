@@ -1726,20 +1726,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11: cancel the timer and stay paused (d-h2in7kd6); queued in "Next, in order".
 - [x] Release years: About 166 files have no recording MBID at all ("needs MBID", class no-recording); should the
       Decided by the user 2026-10-11: list them under a separate filter, off by default (d-bzidm3vs); queued in "Next, in order".
-- [ ] Release years: When you pick a recording MBID for a file in the picker, should it also rewrite the file's
-      MusicBrainz recording tag (UFID, which the scrobbler sends as recording_mbid)?
-      Options: yes, the picked recording is what the file is | no, only the year's source changes
-      Checked: rormpc-tools b758320 `--mbid` changes only DATE_SOURCE (2026-10-11).
-- [ ] Release years: A video match whose work has same-length audio recordings, none on an official Album, Single
-      or EP: swap to the one first released earliest, or keep the video?
-      Options: swap (rule work-same-length-no-studio, as built) | keep the video match
-      Checked: rormpc-tools 877205d years.audio_for (2026-10-11).
-- [ ] Transcribed lyrics: Transcribe new Omarchy Radio downloads automatically, or only on request?
-      Options: on request and by `--playlist` batch | automatically after each radio download | never in batch
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
-- [ ] Transcribed lyrics: Run the whole library's songs without lyrics (about 274, about 10 hours of CPU)?
-      Options: no, only radio and on request | yes, once overnight | only a playlist the user names
-      Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
+- [x] Release years: When you pick a recording MBID for a file in the picker, should it also rewrite the file's
+      Decided by the user 2026-10-11: yes, the picked recording also rewrites the file's UFID (d-hkqe4mfl).
+- [x] Release years: A video match whose work has same-length audio recordings, none on an official Album, Single
+      Decided by the user 2026-10-11: swap, as built (d-6bdujk63).
+- [x] Transcribed lyrics: Transcribe new Omarchy Radio downloads automatically, or only on request?
+      Decided by the user 2026-10-11: automatically after each radio download (d-k5ct3563).
+- [x] Transcribed lyrics: Run the whole library's songs without lyrics (about 274, about 10 hours of CPU)?
+      Decided by the user 2026-10-11: yes, once overnight (d-ofgw3a5v).
 - [ ] Transcribed lyrics: May a single-song `--current` request skip vocal separation to answer in about 20 s instead of about 2 min?
       Options: no, always separate (accuracy, the instrumental gate and language detection need the stem) | yes, a fast mode on the mix with a lower-confidence label | ask each time
       Checked: rormpc-tools docs/transcribe-lyrics-plan.md (2026-10-11).
