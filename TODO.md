@@ -1603,17 +1603,20 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: you run `liveplaylist rename omarchy-radio radio.omarchy.org` after the release | allow the coordinator to run it after the release
       Checked: rormpc-tools af44539 (2026-10-10); nothing else names the old playlist (config, sets, smart lists).
 - [ ] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
+      Asked 2026-10-11; the user did not know what removing a song from the source means and said "ultimately there
+      is to be only one folder"; ask again in plain words.
       Options: Remembered for this source (`removed`), cleared when the source is left; `-` stays the lasting exclusion | It becomes an exclusion scoped to the source (Sol) | Nothing: the next filter change brings it back
       Checked: plans/instant-filtering.md (2026-10-10).
-- [ ] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
-      Options: At once; the old source is the first undo entry (Sol) | Ask once per source, then instant | Never: filters apply only while a filter source plays
-      Checked: plans/instant-filtering.md (2026-10-10).
-- [ ] Instant filtering: In weighted mode, what does the table show while filtering?
-      Options: The forecast, with the counts in the header and a rows ⇄ plan toggle for the full result | The result rows while the filter column has the keys, the forecast otherwise | Always the result rows
-      Checked: plans/instant-filtering.md (2026-10-10).
-- [ ] Instant filtering: Which keys undo and redo a filter change?
-      Options: Backspace undo, Z redo (recommended, both free) | Z undo, no redo | Other keys (name them)
-      Checked: plans/instant-filtering.md (2026-10-10).
+- [x] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
+      Decided by the user 2026-10-11: at once; the old source is the first undo entry (d-s6fcqo5u).
+- [x] Instant filtering: In weighted mode, what does the table show while filtering?
+      Decided by the user 2026-10-11: the forecast, with the counts in the header and a rows ⇄ plan toggle for the
+      full result (d-eaccjsts).
+- [x] Instant filtering: Which keys undo and redo a filter change?
+      Decided by the user 2026-10-11: z undo, Shift+Z redo, as in the ki editor (d-7x5qkzms).
+- [ ] Instant filtering: `z` is the user's global ToggleRepeat; where do z / Z undo and redo filter changes?
+      Options: In the Music view only, where z then shadows ToggleRepeat | Everywhere, ToggleRepeat moves to another key (name it) | Music view only, and repeat stays reachable through the mode bar
+      Checked: ~/.config/rormpc/config.ron global "z": ToggleRepeat, Z is unbound (2026-10-11).
 - [ ] Instant filtering: A filter with 0 owned songs?
       Options: The queue stays as it was, the header says so (MiMo) | The upcoming songs go, it stops after the playing song (Sol)
       Checked: plans/instant-filtering.md (2026-10-10).
