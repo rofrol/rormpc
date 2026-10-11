@@ -595,20 +595,9 @@ impl PlanView {
                     } else {
                         self.marked.iter().copied().collect()
                     };
-                    // a request leaves Up next (an added song leaves the queue too, a source song stays)
-                    let waiting = rormpc_upnext::up_next_ids();
-                    let (requests, ids): (Vec<_>, Vec<_>) = ids.into_iter().partition(|id| waiting.contains(id));
-                    for id in requests {
-                        rormpc_upnext::remove(ctx, id);
-                    }
-                    if !ids.is_empty() {
-                        ctx.command(move |_, client| {
-                            for id in ids {
-                                client.delete_id(id)?;
-                            }
-                            Ok(())
-                        });
-                    }
+                    // a request leaves Up next (an added song leaves the queue too, a source song stays); the other
+                    // songs leave the queue and are banned
+                    crate::ui::rormpc_banned::remove(ctx, ids);
                 }
                 QueueActions::DeleteAll if self.on_header => {
                     rormpc_upnext::confirm_clear(ctx, self.requests_shown());
@@ -829,7 +818,7 @@ impl PlanView {
                     MouseEventKind::RightClick => return Ok(false),
                     MouseEventKind::MiddleClick => {
                         if let Some(id) = self.selected_id {
-                            ctx.command(move |_, client| Ok(client.delete_id(id)?));
+                            crate::ui::rormpc_banned::remove(ctx, vec![id]); // a hand removal bans
                         }
                     }
                     _ => {}

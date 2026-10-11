@@ -337,13 +337,31 @@ fn save(s: &State) {
     }
 }
 
-/// Make `source` the one being played: in memory and in source.json (atomically).
+/// Make `source` the one being played: in memory and in source.json (atomically). Music's filters left for
+/// another kind of source: Previous sources remembers their last rules (`rormpc_smartlists::remember`).
 fn publish(source: Option<Source>) {
     let st = State { source };
-    if let Ok(mut g) = state().lock() {
-        *g = st.clone();
-    }
+    let old = state().lock().ok().and_then(|mut g| std::mem::replace(&mut *g, st.clone()).source);
     save(&st);
+    if let Some(old) = old.filter(|o| left_filters(o, st.source.as_ref()))
+        && let (Some(rules), Some(hash)) = (&old.rules, &old.rules_hash)
+    {
+        crate::ui::rormpc_smartlists::remember(&old.name, rules, hash);
+    }
+}
+
+/// Whether going from `old` to `new` leaves Music's filters for another kind of source (or none).
+fn left_filters(old: &Source, new: Option<&Source>) -> bool {
+    old.kind == "hits" && old.rules.is_some() && new.is_none_or(|n| n.kind != "hits")
+}
+
+/// Previous sources (decided by the user 2026-10-11): the filters' rule set is remembered once a song of it has
+/// played. `file` started playing: when it is one of the filter source's songs, its rules and their hash (the
+/// caller remembers them once per rule set).
+pub fn played_rules(file: &str) -> Option<(String, serde_json::Value, String)> {
+    let s = state().lock().ok()?;
+    let src = s.source.as_ref().filter(|src| src.kind == "hits" && src.files.iter().any(|f| f == file))?;
+    Some((src.name.clone(), src.rules.clone()?, src.rules_hash.clone()?))
 }
 
 /// One Up next entry from mpd-player's upnext.json.
@@ -799,10 +817,6 @@ impl Replace {
             }
         }
         let len = client.playlist_info()?.map_or(0, |q| q.len());
-        // Play's Apply: Previous sources remembers the rules, a smart list's playlist is exported
-        if let (Some(r), Some(h)) = (&src.rules, &src.rules_hash) {
-            crate::ui::rormpc_smartlists::after_apply(&src.name, r, h);
-        }
         // the members MPD took and the queue's length (the header's "modified" compares it)
         src.files = files;
         src.len = len;
@@ -1021,9 +1035,6 @@ fn reconcile(client: &mut rmpc_mpd::client::Client<'_>, src: HitsSource, in_orde
     let len = client.playlist_info()?.map_or(0, |q| q.len());
     let up = upnext_file();
     src.len = len.saturating_sub(up.entries.iter().chain(up.playing.iter()).filter(|e| e.added).count());
-    if let (Some(r), Some(h)) = (&src.rules, &src.rules_hash) {
-        crate::ui::rormpc_smartlists::after_apply(&src.name, r, h);
-    }
     let members = src.files.len() + src.added.len();
     publish(Some(src));
     if current.is_none() && members > 0 {
@@ -1174,6 +1185,18 @@ mod tests {
             generation: None,
             held: Vec::new(),
         }
+    }
+
+    #[test]
+    fn previous_sources_remember_the_filters_when_another_kind_of_source_replaces_them() {
+        let filters = Source { rules: Some(serde_json::json!({"sort": "plays"})), ..source("hits", &["a"]) };
+        assert!(left_filters(&filters, Some(&source("album", &["b"]))));
+        assert!(left_filters(&filters, None));
+        // another generation of the filters is no leaving: a song of it playing records it instead
+        assert!(!left_filters(&filters, Some(&filters)));
+        // the old Hits "Play these results" snapshot has no rules to remember
+        assert!(!left_filters(&source("hits", &["a"]), Some(&source("album", &["b"]))));
+        assert!(!left_filters(&source("album", &["b"]), Some(&filters)));
     }
 
     #[test]

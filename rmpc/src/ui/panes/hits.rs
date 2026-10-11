@@ -867,6 +867,11 @@ impl HitsPane {
         true
     }
 
+    /// Play: run `hits` again for the filters on screen on the next `prepare` (a ban changed what they match).
+    pub(crate) fn request_rerun(&self) {
+        self.job.lock().expect("hits job lock").rerun = true;
+    }
+
     /// Stop the `hits` run in progress without a word (undo takes over); false when nothing runs.
     pub(crate) fn cancel_run(&mut self) -> bool {
         let mut job = self.job.lock().expect("hits job lock");
@@ -1646,8 +1651,9 @@ impl HitsPane {
         lines
     }
 
-    /// After an exception was recorded or removed: run `hits` again, so the marks and rows follow.
-    fn rerun_done(&self, ctx: &Ctx) -> rormpc_exceptions::Done {
+    /// After an exception was recorded or removed (or a ban changed): run `hits` again, so the marks and rows
+    /// follow (and in Play, the queue).
+    pub(crate) fn rerun_done(&self, ctx: &Ctx) -> rormpc_exceptions::Done {
         let (job, sender) = (Arc::clone(&self.job), ctx.app_event_sender.clone());
         Arc::new(move || {
             job.lock().expect("hits job lock").rerun = true;

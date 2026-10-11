@@ -77,6 +77,7 @@ use crate::{
 };
 
 pub mod album_art;
+pub mod banned;
 pub mod cava;
 pub mod directories;
 pub mod deleted;

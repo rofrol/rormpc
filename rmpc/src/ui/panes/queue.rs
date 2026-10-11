@@ -352,19 +352,9 @@ impl QueuePane {
                 if !targets.iter().any(|id| upnext.contains(id)) {
                     return false;
                 }
-                // a request leaves Up next (an added song leaves the queue too, a source song stays)
-                let (requests, others): (Vec<u32>, Vec<u32>) = targets.into_iter().partition(|id| upnext.contains(id));
-                for id in requests {
-                    crate::ui::rormpc_upnext::remove(ctx, id);
-                }
-                if !others.is_empty() {
-                    ctx.command(move |_, client| {
-                        for id in others {
-                            client.delete_id(id)?;
-                        }
-                        Ok(())
-                    });
-                }
+                // a request leaves Up next (an added song leaves the queue too, a source song stays); the other
+                // songs leave the queue and are banned
+                crate::ui::rormpc_banned::remove(ctx, targets);
                 self.queue.marked_mut().clear();
             }
             (_, Some(CommonAction::Up | CommonAction::Down)) => {
@@ -756,12 +746,9 @@ impl QueuePane {
             })
             .list_section(ctx, |section| {
                 let section = section
-                    .item("Remove from queue (keep file)", move |ctx| {
+                    .item("Remove from queue and ban (keep file; z undoes)", move |ctx| {
                         if let Some(id) = selected_song_id {
-                            ctx.command(move |_, client| {
-                                client.delete_id(id)?;
-                                Ok(())
-                            });
+                            crate::ui::rormpc_banned::remove(ctx, vec![id]);
                         }
                         Ok(())
                     })
@@ -1286,11 +1273,7 @@ impl Pane for QueuePane {
             MouseEventKind::MiddleClick if self.areas[Areas::Table].contains(event.into()) => {
                 if let Some(selected_song) = hit_item().and_then(|idx| self.queue.items.get(idx))
                 {
-                    let id = selected_song.id;
-                    ctx.command(move |_, client| {
-                        client.delete_id(id)?;
-                        Ok(())
-                    });
+                    crate::ui::rormpc_banned::remove(ctx, vec![selected_song.id]); // a hand removal bans
                 }
             }
             MouseEventKind::MiddleClick => {}
@@ -1487,23 +1470,17 @@ impl Pane for QueuePane {
         }
         if let Some(action) = event.claim_queue() {
             match action {
+                // rormpc: a hand removal bans the song (`rormpc_banned`), D below does not
                 QueueActions::Delete if !self.queue.marked().is_empty() => {
-                    for range in self.queue.marked().ranges().rev() {
-                        ctx.command(move |_, client| {
-                            client.delete_from_queue(range.into())?;
-                            Ok(())
-                        });
-                    }
+                    let ids: Vec<u32> =
+                        self.queue.marked().iter().filter_map(|i| self.queue.items.get(*i)).map(|s| s.id).collect();
+                    crate::ui::rormpc_banned::remove(ctx, ids);
                     self.queue.marked_mut().clear();
-                    status_info!("Marked songs removed from queue");
                     ctx.render()?;
                 }
                 QueueActions::Delete => {
-                    if let Some((idx, _)) = self.queue.selected_with_idx() {
-                        ctx.command(move |_, client| {
-                            client.delete_from_queue(SingleOrRange::single(idx))?;
-                            Ok(())
-                        });
+                    if let Some(song) = self.queue.selected() {
+                        crate::ui::rormpc_banned::remove(ctx, vec![song.id]);
                     } else {
                         status_error!("No song selected");
                     }
@@ -2287,15 +2264,8 @@ impl QueuePane {
                     if ids.is_empty() {
                         status_error!("No song selected");
                     } else {
-                        let n = ids.len();
-                        ctx.command(move |_, client| {
-                            for id in ids {
-                                client.delete_id(id)?;
-                            }
-                            Ok(())
-                        });
+                        crate::ui::rormpc_banned::remove(ctx, ids); // a hand removal bans
                         self.queue.marked_mut().clear();
-                        status_info!("{n} song(s) removed from the queue");
                     }
                 }
                 QueueActions::JumpToCurrent => {

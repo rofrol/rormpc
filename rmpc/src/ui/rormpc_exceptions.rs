@@ -380,11 +380,12 @@ pub fn plus_sets_of_args(args: &serde_json::Value) -> Vec<String> {
 
 /// `+` / `-` on a Queue row: the song's file, the `+` sets of the Hits result the queue may have come from.
 pub fn open_for_queue_song(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song) {
-    open_for_song_with_sets(ctx, kind, song, applied_plus_sets(HITS_FILE));
+    open_for_song_with_sets(ctx, kind, song, applied_plus_sets(HITS_FILE), None);
 }
 
-/// `+` / `-` on a queued song, offering the `+` sets `plus` as scopes (Play: those of the rules it played).
-pub fn open_for_song_with_sets(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song, plus: Vec<String>) {
+/// `+` / `-` on a queued song, offering the `+` sets `plus` as scopes (Play: those of the rules it played);
+/// `done` runs once it was recorded (Play reruns its filters: an exception applies at once).
+pub fn open_for_song_with_sets(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands::Song, plus: Vec<String>, done: Option<Done>) {
     let tag = |name: &str| song.metadata.get(name).map(|v| v.last().to_owned());
     let target = Target {
         file: Some(song.file.clone()),
@@ -392,7 +393,7 @@ pub fn open_for_song_with_sets(ctx: &Ctx, kind: Kind, song: &rmpc_mpd::commands:
         artist: tag("artist").unwrap_or_default(),
         title: tag("title").unwrap_or_else(|| song.file.clone()),
     };
-    open_scope_menu(ctx, vec![HITS.to_owned()], kind, target, plus, None);
+    open_scope_menu(ctx, vec![HITS.to_owned()], kind, target, plus, done);
 }
 
 /// The ✚ ⊘ marks of queue rows (Play and Queue): every exception by file, read with `hits exceptions --json` in

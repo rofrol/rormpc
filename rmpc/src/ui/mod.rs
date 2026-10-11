@@ -76,6 +76,7 @@ pub mod input;
 pub mod modals;
 pub mod panes;
 pub mod rormpc_actions;
+pub mod rormpc_banned;
 pub mod rormpc_filter;
 pub mod rormpc_lyrics;
 pub mod rormpc_pause;

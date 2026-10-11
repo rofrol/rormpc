@@ -8,6 +8,9 @@
 //!   files in order: undo brings that source back.
 //! - Undo and redo are filter changes themselves (they bump the generation and reconcile); they restore the
 //!   membership, never the playback time or a hand edit of the queue. Depth 20; a new change drops the redo.
+//! - A hand removal from the queue bans the song (stage 5, decided by the user 2026-10-11), and the ban is an
+//!   entry of the same timeline: `z` takes back the newest filter change or ban, whichever came last. Bans are
+//!   lasting, so a new source (`reset`) keeps their entries.
 
 /// What a filter change replaced, or what undo goes back to.
 #[derive(Debug, Clone, PartialEq)]
@@ -16,6 +19,20 @@ pub enum State {
     Rules(serde_json::Value),
     /// another kind of source the first filter touch replaced
     Other(Departed),
+}
+
+/// A ban of a hand removal: its files and what the status says ("Toto - Africa", "3 songs").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ban {
+    pub files: Vec<String>,
+    pub what: String,
+}
+
+/// One entry of the timeline: the filter state a change replaced, or a ban.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Entry {
+    State(State),
+    Banned(Ban),
 }
 
 /// A source that was not Music's filters, as it was in the queue.
@@ -42,17 +59,35 @@ pub const DEPTH: usize = 20;
 
 #[derive(Debug, Default)]
 pub struct History {
-    undo: Vec<State>,
-    redo: Vec<State>,
+    undo: Vec<Entry>,
+    redo: Vec<Entry>,
     /// the state in the queue as far as the history knows (None: not known yet)
     in_mpd: Option<State>,
     sent: Option<Sent>,
 }
 
 impl History {
-    /// Another rormpc, Sources… or Browse's `P` put a source in the queue: the old history no longer applies.
+    /// Another rormpc, Sources… or Browse's `P` put a source in the queue: the old filter history no longer
+    /// applies; the bans stay undoable.
     pub fn reset(&mut self, state: Option<State>) {
-        *self = Self { in_mpd: state, ..Self::default() };
+        let mut undo = std::mem::take(&mut self.undo);
+        undo.retain(|e| matches!(e, Entry::Banned(_)));
+        *self = Self { undo, in_mpd: state, ..Self::default() };
+    }
+
+    /// A hand removal banned `ban`: the newest entry (a change sent before it counts as reached, so it stays the
+    /// older one); a new action drops the redo.
+    pub fn banned(&mut self, ban: Ban) {
+        self.settle(None);
+        self.push_undo(Entry::Banned(ban));
+        self.redo.clear();
+    }
+
+    fn push_undo(&mut self, entry: Entry) {
+        self.undo.push(entry);
+        if self.undo.len() > DEPTH {
+            self.undo.remove(0);
+        }
     }
 
     /// The queue holds `state` now (another kind of source, about to be replaced by the filters).
@@ -83,10 +118,7 @@ impl History {
         if s.push {
             match self.in_mpd.take() {
                 Some(prev) if prev != s.state => {
-                    self.undo.push(prev);
-                    if self.undo.len() > DEPTH {
-                        self.undo.remove(0);
-                    }
+                    self.push_undo(Entry::State(prev));
                     self.redo.clear();
                 }
                 _ => {}
@@ -95,24 +127,33 @@ impl History {
         self.in_mpd = Some(s.state);
     }
 
-    /// `z`: the state to go back to (the caller restores it as a filter change sent with `push` false).
-    pub fn undo(&mut self) -> Option<State> {
+    /// `z`: the state to go back to (the caller restores it as a filter change sent with `push` false), or the
+    /// ban to take back.
+    pub fn undo(&mut self) -> Option<Entry> {
         self.settle(None);
         let target = self.undo.pop()?;
-        if let Some(cur) = self.in_mpd.replace(target.clone()) {
-            self.redo.push(cur);
+        if let Some(back) = self.step_to(&target) {
+            self.redo.push(back);
         }
         Some(target)
     }
 
-    /// `Z`: the state an undo left, back again.
-    pub fn redo(&mut self) -> Option<State> {
+    /// `Z`: the state an undo left, back again, or the ban an undo took back.
+    pub fn redo(&mut self) -> Option<Entry> {
         self.settle(None);
         let target = self.redo.pop()?;
-        if let Some(cur) = self.in_mpd.replace(target.clone()) {
-            self.undo.push(cur);
+        if let Some(back) = self.step_to(&target) {
+            self.undo.push(back);
         }
         Some(target)
+    }
+
+    /// Go to `target`: the entry that takes the step back (the state left, or the same ban).
+    fn step_to(&mut self, target: &Entry) -> Option<Entry> {
+        match target {
+            Entry::State(state) => self.in_mpd.replace(state.clone()).map(Entry::State),
+            Entry::Banned(ban) => Some(Entry::Banned(ban.clone())),
+        }
     }
 
     /// Whether `z` / `Z` have something to do (the generation sent last counts as reached).
@@ -145,12 +186,12 @@ mod tests {
         h.sent(2, rules(2), true, 1);
         assert!(h.can_undo());
         assert!(!h.can_redo());
-        assert_eq!(h.undo(), Some(rules(1)));
-        assert_eq!(h.undo(), Some(rules(0)));
+        assert_eq!(h.undo(), Some(Entry::State(rules(1))));
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
         assert_eq!(h.undo(), None);
         assert!(h.can_redo());
-        assert_eq!(h.redo(), Some(rules(1)));
-        assert_eq!(h.redo(), Some(rules(2)));
+        assert_eq!(h.redo(), Some(Entry::State(rules(1))));
+        assert_eq!(h.redo(), Some(Entry::State(rules(2))));
         assert_eq!(h.redo(), None);
     }
 
@@ -162,8 +203,8 @@ mod tests {
         h.sent(1, rules(1), true, 0);
         h.sent(2, rules(2), true, 0);
         h.sent(3, rules(3), true, 2);
-        assert_eq!(h.undo(), Some(rules(2)));
-        assert_eq!(h.undo(), Some(rules(0)));
+        assert_eq!(h.undo(), Some(Entry::State(rules(2))));
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
         assert_eq!(h.undo(), None);
     }
 
@@ -172,13 +213,13 @@ mod tests {
         let mut h = History::default();
         h.reset(Some(rules(0)));
         h.sent(1, rules(1), true, 0);
-        assert_eq!(h.undo(), Some(rules(0)));
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
         h.sent(2, rules(0), false, 1); // the undo's own generation
         assert!(h.can_redo());
         h.sent(3, rules(5), true, 2);
         assert!(!h.can_redo(), "a new change drops the redo");
         assert_eq!(h.redo(), None);
-        assert_eq!(h.undo(), Some(rules(0)));
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
         assert_eq!(h.undo(), None);
     }
 
@@ -189,10 +230,10 @@ mod tests {
         h.sent(1, rules(1), true, 0);
         h.sent(2, rules(2), true, 1);
         h.sent(3, rules(3), true, 2);
-        assert_eq!(h.undo(), Some(rules(2)));
-        assert_eq!(h.undo(), Some(rules(1)));
-        assert_eq!(h.redo(), Some(rules(2)));
-        assert_eq!(h.redo(), Some(rules(3)));
+        assert_eq!(h.undo(), Some(Entry::State(rules(2))));
+        assert_eq!(h.undo(), Some(Entry::State(rules(1))));
+        assert_eq!(h.redo(), Some(Entry::State(rules(2))));
+        assert_eq!(h.redo(), Some(Entry::State(rules(3))));
     }
 
     #[test]
@@ -202,10 +243,10 @@ mod tests {
         h.set_in_mpd(album());
         h.sent(1, rules(1), true, 0);
         h.sent(2, rules(2), true, 1);
-        assert_eq!(h.undo(), Some(rules(1)));
-        assert_eq!(h.undo(), Some(album()));
+        assert_eq!(h.undo(), Some(Entry::State(rules(1))));
+        assert_eq!(h.undo(), Some(Entry::State(album())));
         assert_eq!(h.current(), Some(&album()));
-        assert_eq!(h.redo(), Some(rules(1)));
+        assert_eq!(h.redo(), Some(Entry::State(rules(1))));
     }
 
     #[test]
@@ -229,9 +270,45 @@ mod tests {
         h.reset(Some(rules(0)));
         h.sent(1, rules(0), true, 0);
         h.sent(2, rules(1), true, 1);
-        assert_eq!(h.undo(), Some(rules(0)));
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
         assert_eq!(h.undo(), None);
         h.reset(Some(rules(7)));
         assert!(!h.can_undo() && !h.can_redo());
+    }
+
+    fn ban(file: &str) -> Ban {
+        Ban { files: vec![file.to_owned()], what: file.to_owned() }
+    }
+
+    #[test]
+    fn bans_and_filter_changes_share_one_timeline() {
+        let mut h = History::default();
+        h.reset(Some(rules(0)));
+        h.sent(1, rules(1), true, 0);
+        h.banned(ban("a.mp3"));
+        h.sent(2, rules(2), true, 1);
+        assert_eq!(h.undo(), Some(Entry::State(rules(1))));
+        assert_eq!(h.undo(), Some(Entry::Banned(ban("a.mp3"))), "the ban came between the two changes");
+        assert_eq!(h.current(), Some(&rules(1)), "taking a ban back leaves the filters as they are");
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
+        assert_eq!(h.redo(), Some(Entry::State(rules(1))));
+        assert_eq!(h.redo(), Some(Entry::Banned(ban("a.mp3"))));
+        assert_eq!(h.redo(), Some(Entry::State(rules(2))));
+        assert_eq!(h.redo(), None);
+    }
+
+    #[test]
+    fn a_ban_drops_the_redo_and_a_new_source_keeps_the_bans() {
+        let mut h = History::default();
+        h.reset(Some(rules(0)));
+        h.sent(1, rules(1), true, 0);
+        assert_eq!(h.undo(), Some(Entry::State(rules(0))));
+        h.banned(ban("a.mp3"));
+        assert!(!h.can_redo());
+        h.reset(None);
+        assert!(h.can_undo());
+        assert_eq!(h.undo(), Some(Entry::Banned(ban("a.mp3"))));
+        assert_eq!(h.undo(), None);
+        assert_eq!(h.redo(), Some(Entry::Banned(ban("a.mp3"))));
     }
 }

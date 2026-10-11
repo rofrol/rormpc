@@ -29,6 +29,11 @@
 //! - The Deleted pane is a panel over Music too (decided by the user 2026-10-10): `gd`, or the `Deleted ! N` badge,
 //!   shown only while deletions have failed or unresolved steps.
 //! - "Years to review" (`gY`, `rormpc_years`) is a panel over Music like Deleted.
+//! - `d` on a queue song removes it and bans it (`rormpc_banned`, stage 5); the ban is an entry of the `z` / `Z`
+//!   timeline, and the Banned panel (`gB`) lists the bans and unbans one (the filters rerun, so it comes back).
+//! - Previous sources (`L`) records a rule set once a song of it has played, or when the filters' source is left
+//!   for another one (`rormpc_smartlists::remember`), not on every applied change; an open smart list exports its
+//!   playlist on the same rule.
 //!
 //! It is composed, not copied: the filter column and the result rows are a `HitsPane` in Play mode, the table
 //! is a `QueuePane` whose view follows the weighted shuffle, Browse's groupings are the browser panes.
@@ -53,6 +58,7 @@ use ratatui::{
 use super::{
     Pane,
     PaneContainer,
+    banned::BannedPane,
     directories::DirectoriesPane,
     hits::{HitsBody, HitsPane},
     deleted::DeletedPane,
@@ -89,7 +95,8 @@ use crate::{
         rormpc_play::{self, LastChange, Step},
         rormpc_player,
         rormpc_smartlists::{self, Pick},
-        rormpc_undo::{Departed, History, State},
+        rormpc_banned,
+        rormpc_undo::{Ban, Departed, Entry, History, State},
         rormpc_upnext::{self, Generations, HitsSource},
         rormpc_years::YearsPane,
     },
@@ -132,6 +139,7 @@ enum Overlay {
     None,
     Live,
     Deleted,
+    Banned,
     Years,
 }
 
@@ -142,6 +150,15 @@ enum Table {
     Queue,
     /// the `hits` result rows, missing songs dimmed
     Rows,
+}
+
+/// The song Previous sources saw playing last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Playing {
+    /// not looked yet: the song playing when rormpc started is no start
+    NotLooked,
+    /// this song id (None: nothing plays)
+    Song(Option<u32>),
 }
 
 /// An undo or redo whose rules' `hits` run has not reached the queue yet.
@@ -198,6 +215,8 @@ pub struct PlayPane {
     /// the Live playlists inbox and the Deleted journal: their panes keep their place while closed
     live: LivePlaylistsPane,
     deleted: DeletedPane,
+    /// the songs a hand removal banned (`gB`)
+    banned: BannedPane,
     /// the release years to review (`gY`)
     years: YearsPane,
     overlay: Overlay,
@@ -229,6 +248,9 @@ pub struct PlayPane {
     table: Table,
     /// `a` in the Queue body said once that filters apply at once
     a_hint_said: bool,
+    /// Previous sources: the song seen playing last, and the rules hash remembered for the rule set in the queue
+    playing_seen: Playing,
+    remembered: Option<String>,
     /// what the list picker and the Save modal hand back (`rormpc_smartlists::Pick`)
     inbox: rormpc_smartlists::Inbox,
     /// areas of the last render, for the mouse
@@ -241,7 +263,7 @@ impl PlayPane {
     pub fn new(ctx: &Ctx) -> Self {
         let gens = Generations::default();
         let mut s = Self {
-            hits: HitsPane::for_play(rormpc_play::PREVIEW_FILE.to_owned(), vec!["hits".to_owned()], Arc::clone(&gens.latest)),
+            hits: HitsPane::for_play(rormpc_play::preview_file(), vec!["hits".to_owned()], Arc::clone(&gens.latest)),
             queue: QueuePane::new(ctx),
             left: Left::Filters,
             browse_focus: false,
@@ -249,6 +271,7 @@ impl PlayPane {
             children: HashMap::new(),
             live: LivePlaylistsPane::new(),
             deleted: DeletedPane::new(),
+            banned: BannedPane::new(),
             years: YearsPane::new(),
             overlay: Overlay::None,
             baseline: None,
@@ -264,6 +287,8 @@ impl PlayPane {
             owned_was: None,
             table: Table::Queue,
             a_hint_said: false,
+            playing_seen: Playing::NotLooked,
+            remembered: None,
             inbox: rormpc_smartlists::Inbox::default(),
             toggle_area: Rect::default(),
             queue_area: Rect::default(),
@@ -336,7 +361,11 @@ impl PlayPane {
         }
         self.last_change = Some(match &restore {
             Some(r) => r.label.clone(),
-            None => format!("Filter: {}", describe(self.history.current(), &rules)),
+            // the same rules again: an exception or the library changed their result
+            None => match describe(self.history.current(), &rules) {
+                same if same == "same rules" => "Result updated (same rules)".to_owned(),
+                what => format!("Filter: {what}"),
+            },
         });
         let reached = self.gens.reached.load(Ordering::SeqCst);
         self.history.sent(generation, State::Rules(rules.clone()), restore.is_none(), reached);
@@ -345,18 +374,56 @@ impl PlayPane {
         rormpc_upnext::reconcile_hits_source(ctx, src, generation, self.gens.clone(), in_order);
     }
 
-    /// `z` / `Z` asked for since the last frame, from any tab, in order.
+    /// `z` / `Z` asked for since the last frame, from any tab, in order, and the bans hand removals made (they
+    /// share the timeline); then the songs the Banned panel unbanned, which the filters take back in.
     fn take_steps(&mut self, ctx: &Ctx) {
         for step in rormpc_play::take_steps() {
-            self.step(step, ctx);
+            match step {
+                Step::Banned(ban) => self.history.banned(ban),
+                step => self.step(&step, ctx),
+            }
         }
+        let unbanned = self.banned.take_unbanned();
+        if !unbanned.is_empty() {
+            let label = format!("Unbanned {}", unbanned.len());
+            self.last_change = Some(label.clone());
+            self.rerun_filters(label);
+        }
+    }
+
+    /// Run `hits` again for the filters on screen (a ban or unban changed what they match): its result
+    /// reconciles the queue as no new history entry, the counts line saying `label`. Only while the queue holds
+    /// the filters' source: an album or a playlist is not replaced behind the user's back.
+    fn rerun_filters(&mut self, label: String) {
+        if !rormpc_upnext::holds_filter_source() {
+            return;
+        }
+        if let Some(hash) = self.hits.rules_hash() {
+            self.restoring = Some(Restoring { hash, label });
+            self.hits.request_rerun();
+        }
+    }
+
+    /// `z` / `Z` on a ban: unban its songs (or ban them again), then rerun the filters so the queue follows.
+    fn step_ban(&mut self, ban: Ban, undo: bool, ctx: &Ctx) {
+        let label = format!("{}: {} {}", if undo { "Undo" } else { "Redo" }, if undo { "unbanned" } else { "banned" }, ban.what);
+        self.last_change = Some(label.clone());
+        let rerun = rormpc_upnext::holds_filter_source().then(|| self.hits.rerun_done(ctx));
+        if let (Some(hash), true) = (self.hits.rules_hash(), rerun.is_some()) {
+            self.restoring = Some(Restoring { hash, label });
+        }
+        rormpc_banned::set_banned(ctx, ban.files, !undo, move || {
+            if let Some(rerun) = rerun {
+                rerun();
+            }
+        });
     }
 
     /// One undo or redo: itself a filter change (it bumps the generation and the queue follows), restoring the
     /// membership, never the playback time. Undo while a change is still under way takes that change back.
-    fn step(&mut self, step: Step, ctx: &Ctx) {
+    fn step(&mut self, step: &Step, ctx: &Ctx) {
         let running = self.hits.preview_info().running;
-        if running && step == Step::Redo {
+        if running && *step == Step::Redo {
             return status_info!("A filter change is under way: nothing to redo");
         }
         if running {
@@ -377,15 +444,17 @@ impl PlayPane {
         let (target, verb) = match step {
             Step::Undo => (self.history.undo(), "Undo"),
             Step::Redo => (self.history.redo(), "Redo"),
+            Step::Banned(_) => return,
         };
         match target {
-            None if step == Step::Undo => status_info!("Nothing to undo in Music's filters"),
-            None => status_info!("Nothing to redo in Music's filters"),
-            Some(State::Rules(r)) => {
+            None if *step == Step::Undo => status_info!("Nothing to undo in Music's filters or bans"),
+            None => status_info!("Nothing to redo in Music's filters or bans"),
+            Some(Entry::Banned(ban)) => self.step_ban(ban, *step == Step::Undo, ctx),
+            Some(Entry::State(State::Rules(r))) => {
                 let label = format!("{verb}: {}", describe(before.as_ref(), &r));
                 self.restore_rules(&r, label);
             }
-            Some(State::Other(d)) => {
+            Some(Entry::State(State::Other(d))) => {
                 self.hits.cancel_run();
                 let generation = self.gens.latest.fetch_add(1, Ordering::SeqCst) + 1;
                 let label = format!("{verb}: back to {}", departed_label(&d));
@@ -432,6 +501,7 @@ impl PlayPane {
     /// not reconcile (Sources…, Browse's `P`, another rormpc) becomes the filters' starting point.
     fn sync(&mut self, ctx: &Ctx) {
         self.queue.follow_weighted(rormpc_player::shuffle_state().enabled, ctx);
+        self.note_played(ctx);
         let rules = rormpc_upnext::source_rules();
         let hash = rules.as_ref().map(|(_, h)| h.clone());
         if self.synced && self.source_hash == hash {
@@ -455,6 +525,22 @@ impl PlayPane {
                 self.last_change = None;
                 self.restoring = None;
             }
+        }
+    }
+
+    /// Previous sources records a rule set once a song of it has played (decided by the user 2026-10-11): a song
+    /// of the filter source started, so its rules are remembered, once per rule set.
+    fn note_played(&mut self, ctx: &Ctx) {
+        let song = ctx.current_song();
+        let id = song.map(|s| s.id);
+        let seen = std::mem::replace(&mut self.playing_seen, Playing::Song(id));
+        if seen == Playing::NotLooked || seen == Playing::Song(id) {
+            return;
+        }
+        let played = song.and_then(|s| rormpc_upnext::played_rules(&s.file));
+        if let Some((name, rules, hash)) = played.filter(|(_, _, h)| self.remembered.as_ref() != Some(h)) {
+            rormpc_smartlists::remember(&name, &rules, &hash);
+            self.remembered = Some(hash);
         }
     }
 
@@ -518,6 +604,7 @@ impl PlayPane {
             }
             Some(PlayView::Live) => self.open_overlay(Overlay::Live, ctx),
             Some(PlayView::Deleted) => self.open_overlay(Overlay::Deleted, ctx),
+            Some(PlayView::Banned) => self.open_overlay(Overlay::Banned, ctx),
             Some(PlayView::Years) => self.open_overlay(Overlay::Years, ctx),
             // gu: the table gets the keys, the cursor goes to its "Up next · N" row
             Some(PlayView::UpNext) => {
@@ -542,6 +629,7 @@ impl PlayPane {
         let loaded = match overlay {
             Overlay::Live => self.live.before_show(ctx),
             Overlay::Deleted => self.deleted.before_show(ctx),
+            Overlay::Banned => self.banned.before_show(ctx),
             Overlay::Years => self.years.before_show(ctx),
             Overlay::None => Ok(()),
         };
@@ -805,6 +893,12 @@ impl PlayPane {
                 self.areas.overlay = rect;
                 return self.deleted.render(frame, inner, ctx);
             }
+            Overlay::Banned => {
+                let title = " Banned · Enter or u unbans · Esc closes ".to_owned();
+                let (rect, inner) = Self::panel(frame, area, title, ctx);
+                self.areas.overlay = rect;
+                return self.banned.render(frame, inner, ctx);
+            }
             Overlay::Years => {
                 let title = " Years to review · Space marks · a accept · D reject (again: undecide) · h/l filter · Enter menu · Esc closes ".to_owned();
                 let (rect, inner) = Self::panel(frame, area, title, ctx);
@@ -1046,6 +1140,7 @@ impl Pane for PlayPane {
         self.live.on_event(event, is_visible && self.overlay == Overlay::Live, ctx)?;
         // the journal reloads on a Ctrl-x or Ctrl-y while Music is shown: the badge follows it
         self.deleted.on_event(event, is_visible, ctx)?;
+        self.banned.on_event(event, is_visible && self.overlay == Overlay::Banned, ctx)?;
         self.years.on_event(event, is_visible && self.overlay == Overlay::Years, ctx)?;
         self.queue.on_event(event, is_visible, ctx)
     }
@@ -1100,7 +1195,7 @@ impl Pane for PlayPane {
         let queue_action = event.actions.iter().find_map(|a| a.as_queue()).cloned();
         // a panel over Play has every key; Esc (with nothing marked in the Live inbox) closes it
         match self.overlay {
-            Overlay::Live | Overlay::Deleted | Overlay::Years
+            Overlay::Live | Overlay::Deleted | Overlay::Banned | Overlay::Years
                 if matches!(common, Some(CommonAction::Close))
                     && !(self.overlay == Overlay::Live && self.live.has_marks())
                     && !(self.overlay == Overlay::Years && self.years.has_marks()) =>
@@ -1111,6 +1206,7 @@ impl Pane for PlayPane {
             }
             Overlay::Live => return self.live.handle_action(event, ctx),
             Overlay::Deleted => return self.deleted.handle_action(event, ctx),
+            Overlay::Banned => return self.banned.handle_action(event, ctx),
             Overlay::Years => return self.years.handle_action(event, ctx),
             Overlay::None => {}
         }
@@ -1176,12 +1272,19 @@ impl Pane for PlayPane {
                     let _ = event.claim_common();
                     return Ok(ctx.render()?);
                 }
-                // + / -: the scopes offered are the + sets of the rules being played
+                // + / -: the scopes offered are the + sets of the rules being played; the exception applies at
+                // once (the filters rerun) while the queue holds their source
                 (_, Some(QueueActions::PinSong | QueueActions::ExcludeSong)) if event.claim_queue().is_some() => {
                     let kind = if matches!(queue_action, Some(QueueActions::PinSong)) { Kind::Pin } else { Kind::Exclude };
                     if let Some(song) = self.queue.selected_song(ctx) {
                         let plus = self.baseline.as_ref().map_or_else(Vec::new, rormpc_exceptions::plus_sets_of_args);
-                        rormpc_exceptions::open_for_song_with_sets(ctx, kind, &song, plus);
+                        let rerun = self.hits.rerun_done(ctx);
+                        let done: rormpc_exceptions::Done = Arc::new(move || {
+                            if rormpc_upnext::holds_filter_source() {
+                                rerun();
+                            }
+                        });
+                        rormpc_exceptions::open_for_song_with_sets(ctx, kind, &song, plus, Some(done));
                     } else {
                         status_error!("No song selected");
                     }
@@ -1218,6 +1321,7 @@ impl Pane for PlayPane {
                 match self.overlay {
                     Overlay::Live => return self.live.handle_mouse_event(event, ctx),
                     Overlay::Deleted => return self.deleted.handle_mouse_event(event, ctx),
+                    Overlay::Banned => return self.banned.handle_mouse_event(event, ctx),
                     Overlay::Years => return self.years.handle_mouse_event(event, ctx),
                     Overlay::None => {}
                 }

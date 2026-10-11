@@ -165,6 +165,15 @@ The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowP
   change back. The counts line names the last change and the keys:
   `Filter: +rock · 287 owned · 25 missing · was 312 · z undoes`, `Undo: rock cleared · … · Z redoes`. Music's pane
   takes the results while another tab is shown, so `z` there changes the queue too.
+- **A hand removal bans** (decided by the user 2026-10-11, stage 5): `d` (Delete) on a song or the marked songs of
+  the queue (Music's queue or plan, the Queue pane; a middle click and the row menu's "Remove from queue and ban"
+  too) removes them from MPD's queue and runs `musicdb ban` on their files in the background; the status bar says
+  `Banned 1: Africa · z undoes`. A banned song stays on disk and in ListenBrainz, but `hits` leaves it out of every
+  result and mpd-player never plans it, so no filter change brings it back. The ban is an entry of the same undo
+  timeline as the filter changes: `z` takes back whichever came last (`musicdb unban` on its files, then the
+  filters rerun and the queue gets the song back if they match it), `Z` bans again. Not a ban: `D` (clear the
+  queue), `d` on an Up next request (it only cancels the request), "Remove repeated entries". Another source
+  (Sources…, Browse's `P`) clears the filter history but keeps the bans undoable.
 - Keys moved for this (decided by the user 2026-10-11): ToggleRepeat is on `r` (global) and Rate on `y`
   (navigation; the default `y` copy of the displayed value is gone, `Y` still copies), so `r` reaches repeat in every
   pane and no pane takes `z` / `Z`.
@@ -176,7 +185,9 @@ The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowP
   `generation` (how many changes of this source reached MPD).
 - Pins and exclusions: `+` / `-` on a row (queue, plan or result rows) open the scope menu with the `+` sets of the
   rules being played; queue and plan rows (in the Queue pane too) show `✚` / `⊘` for a file an exception names
-  (`hits exceptions --json`, read in the background and again after `+` / `-` or the Exceptions list).
+  (`hits exceptions --json`, read in the background and again after `+` / `-` or the Exceptions list). An exception
+  applies at once like any filter change: `hits` runs again and the queue follows (from a queue or plan row only
+  while the queue holds the filters' songs, never replacing an album or a playlist).
 
 ### Browse, the playlist editor and the Live inbox
 
@@ -220,6 +231,10 @@ still load from an explicit config.
   step whose outcome is "failed"). The panel has the pane's keys (Enter restores, retries, allows or blocks
   downloading it again); Esc or a click outside closes it. It replaced the Deleted tab (decided by the user
   2026-10-10).
+- **Banned** is a panel over Music too: `gB` (ShowPlay(Banned)) lists the banned songs, newest first, from
+  `musicdb banned --json` (when, artist, title). Enter, `u` or a double click unbans the selected song (`musicdb
+  unban FILE`); the list is read again, and the filters rerun so the song comes back into the queue when they match
+  it. Esc or a click outside closes it.
 - **Years to review** is a panel over Music too: `gY` (ShowPlay(Years)), see Years to review.
 - **Keys** (built-in and `assets/example_config.ron`; `ShowPlay(...)` opens the Music tab from anywhere):
 
@@ -230,6 +245,7 @@ still load from an explicit config.
   | `5` `6` `7` `8` `9` | global | `ShowPlay(Browse(Folders))`, `(Artists)`, `(AlbumArtists)`, `(Albums)`, `(Lists)` |
   | `0`, `gl` | global | `ShowPlay(Live)`: the Live inbox (`ShowPlay(Queue)` brings the filters back) |
   | `gd` | global | `ShowPlay(Deleted)`: the Deleted panel |
+  | `gB` | global | `ShowPlay(Banned)`: the Banned panel |
   | `gY` | global | `ShowPlay(Years)`: the Years to review panel |
   | `B` | queue | ToggleBrowse: the left column, Filters or Browse |
   | `[` / `]` | queue | PreviousGrouping / NextGrouping in Browse |
@@ -264,13 +280,16 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
   (scope `list:ID`) apply, and its id is part of the rules hash. The header names it (`Smart list: 80s party`,
   "(changed)" once the filters differ from its rules), and a list applied as saved plays as "Hits · smart list 80s party". A new pin or exclusion defaults to the open
   list ("in the smart list 80s party only (while it is open)"), else library.
-- Export: each change applied with a list open writes it as the MPD playlist "Smart NAME" (`hits lists export ID` in
-  the background) and `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The
+- Export: a list Previous sources records (below) is written as the MPD playlist "Smart NAME" (`hits lists export ID`
+  in the background) and `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The
   export is a snapshot for phones, never read back as rules, and `hits`' "my playlists" set leaves "Smart " playlists
   out.
-- Previous sources: each change applied in Music is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json`
-  (the last 10 rule sets, the same rules once; local state, not the data repo; recording only when a rule set is
-  left or after one of its songs played comes with a later stage). Enter loads one, and it applies at once.
+- Previous sources: a rule set of Music's filters is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json`
+  once a song of it has started playing (one of its `files` in source.json; the song that played on when the rules
+  changed does not count), or when the queue leaves the filters for another kind of source (an album with `P`,
+  Sources…, an undo back to the album), not on every applied change (decided by the user 2026-10-11): quick clicks
+  and a held key leave no trail of in-between rules. The last 10 rule sets, the same rules once (a newer record
+  moves them to the top); local state, not the data repo. Enter loads one, and it applies at once.
 - A list whose rules or events this version cannot read shows `! NAME · made by a newer rormpc-tools, update it`
   and is never loaded or exported (its last export stays).
 - A smart list can use another one as a set ("+ set…"); updating a list so that it leads back to itself is
@@ -408,8 +427,9 @@ apply now is dim). "show excluded (N)" in the filter column (the old "show hidde
 dim and marked; "⋯ exceptions…" lists every exception by scope (`hits exceptions --json`; a pinned song whose file
 is gone shows `!`) and Enter removes the one under the cursor (a hide is unhidden). In the filter column the same
 `+` / `-` set the set, genre or artist row under the cursor (pressed again: off). Only these keys record an
-exception: "Remove from queue" and a song added by hand stay one-offs, and the queue itself never changes when an
-exception is recorded; the next "Play these" takes it into account (in Music its `hits` run applies at once).
+exception: a song added by hand stays a one-off ("Remove from queue" bans the song instead, see Music tab), and in
+the Hits pane the queue never changes when an exception is recorded; the next "Play these" takes it into account
+(in Music its `hits` run applies at once).
 The log is `<data_dir>/exceptions.jsonl`, keyed by music-data's song id (songs.jsonl), so a pin follows a moved or
 merged file.
 
@@ -433,13 +453,14 @@ after each keystroke), Backspace, Ctrl-w and Ctrl-u edit. Enter plays the select
 the filter and shows it in the whole queue; Esc clears the filter and puts the cursor and the scroll back where
 they were. The filtered rows are a view rebuilt from MPD's queue by song id whenever it changes, so nothing acts
 on a filtered position: while filtered, moving, sorting and the context menu wait for the filter to be cleared
-(the status bar says so); delete works on the selected or marked rows by id.
+(the status bar says so); delete works on the selected or marked rows by id (and bans them, as `d` always does).
 
 ## Context menus
 
 Queue (ContextMenu, e.g. Ctrl-z): besides upstream's items, Like ♥ / Dislike ✗ / Clear like (rmpc's like
 sticker) and, in its own section, "Move library file to Trash…" with a confirmation (the same as Ctrl-x,
-`musicdb delete`); "Remove" is renamed "Remove from queue (keep file)", and "Remove repeated entries (N)…"
+`musicdb delete`); "Remove" is renamed "Remove from queue and ban (keep file; z undoes)" (a hand removal bans,
+see Music tab), and "Remove repeated entries (N)…"
 collapses a file queued several times to one entry (the playing one, else the first), after a confirmation (such
 entries carry a dim `⧉` in the first column);
 library files stay. Hits rows: Play now, Add to queue, like

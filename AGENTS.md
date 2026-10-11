@@ -63,6 +63,8 @@ A file for [guiding AI coding agents](https://agents.md/).
   `mpd --no-daemon --stderr <conf>` in the background; `MPD_PORT=6650 mpc update --wait`, then
   `env XDG_STATE_HOME=<scratch> rormpc -a 127.0.0.1:6650` in a herdr tab. Stop it with `kill <pid>` (check with
   `lsof -iTCP:6650`); `mpc kill` did not stop it.
+- Run scratch tests with their own `XDG_CACHE_HOME` as well as `XDG_STATE_HOME` (Music's `hits` result goes to
+  `$XDG_CACHE_HOME/rormpc/hits/preview.json`): a stage 4 test overwrote the user's preview.json on 2026-10-11.
 - Don't `export XDG_STATE_HOME` in a shell that then runs `herdr-job`: herdr-job keeps its own state there and
   reports the job as "lost". Pass it to the command with `env` instead.
 

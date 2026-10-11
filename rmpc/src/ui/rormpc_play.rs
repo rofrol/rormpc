@@ -1,7 +1,7 @@
 //! rormpc: the Play pane's helpers outside the pane itself.
 //!
 //! - Music's filters apply at once (plans/instant-filtering.md): every finished newest `hits` run into
-//!   `PREVIEW_FILE` reconciles the queue (`rormpc_upnext::reconcile_hits_source`); there is no preview and no Apply.
+//!   `preview_file()` reconciles the queue (`rormpc_upnext::reconcile_hits_source`); there is no preview and no Apply.
 //! - Browse's `P` (phase 3b) replaces the queue with an album, folder, artist or list in its order, and starts it
 //!   at once. It asks first only when the source kind changes or more than a quarter of the queue would go; the
 //!   replace carries the queue's `playlist` version and refuses when MPD's moved since. No retry, no delay.
@@ -17,6 +17,7 @@ use crate::{
     ui::{
         modals::confirm_modal::{Action, ConfirmModal},
         panes::hits::PreviewInfo,
+        rormpc_undo::Ban,
         rormpc_upnext::{self, Collection},
     },
 };
@@ -35,8 +36,18 @@ pub fn take_view() -> Option<PlayView> {
     VIEW_REQUEST.lock().ok().and_then(|mut v| v.take())
 }
 
-/// Where Play's `hits` runs write their result.
-pub const PREVIEW_FILE: &str = "~/.cache/rormpc/hits/preview.json";
+/// Where Play's `hits` runs write their result: `$XDG_CACHE_HOME/rormpc/hits/preview.json` when it is set (a
+/// scratch test keeps away from the user's file), else under `~/.cache`.
+pub fn preview_file() -> String {
+    preview_file_in(std::env::var("XDG_CACHE_HOME").ok().as_deref())
+}
+
+fn preview_file_in(cache_home: Option<&str>) -> String {
+    match cache_home.filter(|c| !c.is_empty()) {
+        Some(c) => format!("{}/rormpc/hits/preview.json", c.trim_end_matches('/')),
+        None => "~/.cache/rormpc/hits/preview.json".to_owned(),
+    }
+}
 
 /// The canonical hash of a rules key (FNV-1a, 64 bits, hex): stable across runs and machines.
 pub fn rules_hash(key: &str) -> String {
@@ -92,16 +103,19 @@ pub fn counts_line(info: &PreviewInfo, was: Option<usize>, asked: bool, last: La
     format!("{what}{owned} owned · {missing} missing{was}{keys}")
 }
 
-/// `z` / `Z` (`FilterUndo` / `FilterRedo`) from any tab: a step through Music's filter history.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `z` / `Z` (`FilterUndo` / `FilterRedo`) from any tab: a step through Music's history of filter changes and
+/// bans; a hand removal's ban leaves its entry here too, so both share one timeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
     Undo,
     Redo,
+    /// a hand removal from the queue banned these songs (`musicdb ban` succeeded): an entry z takes back
+    Banned(Ban),
 }
 
 static STEPS: Mutex<Vec<Step>> = Mutex::new(Vec::new());
 
-/// Leave an undo or redo for the Play pane, which takes them in order on its next frame (shown or not).
+/// Leave an undo, redo or ban for the Play pane, which takes them in order on its next frame (shown or not).
 pub fn request_step(step: Step) {
     if let Ok(mut s) = STEPS.lock() {
         s.push(step);
@@ -317,8 +331,17 @@ mod tests {
     #[test]
     fn steps_are_taken_once_in_order() {
         request_step(Step::Undo);
+        let ban = Ban { files: vec!["a.mp3".into()], what: "a".into() };
+        request_step(Step::Banned(ban.clone()));
         request_step(Step::Redo);
-        assert_eq!(take_steps(), vec![Step::Undo, Step::Redo]);
+        assert_eq!(take_steps(), vec![Step::Undo, Step::Banned(ban), Step::Redo]);
         assert!(take_steps().is_empty());
+    }
+
+    #[test]
+    fn the_preview_file_follows_xdg_cache_home() {
+        assert_eq!(preview_file_in(Some("/tmp/scratch/cache/")), "/tmp/scratch/cache/rormpc/hits/preview.json");
+        assert_eq!(preview_file_in(Some("")), "~/.cache/rormpc/hits/preview.json");
+        assert_eq!(preview_file_in(None), "~/.cache/rormpc/hits/preview.json");
     }
 }

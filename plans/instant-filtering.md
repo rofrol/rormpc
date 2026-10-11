@@ -3,7 +3,7 @@
 Written 2026-10-10 from the code, measurements on the real library (read-only) and consult round
 `20261010-230739-29d8` (GPT-6.1 Sol `7f68ca37`, Xiaomi MiMo `829929fd`). Every open choice was decided by the user on
 2026-10-11 ("Decided choices" at the end; they override the design where they differ). Built: build order steps 1
-(rormpc-tools 0.2.50/0.2.51), 2, 3 and 4 (rormpc). It changes the decision "a filter change prepares, Apply plays" of
+(rormpc-tools 0.2.50/0.2.51), 2, 3, 4 and 5 (rormpc). It changes the decision "a filter change prepares, Apply plays" of
 plans/combined-view.md (open choice 2 there, decided 2026-10-09); the rest of that plan stays.
 
 ## Goal (the user's words, translated)
@@ -303,7 +303,12 @@ decision ids in brackets).
 1. Removing a song from the queue in Music: lasting, not a session omission: it bans the song into a separate
    Banned list, like Deleted but the file stays on disk; banned songs never come back through filters or the
    shuffle, the Banned list restores them, `z` undoes a ban (d-6xjfvyp3, d-x3g5wgkv). ListenBrainz: nothing, listens
-   stay, no feedback (d-a7xehj4c). This replaces `removed` (stage 5).
+   stay, no feedback (d-a7xehj4c). This replaces `removed` (stage 5). Built in step 5 (`rormpc_banned`): `d` in any
+   queue view, a middle click and the row menu's "Remove from queue and ban" remove the song and run `musicdb ban`
+   in the background; `D`, an Up next request and "Remove repeated entries" are no ban. The ban is an entry of the
+   `z` / `Z` timeline (`rormpc_undo::Entry::Banned`); its undo runs `musicdb unban FILE...` (not `ban --undo`, which
+   takes back the newest ban in musicdb's log even when that is another one) and reruns the filters while the queue
+   holds their source. The Banned panel (`gB`, `ShowPlay(Banned)`) unbans with Enter or `u`.
 2. The first filter touch replaces another kind of source at once; the old source is the first undo entry
    (d-s6fcqo5u). Built in step 3; the undo entry comes with step 4.
 3. Weighted mode: the table shows the forecast, the counts are in the line under the header, and a rows ⇄ plan
@@ -318,8 +323,11 @@ decision ids in brackets).
    displayed value went to make room for Rate (`Y` still copies); the smart list picker's `r` renames through
    ToggleRepeat.
 5. 0 owned songs: the upcoming songs go, it stops after the playing song (Sol; d-sy7ma764). Built in step 3.
-6. Previous sources records a rule set when it is left, or once a song of it has played (d-m7t2ldzp). Step 5;
-   until then each applied change is recorded.
+6. Previous sources records a rule set when it is left, or once a song of it has played (d-m7t2ldzp). Built in
+   step 5: a song of the rule set's `files` starting to play records it (once per rule set), and so does
+   `source.json` changing from the filters to another kind of source ("left"); a filter change alone records
+   nothing, so quick clicks leave no trail. An open smart list exports on the same rule
+   (`rormpc_smartlists::remember`).
 7. A round counts a song as heard only after a scrobble-qualifying play, by the user's scrobbler rule (d-yxxlysnq).
    Built in step 1 (rormpc-tools 0.2.50, the scrobbler's own rule in 0.2.51).
 8. `hits` is kept warm beyond the cached library index only if the end-to-end time after the cache is over 0.15 s

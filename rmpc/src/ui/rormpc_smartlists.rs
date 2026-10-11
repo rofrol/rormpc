@@ -3,14 +3,16 @@
 //!
 //! - `S` saves the filters on screen: a name prompt with the rules shown; a name that exists offers "Update NAME"
 //!   or another name. The saved list becomes the open one.
-//! - `L` opens the picker: Smart lists, Previous sources (the last applied rule sets, local state), then MPD
-//!   playlists and Live playlists. Enter loads a list's rules into the filter column as a preview (it never plays
-//!   by itself); `a` applies; `r` rename, `u` update with the filters on screen, `c` duplicate, `d` delete
-//!   (confirmed; its exceptions go with it). The letters are matched by the actions they are bound to (Add,
-//!   Rate, Update, ToggleConsume/ConsumeOff, Delete), as `a` is Apply in Play.
+//! - `L` opens the picker: Smart lists, Previous sources (the last played rule sets, local state), then MPD
+//!   playlists and Live playlists. Enter loads a list's rules into the filter column, and they apply at once like
+//!   any filter change (plans/instant-filtering.md); `a` does the same; `r` rename, `u` update with the filters on
+//!   screen, `c` duplicate, `d` delete (confirmed; its exceptions go with it). The letters are matched by the
+//!   actions they are bound to (Add, ToggleRepeat/Rate/Rename, Update, ToggleConsume/ConsumeOff, Delete).
 //! - The open list is part of the filters (`hits --open-list`): its own exceptions apply, and a new pin or
 //!   exclusion defaults to it (`rormpc_exceptions::default_scope`).
-//! - Apply of a list writes its MPD playlist "Smart NAME" (`hits lists export`); `musicdb update` does it hourly.
+//! - A played list writes its MPD playlist "Smart NAME" (`hits lists export`) when Previous sources records it
+//!   (once a song of it has played, or when the filters' source is left; `remember`); `musicdb update` does it
+//!   hourly.
 //!   A list made by a newer rormpc-tools is shown, never loaded.
 
 use std::{
@@ -45,7 +47,7 @@ use crate::{
 };
 
 const HITS: &str = "hits";
-/// Previous sources kept (decided with the plan: the last 10 applied rule sets).
+/// Previous sources kept (decided with the plan: the last 10 rule sets).
 const PREVIOUS_MAX: usize = 10;
 
 /// A list's own exceptions (scope `list:ID`).
@@ -150,8 +152,8 @@ pub fn name_of(id: &str) -> String {
 
 // ---------------------------------------------------------------- previous sources
 
-/// One applied rule set (`$XDG_STATE_HOME/rormpc/previous-sources.json`, newest first): local state, not the data
-/// repo, so "give me the old queue back" is one explicit Apply.
+/// One played rule set (`$XDG_STATE_HOME/rormpc/previous-sources.json`, newest first): local state, not the data
+/// repo, so "give me the old queue back" is one pick.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Previous {
     pub name: String,
@@ -192,8 +194,10 @@ fn remembered(mut sources: Vec<Previous>, new: Previous) -> Vec<Previous> {
     sources
 }
 
-/// After an Apply replaced the queue: remember the rules, and export the list it played (if one was open).
-pub fn after_apply(name: &str, rules: &serde_json::Value, rules_hash: &str) {
+/// Remember a rule set in Previous sources and export the smart list it played (if one was open). Called once a
+/// song of it has played, or when the filters' source is left for another kind of source (decided by the user
+/// 2026-10-11), not on every applied change: a held key or a few quick clicks leave no trail of in-between rules.
+pub fn remember(name: &str, rules: &serde_json::Value, rules_hash: &str) {
     let at = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let new = Previous { name: name.to_owned(), rules: rules.clone(), rules_hash: rules_hash.to_owned(), at };
     let file = PreviousFile { sources: remembered(previous(), new) };
@@ -502,7 +506,7 @@ pub fn open_picker(ctx: &Ctx, inbox: &Inbox, rule_args: Vec<String>, open: Optio
     let rule_args = Arc::new(rule_args);
 
     let mut menu = MenuModal::new(ctx).width(110).list_section(ctx, |mut section| {
-        section.add_item("Lists · Enter load · a apply · r rename · u update · c duplicate · d delete · / search", |_| Ok(()));
+        section.add_item("Lists · Enter applies at once (z undoes) · r rename · u update · c duplicate · d delete · / search", |_| Ok(()));
         Some(section)
     });
     if let Some((_, name)) = open.cloned() {
