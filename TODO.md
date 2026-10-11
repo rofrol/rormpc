@@ -711,6 +711,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       once while filters own the queue; preview.json follows XDG_CACHE_HOME (AGENTS.md note). Noted: z after banning
       several songs, some already banned, unbans those too; the first song start after rormpc starts from a stop is
       not recorded in Previous sources. Proposed below: the smart list picker's "Load" and "a Apply" now do the same.
+      Stage 6 done in rormpc-tools (worker, cherry-picked; v0.2.52 installed 2026-10-11, 575 tests): `hits` keeps the
+      library index (MPD songs, play counts) in ~/.cache/hits/library-index.json, keyed by MPD's db_update and the
+      play DB / path logs / deletions / banned.jsonl, written atomically; path tie-breaks give a stable order.
+      Measured on the real library (10 runs each, median / p90): billboard warm 0.300 → 0.199 / 0.207 s, cold 0.327 s;
+      library by plays warm 0.254 → 0.147 / 0.158 s, cold 0.347 s. Billboard is still over the 0.15 s line, and every
+      play changes the play DB, so the run after a song is cold. Per the user's rule (hits serve only if still over
+      0.15 s after caching), the cheaper caching the worker found comes first: next item, stage 6b.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
@@ -814,6 +821,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       song (~10.5 h for the ~274 songs without lyrics); instrumentals detected by VAD on the stem (whisper writes
       "Thank you." there); stored as <song>.transcript.json, never as .lrc, shown in rormpc as machine-transcribed.
       Seven open choices in "Needs a decision" ("Transcribed lyrics:"); the build waits for them.
+- [ ] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a
+      play must not make the next run cold) and cache the chart matching (chart_candidates: name normalisation and
+      matching of ~2000 chart rows), then measure again; `hits serve` only if the warm median is still over 0.15 s
+      (the user's rule, 2026-10-11).
 - [ ] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
       instant filtering stage 5 worker (2026-10-11). Cost: a small rormpc change, no build beyond the usual install.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
