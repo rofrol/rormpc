@@ -1654,6 +1654,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: rormpc-tools docs/media-keys-plan.md (2026-10-10).
 - [x] Radio rename: the worker's `uv run liveplaylist rename omarchy-radio radio.omarchy.org` on your library was
       Decided by the user 2026-10-11: the coordinator runs the rename (d-ku6vswnr).
+      Done by the coordinator 2026-10-11: `liveplaylist rename omarchy-radio radio.omarchy.org`; MPD lists
+      "radio.omarchy.org", no "Omarchy Radio" left.
 - [x] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
       Asked 2026-10-11; the user did not know what removing a song from the source means and said "ultimately there
       is to be only one folder"; asked again in plain words, the user answered: "but there will be no sources any
