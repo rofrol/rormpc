@@ -835,9 +835,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       play must not make the next run cold) and cache the chart matching (chart_candidates: name normalisation and
       matching of ~2000 chart rows), then measure again; `hits serve` only if the warm median is still over 0.15 s
       (the user's rule, 2026-10-11).
-- [ ] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
+- [x] Smart list picker: "Load" and "a Apply" now do the same (filters apply at once); keep one button. Found by the
       instant filtering stage 5 worker (2026-10-11). Cost: a small rormpc change, no build beyond the usual install.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
+      Done in rormpc (worker, cherry-picked; installed 2026-10-11, 1091 tests): one "Load" button (Enter; `a` an
+      alias without a button), Pick::Apply removed, the hints and the save dialog's export note updated. Found: the
+      user's config has no `L` (SmartLists) binding in its queue keys, so the picker may be unreachable there.
 - [ ] The status bar cuts long messages (seen by the Apply worker 2026-10-10: "… in their order" cut off): show
       the whole text or wrap it, and keep it long enough to read.
       Decided by the user 2026-10-11: approved (d-bzzoexao).
