@@ -676,7 +676,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       2026-10-11 (547 tests pass). The plan's `removed` field is obsolete: a hand removal bans (the user's decision).
       Found at the install: the listen rule is hard-coded to ro-listenbrainz-mpd's defaults (0.5 / 240 s), but the
       user's scrobbler config says listen_fraction 0.9, no cap, uninterrupted (a seek restarts the count); "as in
-      scrobble" means the user's rule, so mpd-player reads the scrobbler's config (next item, stage 1b).
+      scrobble" means the user's rule, so mpd-player reads the scrobbler's config. Stage 1b done in rormpc-tools
+      (worker, cherry-picked after f060ad8): the [submission] listen_fraction / listen_max_seconds (0 = no cap) /
+      listen_uninterrupted (a seek over 2 s restarts the count) from ro-listenbrainz-mpd's config.toml, re-read on
+      its mtime; released in v0.2.51 and installed 2026-10-11 (561 tests). Noted: after a daemon restart mid-song the
+      elapsed time counts as played, while the scrobbler starts from zero.
       Noted: mpd-player matches bans by file path only (hits also by YouTube id / MBID); the one-folder migration
       (music-data) must rewrite banned.jsonl's paths with the others.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
