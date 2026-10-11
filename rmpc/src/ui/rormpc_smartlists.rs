@@ -264,10 +264,8 @@ pub fn list_line(list: &SmartList, open: bool) -> String {
 /// What the picker or the save modal hands back to Play, taken on its next frame.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pick {
-    /// load these rules (a result's `args`) into the filters as a preview
+    /// load these rules (a result's `args`) into the filters: they apply at once
     Load(serde_json::Value),
-    /// load them and Apply once their preview is in
-    Apply(serde_json::Value),
     /// keep the filters, leave the open list
     CloseList,
 }
@@ -334,7 +332,7 @@ pub fn open_save(ctx: &Ctx, inbox: Inbox, req: SaveRequest) {
         info.push(format!("  Owned     {counts}"));
     }
     info.push("  New pins and exclusions go to the open list; library and set ones stay".to_owned());
-    info.push("  Exported as the MPD playlist \"Smart NAME\" (Apply, and musicdb update hourly)".to_owned());
+    info.push("  Exported as the MPD playlist \"Smart NAME\" (once it plays, and musicdb update hourly)".to_owned());
     let initial = req.open.as_ref().map(|(_, name)| name.clone()).unwrap_or_default();
     let sender = ctx.app_event_sender.clone();
     let menu = MenuModal::new(ctx)
@@ -408,7 +406,8 @@ fn update_list(ctx: &Ctx, inbox: Inbox, list: &SmartList, rule_args: Vec<String>
 
 // ---------------------------------------------------------------- L: the picker
 
-fn is_apply(e: &ActionEvent) -> bool {
+/// `a` (Add) loads too, as an alias of Enter on Load: there is no separate Apply button since filters apply at once.
+fn is_load(e: &ActionEvent) -> bool {
     e.actions.iter().any(|a| matches!(a.as_common(), Some(CommonAction::AddOptions { .. })))
 }
 
@@ -506,7 +505,7 @@ pub fn open_picker(ctx: &Ctx, inbox: &Inbox, rule_args: Vec<String>, open: Optio
     let rule_args = Arc::new(rule_args);
 
     let mut menu = MenuModal::new(ctx).width(110).list_section(ctx, |mut section| {
-        section.add_item("Lists · Enter applies at once (z undoes) · r rename · u update · c duplicate · d delete · / search", |_| Ok(()));
+        section.add_item("Lists · Enter loads a list, applied at once (z undoes) · r rename · u update · c duplicate · d delete · / search", |_| Ok(()));
         Some(section)
     });
     if let Some((_, name)) = open.cloned() {
@@ -521,18 +520,13 @@ pub fn open_picker(ctx: &Ctx, inbox: &Inbox, rule_args: Vec<String>, open: Optio
     let heading = if lists.is_empty() { "Smart lists: none yet (S saves the filters as one)" } else { "Smart lists" };
     menu = menu.list_section(ctx, |section| Some(section.item(heading, |_| Ok(()))));
     if !labels.is_empty() {
-        let (load, apply) = ((Arc::clone(inbox), sender.clone(), Arc::clone(&by_label)), (Arc::clone(inbox), sender.clone(), Arc::clone(&by_label)));
+        let load = (Arc::clone(inbox), sender.clone(), Arc::clone(&by_label));
         let (ren, upd, dup, del) = (Arc::clone(&by_label), (Arc::clone(&by_label), Arc::clone(inbox), Arc::clone(&rule_args)), Arc::clone(&by_label), (Arc::clone(&by_label), Arc::clone(inbox), sender.clone()));
         menu = menu.multi_section(ctx, move |section| {
             let mut section = section
-                .add_action("Load", move |_, label| {
+                .add_action_with_key("Load", is_load, move |_, label| {
                     if let Some(args) = load.2.get(&label).and_then(|l| l.args.clone()) {
                         deliver(&load.0, &load.1, Pick::Load(args));
-                    }
-                })
-                .add_action_with_key("a Apply", is_apply, move |_, label| {
-                    if let Some(args) = apply.2.get(&label).and_then(|l| l.args.clone()) {
-                        deliver(&apply.0, &apply.1, Pick::Apply(args));
                     }
                 })
                 .add_action_with_key("r Rename", is_rename, move |ctx, label| {
@@ -575,17 +569,12 @@ pub fn open_picker(ctx: &Ctx, inbox: &Inbox, rule_args: Vec<String>, open: Optio
     }
     if !prev.is_empty() {
         menu = menu.list_section(ctx, |section| Some(section.item("Previous sources", |_| Ok(()))));
-        let (load, apply) = ((Arc::clone(inbox), sender.clone(), Arc::clone(&prev_by_label)), (Arc::clone(inbox), sender.clone(), Arc::clone(&prev_by_label)));
+        let load = (Arc::clone(inbox), sender.clone(), Arc::clone(&prev_by_label));
         menu = menu.multi_section(ctx, move |section| {
             let mut section = section
-                .add_action("Load", move |_, label| {
+                .add_action_with_key("Load", is_load, move |_, label| {
                     if let Some(args) = load.2.get(&label) {
                         deliver(&load.0, &load.1, Pick::Load(args.clone()));
-                    }
-                })
-                .add_action_with_key("a Apply", is_apply, move |_, label| {
-                    if let Some(args) = apply.2.get(&label) {
-                        deliver(&apply.0, &apply.1, Pick::Apply(args.clone()));
                     }
                 });
             for (label, _) in prev {
@@ -755,6 +744,6 @@ mod tests {
         assert!(is_duplicate(&of(vec![GlobalAction::ConsumeOff.into()])) && is_duplicate(&of(vec![GlobalAction::ToggleConsume.into()])));
         assert!(is_delete(&of(vec![QueueActions::Delete.into()])) && is_delete(&of(vec![CommonAction::Delete.into()])));
         assert!(is_rename(&of(vec![CommonAction::Rename.into()])));
-        assert!(!is_update(&of(vec![QueueActions::Delete.into()])) && !is_apply(&of(vec![GlobalAction::Update.into()])));
+        assert!(!is_update(&of(vec![QueueActions::Delete.into()])) && !is_load(&of(vec![GlobalAction::Update.into()])));
     }
 }

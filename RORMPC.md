@@ -270,7 +270,8 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
   becomes the open one.
 - `L` (`SmartLists`) opens the picker: Smart lists, Previous sources, then MPD playlists and Live playlists in their
   own sections (the "Smart …" exports are left out of the MPD section). Enter loads a list's rules into the filter
-  column, and they apply at once like any filter change (`a` on a list row does the same). `r` (ToggleRepeat, Rate or Rename) renames, `u` updates it
+  column, and they apply at once like any filter change; Load is the one button for it (`a` on a list row does the
+  same, without a button of its own). `r` (ToggleRepeat, Rate or Rename) renames, `u` updates it
   with the filters on screen, `c` duplicates it (with its exceptions), `d` deletes it after a confirmation (its
   exceptions and its "Smart NAME" playlist go with it); Left/Right and a click pick the same buttons. The letters are
   matched by what they are bound to (Add, ToggleRepeat/Rate/Rename, Update, ToggleConsume/ConsumeOff, Delete), since a modal sees actions,

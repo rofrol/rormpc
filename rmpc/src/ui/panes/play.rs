@@ -315,7 +315,7 @@ impl PlayPane {
     fn take_pick(&mut self) {
         let pick = self.inbox.lock().ok().and_then(|mut p| p.take());
         let args = match pick {
-            Some(Pick::Load(args) | Pick::Apply(args)) => args,
+            Some(Pick::Load(args)) => args,
             Some(Pick::CloseList) => {
                 self.hits.close_list();
                 serde_json::Value::Null
