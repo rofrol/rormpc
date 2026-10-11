@@ -937,10 +937,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       lyrics); its last step, `musicdb.sync`, failed with HTTP 404 (the hourly `musicdb update` runs it again).
       music-data's aliases.jsonl and likes.jsonl are left for the hourly export to commit.
 
-- [ ] AGENTS.md "Coordination": rormpc-tools has its own coordinator and TODO.md from 2026-10-12 (decided by the user, [t-ltsquwes]
+- [x] AGENTS.md "Coordination": rormpc-tools has its own coordinator and TODO.md from 2026-10-12 (decided by the user, [t-ltsquwes]
       d-33kat4ps), replacing the 2026-10-07 rule that todo-rormpc owns both. Cross-repository work goes as a plain
       message to the rormpc-tools coordinator, which replies "landed <tag>"; the consuming item waits here as "Waiting
       on rormpc-tools"; rormpc's install script pins rormpc-tools' tag. Follows from that decision; text only.
+      Done 2026-10-12 (b285c42, through herdr todo run r-ykgns7lf; pushed by the run).
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
