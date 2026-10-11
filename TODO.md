@@ -683,6 +683,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       elapsed time counts as played, while the scrobbler starts from zero.
       Noted: mpd-player matches bans by file path only (hits also by YouTube id / MBID); the one-folder migration
       (music-data) must rewrite banned.jsonl's paths with the others.
+      Stages 2-3 done in rormpc (worker, cherry-picked; installed 2026-10-11, 1071 tests): source.json is written
+      before the queue changes, with `source_id` and `generation`; every finished newest `hits` run reconciles the
+      queue by a diff in one MPD command list (shared songs keep their ids, the playing song and Up next stay, a
+      phone's entries stay, normal mode in rank order, weighted mode only appends); Apply, the Preview banner and
+      `[ Apply ]` are gone from Music; the first filter touch replaces another source; 0 owned songs empty the
+      upcoming songs; a counts line ("16 owned · 177 missing · was 10"); `o` toggles rows ⇄ plan|queue; `a` says once
+      "Filters apply at once; z undoes". Noted from the worker: with nothing playing a filter change starts playback
+      (as Apply did); in normal mode result songs before the playing one move after it and can play again (as
+      Replace did); mpd-player's round counter catches up only at its next plan fill. Until stage 5, Previous sources
+      records every applied change and an open smart list exports on every change.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
