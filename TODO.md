@@ -654,7 +654,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (refuses a taken name, undoes the move if the save fails); new radio subscriptions default to
       "radio.omarchy.org". Released in v0.2.46. The live rename of the user's subscription was blocked by the auto-mode
       classifier (see "Needs a decision").
-- [ ] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant, [t-vtmaq4gz]
+- [x] Instant filtering without Apply (asked 2026-10-10, next after the radio rename: "filtering must be instant, [t-vtmaq4gz]
       without apply. Work out with the models how to do it."): a worker studies how a filter change in the Music view
       reaches the table, the preview and the MPD queue today (Apply, preview.json, the weighted plan, the 3b
       decisions in plans/combined-view.md), consults the models on making every filter change take effect at once
