@@ -693,6 +693,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (as Apply did); in normal mode result songs before the playing one move after it and can play again (as
       Replace did); mpd-player's round counter catches up only at its next plan fill. Until stage 5, Previous sources
       records every applied change and an open smart list exports on every change.
+      Stage 4 done in rormpc (worker, cherry-picked; installed 2026-10-11, 1084 tests): global FilterUndo / FilterRedo
+      on z / Z act on Music's filters from any tab (20 deep, one entry per generation that reached MPD, redo cleared
+      by a new change); the first entry after leaving an album or playlist brings it back in its order around the
+      playing song; the last-change line ("Filter: … · was 16 · z undoes"). Defaults: r ToggleRepeat, y Rate (the
+      default y copy was dropped, Y still copies). The user's config and theme label (z rep → r rep) applied and
+      committed in dotfiles 3b49821 right after the install. Found: the worker's scratch test wrote the user's
+      ~/.cache/rormpc/hits/preview.json (a fixed path); stage 5's worker adds an AGENTS.md note to run scratch tests
+      with their own XDG_CACHE_HOME.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
