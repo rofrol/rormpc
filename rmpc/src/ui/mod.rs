@@ -515,17 +515,15 @@ impl<'ui> Ui<'ui> {
                 GlobalAction::NextTrack if ctx.status.state != State::Stop => {
                     let keep_state = ctx.config.keep_state_on_song_change;
                     let state = ctx.status.state;
-                    ctx.command(move |_, client| {
-                        client.next_keep_state(keep_state, state)?;
-                        Ok(())
-                    });
+                    // rormpc: through mpd-player's command socket when it is bound
+                    ctx.command(move |_, client| rormpc_player::next(client, keep_state, state));
                 }
                 GlobalAction::PreviousTrack if ctx.status.state != State::Stop => {
                     let rewind_to_start = ctx.config.rewind_to_start_sec;
                     let elapsed_sec = ctx.status.elapsed.as_secs();
                     let keep_state = ctx.config.keep_state_on_song_change;
                     let state = ctx.status.state;
-                    // rormpc: through mpd-player's `shuffle prev` when it runs and handles it
+                    // rormpc: through mpd-player's command socket, else its `shuffle prev` when it handles it
                     ctx.command(move |_, client| {
                         rormpc_player::previous(
                             client,

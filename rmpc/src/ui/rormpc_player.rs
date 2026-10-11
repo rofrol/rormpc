@@ -43,15 +43,85 @@ pub fn refresh_presence(ctx: &Ctx) {
     });
 }
 
-pub fn state_path(module: &str) -> PathBuf {
+fn state_base() -> PathBuf {
     // tests never see the machine's mpd-player state (a weighted shuffle left on changed what labels render)
     #[cfg(test)]
-    let base = std::env::temp_dir().join(format!("rormpc-test-state-{}", std::process::id()));
+    return std::env::temp_dir().join(format!("rormpc-test-state-{}", std::process::id()));
     #[cfg(not(test))]
-    let base = std::env::var("XDG_STATE_HOME").map(PathBuf::from).unwrap_or_else(|_| {
-        PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/state")
-    });
-    base.join(format!("rormpc/{module}.json"))
+    std::env::var("XDG_STATE_HOME").map_or_else(
+        |_| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/state"),
+        PathBuf::from,
+    )
+}
+
+pub fn state_path(module: &str) -> PathBuf {
+    state_base().join(format!("rormpc/{module}.json"))
+}
+
+/// mpd-player's command socket, as `mpd-player socket-path` prints it: `$XDG_RUNTIME_DIR/rormpc/player.sock` when
+/// that is set (Linux), else beside its state files. Tests never reach the machine's socket.
+pub fn socket_path() -> PathBuf {
+    #[cfg(not(test))]
+    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR").filter(|r| !r.is_empty()) {
+        return PathBuf::from(runtime).join("rormpc/player.sock");
+    }
+    state_base().join("rormpc/player.sock")
+}
+
+/// One transport command (`next`, `prev`) to mpd-player's command socket: a datagram, fire and forget, never
+/// blocking. Err says why it did not go out (no socket, nobody bound, a full buffer); the caller falls back at once.
+pub fn send_transport(command: &str) -> Result<(), String> {
+    send_transport_to(&socket_path(), command)
+}
+
+/// One datagram's payload, mpd-player's v1 JSON (`{"command": "next"}`).
+fn transport_payload(command: &str) -> String {
+    serde_json::json!({ "command": command }).to_string()
+}
+
+#[cfg(unix)]
+fn send_transport_to(path: &std::path::Path, command: &str) -> Result<(), String> {
+    let sock = std::os::unix::net::UnixDatagram::unbound().map_err(|e| e.to_string())?;
+    sock.set_nonblocking(true).map_err(|e| e.to_string())?;
+    match sock.send_to(transport_payload(command).as_bytes(), path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(format!("no socket at {}", path.display()))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+            Err(format!("nobody bound at {}", path.display()))
+        }
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
+#[cfg(not(unix))]
+fn send_transport_to(path: &std::path::Path, _command: &str) -> Result<(), String> {
+    Err(format!("no Unix sockets here ({})", path.display()))
+}
+
+/// Whether the missing socket was already said in the status bar; a send that goes out again resets it.
+static SOCKET_MISSING_SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Send `command` to the socket; true when it went out. A failure is said once per outage, then stays in the log.
+fn via_socket(command: &str, said: &std::sync::atomic::AtomicBool) -> bool {
+    use std::sync::atomic::Ordering;
+    match send_transport(command) {
+        Ok(()) => {
+            said.store(false, Ordering::Relaxed);
+            true
+        }
+        Err(why) => {
+            if said.swap(true, Ordering::Relaxed) {
+                log::debug!("mpd-player's command socket: {why}");
+            } else {
+                status_warn!(
+                    "mpd-player's command socket is not bound ({why}): Next and Previous go to MPD"
+                );
+            }
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -293,29 +363,34 @@ fn shuffle_state_from_file() -> ShuffleState {
 pub enum PrevRoute {
     /// `rewind_to_start_sec` reached: seek the playing song to 0:00
     Rewind,
+    /// `prev` went out on mpd-player's command socket, the path media keys and Now Playing take too
+    Socket,
     /// `shuffle prev` to mpd-player: back through the songs that really played, no skip counted
     Daemon,
     /// MPD's own `previous` (with random on it follows MPD's random order, not what played)
     Mpd,
 }
 
-/// Previous goes through mpd-player only while it is subscribed to its channel and its shuffle.json has the
-/// `trail` (an mpd-player older than `shuffle prev` ignores the message, so Previous would do nothing).
+/// Previous rewinds first, then goes to mpd-player's command socket (`socket` sends `prev`, false when nobody is
+/// bound). Without the socket it goes through MPD's channel only while mpd-player is subscribed and its
+/// shuffle.json has the `trail` (`daemon`; an mpd-player older than `shuffle prev` ignores the message, so
+/// Previous would do nothing), else to MPD itself.
 pub fn prev_route(
     rewind_to_start: Option<u64>,
     elapsed_sec: u64,
-    subscribed: bool,
-    has_trail: bool,
-) -> PrevRoute {
-    match rewind_to_start {
+    socket: impl FnOnce() -> bool,
+    daemon: impl FnOnce() -> anyhow::Result<bool>,
+) -> anyhow::Result<PrevRoute> {
+    Ok(match rewind_to_start {
         Some(value) if elapsed_sec >= value => PrevRoute::Rewind,
-        _ if subscribed && has_trail => PrevRoute::Daemon,
+        _ if socket() => PrevRoute::Socket,
+        _ if daemon()? => PrevRoute::Daemon,
         _ => PrevRoute::Mpd,
-    }
+    })
 }
 
-/// Previous (the key, `rmpc remote`-style `prev`): see `prev_route`. Runs on the MPD command thread, so the
-/// subscription is asked of MPD now, not taken from the cached presence (a crashed daemon sends no event).
+/// Previous (the key, `rmpc prev`): see `prev_route`. Runs on the MPD command thread, so the subscription is
+/// asked of MPD now, not taken from the cached presence (a crashed daemon sends no event).
 pub fn previous<C: MpdClient + MpdClientExt>(
     client: &mut C,
     rewind_to_start: Option<u64>,
@@ -323,12 +398,46 @@ pub fn previous<C: MpdClient + MpdClientExt>(
     keep_state: bool,
     state: State,
 ) -> anyhow::Result<()> {
-    let has_trail = shuffle_state().trail.is_some();
-    let subscribed = has_trail && client.channels()?.0.iter().any(|c| c == CHANNEL);
-    match prev_route(rewind_to_start, elapsed_sec, subscribed, has_trail) {
+    let route = prev_route(
+        rewind_to_start,
+        elapsed_sec,
+        || via_socket("prev", &SOCKET_MISSING_SAID),
+        || {
+            Ok(shuffle_state().trail.is_some()
+                && client.channels()?.0.iter().any(|c| c == CHANNEL))
+        },
+    )?;
+    match route {
         PrevRoute::Rewind => client.seek_current(ValueChange::Set(0))?,
+        PrevRoute::Socket => {}
         PrevRoute::Daemon => client.send_message(CHANNEL, "shuffle prev")?,
         PrevRoute::Mpd => client.prev_keep_state(keep_state, state)?,
+    }
+    Ok(())
+}
+
+/// Where Next goes.
+#[derive(Debug, PartialEq, Eq)]
+pub enum NextRoute {
+    /// `next` went out on mpd-player's command socket
+    Socket,
+    /// MPD's own `next`
+    Mpd,
+}
+
+/// Next goes to mpd-player's command socket (`socket` sends `next`, false when nobody is bound), else to MPD.
+pub fn next_route(socket: impl FnOnce() -> bool) -> NextRoute {
+    if socket() { NextRoute::Socket } else { NextRoute::Mpd }
+}
+
+/// Next (the key, `rmpc next`): see `next_route`.
+pub fn next<C: MpdClient + MpdClientExt>(
+    client: &mut C,
+    keep_state: bool,
+    state: State,
+) -> anyhow::Result<()> {
+    if next_route(|| via_socket("next", &SOCKET_MISSING_SAID)) == NextRoute::Mpd {
+        client.next_keep_state(keep_state, state)?;
     }
     Ok(())
 }
@@ -488,19 +597,70 @@ pub fn next_marker_for_file(ctx: &crate::ctx::Ctx, file: &str) -> Option<String>
 mod tests {
     use super::*;
 
+    fn prev(rewind: Option<u64>, elapsed: u64, socket: bool, daemon: bool) -> PrevRoute {
+        prev_route(rewind, elapsed, || socket, || Ok(daemon)).unwrap()
+    }
+
     #[test]
-    fn previous_goes_through_mpd_player_only_when_it_handles_shuffle_prev() {
-        assert_eq!(prev_route(None, 30, true, true), PrevRoute::Daemon);
-        // an older mpd-player (no trail in shuffle.json) would ignore `shuffle prev`
-        assert_eq!(prev_route(None, 30, true, false), PrevRoute::Mpd);
-        // a trail left by a daemon that no longer runs
-        assert_eq!(prev_route(None, 30, false, true), PrevRoute::Mpd);
-        assert_eq!(prev_route(None, 30, false, false), PrevRoute::Mpd);
+    fn previous_goes_to_the_socket_then_through_mpd_player_only_when_it_handles_shuffle_prev() {
+        assert_eq!(prev(None, 30, true, true), PrevRoute::Socket);
+        assert_eq!(prev(None, 30, true, false), PrevRoute::Socket);
+        // no socket: `shuffle prev` while mpd-player is subscribed and has the trail
+        assert_eq!(prev(None, 30, false, true), PrevRoute::Daemon);
+        assert_eq!(prev(None, 30, false, false), PrevRoute::Mpd);
         // rewinding the playing song comes first, below the threshold the song changes
-        assert_eq!(prev_route(Some(5), 30, true, true), PrevRoute::Rewind);
-        assert_eq!(prev_route(Some(5), 5, false, false), PrevRoute::Rewind);
-        assert_eq!(prev_route(Some(5), 4, true, true), PrevRoute::Daemon);
-        assert_eq!(prev_route(Some(5), 4, true, false), PrevRoute::Mpd);
+        assert_eq!(prev(Some(5), 30, true, true), PrevRoute::Rewind);
+        assert_eq!(prev(Some(5), 5, false, false), PrevRoute::Rewind);
+        assert_eq!(prev(Some(5), 4, true, true), PrevRoute::Socket);
+        assert_eq!(prev(Some(5), 4, false, true), PrevRoute::Daemon);
+        assert_eq!(prev(Some(5), 4, false, false), PrevRoute::Mpd);
+    }
+
+    #[test]
+    fn previous_tries_nothing_it_does_not_need() {
+        // a rewind sends nothing; a sent `prev` asks MPD nothing
+        let r = prev_route(Some(5), 9, || panic!("socket"), || panic!("daemon")).unwrap();
+        assert_eq!(r, PrevRoute::Rewind);
+        let r = prev_route(None, 9, || true, || panic!("daemon")).unwrap();
+        assert_eq!(r, PrevRoute::Socket);
+        // the subscription query failing is an error, not a silent fallback
+        assert!(prev_route(None, 9, || false, || Err(anyhow::anyhow!("mpd gone"))).is_err());
+    }
+
+    #[test]
+    fn next_goes_to_the_socket_else_to_mpd() {
+        assert_eq!(next_route(|| true), NextRoute::Socket);
+        assert_eq!(next_route(|| false), NextRoute::Mpd);
+    }
+
+    #[test]
+    fn a_send_to_no_socket_fails_at_once() {
+        let dir = std::env::temp_dir().join(format!("rormpc-test-sock-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("player.sock");
+        let _ = std::fs::remove_file(&path);
+        #[cfg(unix)]
+        assert!(send_transport_to(&path, "next").unwrap_err().contains("no socket"));
+        #[cfg(not(unix))]
+        assert!(send_transport_to(&path, "next").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_datagram_is_mpd_players_canonical_command() {
+        assert_eq!(transport_payload("next"), r#"{"command":"next"}"#);
+        assert_eq!(transport_payload("prev"), r#"{"command":"prev"}"#);
+    }
+
+    #[test]
+    fn a_missing_socket_is_said_once_per_outage() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        // tests' socket_path() is in their own temp dir, where nobody listens
+        let said = AtomicBool::new(false);
+        assert!(!via_socket("next", &said));
+        assert!(said.load(Ordering::Relaxed));
+        assert!(!via_socket("next", &said));
+        assert!(said.load(Ordering::Relaxed));
     }
 
     #[test]

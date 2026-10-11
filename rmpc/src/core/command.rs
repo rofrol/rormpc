@@ -158,11 +158,12 @@ impl Command {
             })),
             Command::Next { keep_state } => Ok(Box::new(move |_, client| {
                 let status = client.get_status()?;
-                Ok(client.next_keep_state(keep_state, status.state)?)
+                // rormpc: the same routing as the Next key (mpd-player's command socket)
+                crate::ui::rormpc_player::next(client, keep_state, status.state)
             })),
             Command::Prev { rewind_to_start, keep_state } => Ok(Box::new(move |_, client| {
                 let status = client.get_status()?;
-                // rormpc: the same routing as the Previous key (mpd-player's `shuffle prev`)
+                // rormpc: the same routing as the Previous key (mpd-player's command socket)
                 crate::ui::rormpc_player::previous(
                     client,
                     rewind_to_start,

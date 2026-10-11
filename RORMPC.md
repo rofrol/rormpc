@@ -773,11 +773,15 @@ The shuffle's own picks don't raise a song's play count used for weights, so it 
 skips; mpd-player adds what it saw since and logs its own picks to `auto.jsonl`. `w` (ToggleWeightedShuffle) turns it on
 or off; `e` (HeardEnough) rests the playing song for 1, 3, 7, then 14 days and skips to the next (the Queue menu
 has it for the selected song, and "Back in the weighted shuffle"). Enter and Play next still play a resting song.
-Previous (the key and `rmpc prev`) sends `shuffle prev` to mpd-player while it is subscribed to channel `rormpc`
-and its shuffle.json has the `trail` (only an mpd-player that handles `shuffle prev` writes it): in the weighted
-shuffle it walks back through the songs that really played and counts no skip, with the shuffle off it does MPD's
-own `previous`. Without that mpd-player it is MPD's `previous`, which with random on follows MPD's random order.
-`rewind_to_start_sec` still restarts the playing song first.
+Next and Previous (the keys, `rmpc next` and `rmpc prev`) send `next` / `prev` to mpd-player's command socket
+while it is bound (`mpd-player socket-path` shows the path), the same path as the media keys and Now Playing (see
+Media keys): Previous walks the weighted shuffle's trail and counts no skip, and from a pause both play the song
+they move to (`keep_state_on_song_change` does not apply there). A send that fails (no socket, nobody bound, a full
+buffer) falls back at once, without a retry, and the status bar says so once until a send goes out again. The
+fallback for Next is MPD's `next`; for Previous it is `shuffle prev` on channel `rormpc` while mpd-player is
+subscribed and its shuffle.json has the `trail` (only an mpd-player that handles `shuffle prev` writes it), else
+MPD's `previous`, which with random on follows MPD's random order. `rewind_to_start_sec` still restarts the playing
+song first, before any of them.
 The Up next pane's second footer line (an explicit config only) shows the pick ("Then likely: … · may change") or
 why there is none; in Music the plan shows it. The theme
 property `Status(WeightedShuffle(on_label, off_label, on_style, waiting_style, off_style))` shows its state, e.g.
