@@ -1602,7 +1602,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       blocked by the auto-mode classifier; will you run it yourself after the next release?
       Options: you run `liveplaylist rename omarchy-radio radio.omarchy.org` after the release | allow the coordinator to run it after the release
       Checked: rormpc-tools af44539 (2026-10-10); nothing else names the old playlist (config, sets, smart lists).
-- [ ] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
+- [x] Instant filtering: What does removing a source song from the queue in Music do, now that the next click would bring it back?
       Asked 2026-10-11; the user did not know what removing a song from the source means and said "ultimately there
       is to be only one folder"; asked again in plain words, the user answered: "but there will be no sources any
       more. There is to be one folder. So what is the source then? YouTube playlists or radio.omarchy.org? Ask the
@@ -1627,7 +1627,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       user restores it, never cleared by playing an album. Consider (Sol): move hits-hidden.jsonl into
       Billboard-scoped exclusions; an excluded song played on purpose plays once. Consider (MiMo): name them
       Less · Never · Gone in the UI.
-      Options: Until rormpc closes or you restore it (MiMo) | Until rormpc closes or an album/playlist is played (Sol) | Lasting (an exclusion)
+      Decided by the user 2026-10-11, against both models: a hand removal from the queue is lasting (d-6xjfvyp3),
+      and lasting removals go to a separate Banned list, like Deleted but the file stays on disk (d-x3g5wgkv).
+      Banned songs never come back through filters or the shuffle; the Banned list restores them; z undoes a ban.
+- [ ] Banned: what happens in ListenBrainz when a song is banned?
+      Options: Nothing: listens stay, no feedback (both models) | Listens stay and LB "hate" is sent | Listens are deleted, as Delete --listenbrainz does (irreversible)
+      Checked: ro-listenbrainz-mpd supports love / hate / clear feedback; musicdb delete --listenbrainz deletes
+      listens irreversibly (2026-10-11).
       Options: Remembered for this source (`removed`), cleared when the source is left; `-` stays the lasting exclusion | It becomes an exclusion scoped to the source (Sol) | Nothing: the next filter change brings it back
       Checked: plans/instant-filtering.md (2026-10-10).
 - [x] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
@@ -1640,9 +1646,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] Instant filtering: `z` is the user's global ToggleRepeat; where do z / Z undo and redo filter changes?
       Decided by the user 2026-10-11: z / Z everywhere, ToggleRepeat moves to r ("repeat na r?", d-3wvtn5zn). Open:
       r is Rate() in the navigation keys of the user's config; see the question below.
-- [ ] Instant filtering: r is Rate() in the lists' navigation keys; with ToggleRepeat on r, where does Rate go?
-      Decided by the user 2026-10-11: Rate moves to another key, r is ToggleRepeat (d-bcn65ven); which key is still
-      open (y suggested).
+- [x] Instant filtering: r is Rate() in the lists' navigation keys; with ToggleRepeat on r, where does Rate go?
+      Decided by the user 2026-10-11: Rate moves to y, r is ToggleRepeat (d-bcn65ven, d-wsmj4hvj).
       Options: Rate moves to a free key, e.g. y (name it) | Repeat goes to a free key instead and Rate keeps r | r is repeat only outside lists
       Checked: ~/.config/rormpc/config.ron navigation "r": Rate(), "R": AddRandom; rmpc/src/ui/mod.rs handle_action
       gives the pane the key first and claims the global binding only after, so a global r would toggle repeat
