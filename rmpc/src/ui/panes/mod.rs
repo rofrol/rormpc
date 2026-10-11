@@ -492,6 +492,11 @@ pub(crate) trait Pane {
         Ok(())
     }
 
+    /// rormpc: a frame drawn while no shown tab has this pane (Music's filter undo works from any tab).
+    fn background(&mut self, ctx: &Ctx) -> Result<()> {
+        Ok(())
+    }
+
     fn resize(&mut self, area: Rect, ctx: &Ctx) -> Result<()> {
         Ok(())
     }

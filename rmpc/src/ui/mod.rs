@@ -93,6 +93,7 @@ pub mod rormpc_playlists;
 pub mod rormpc_sets;
 pub mod rormpc_smartlists;
 pub mod rormpc_tags;
+pub mod rormpc_undo;
 pub mod rormpc_upnext;
 pub mod rormpc_versions;
 pub mod rormpc_years;
@@ -237,6 +238,12 @@ impl<'ui> Ui<'ui> {
             },
             ctx,
         )?;
+
+        // rormpc: Music's filters act from any tab (`z` / `Z`): its pane takes their results while hidden too
+        let play_shown = ctx.config.tabs.tabs.get(&ctx.active_tab).is_some_and(|t| t.panes.panes_iter().any(|p| p.pane == PaneType::Play));
+        if !play_shown && let Some(play) = self.panes.others.get_mut(&PaneType::Play) {
+            play.background(ctx)?;
+        }
 
         if ctx.config.theme.modal_backdrop && !self.modals.is_empty() {
             let buffer = frame.buffer_mut();
@@ -524,6 +531,19 @@ impl<'ui> Ui<'ui> {
                         client.stop()?;
                         Ok(())
                     });
+                }
+                GlobalAction::FilterUndo | GlobalAction::FilterRedo => {
+                    if self.panes.others.contains_key(&PaneType::Play) {
+                        let step = if matches!(action, GlobalAction::FilterUndo) {
+                            crate::ui::rormpc_play::Step::Undo
+                        } else {
+                            crate::ui::rormpc_play::Step::Redo
+                        };
+                        crate::ui::rormpc_play::request_step(step);
+                        ctx.render()?;
+                    } else {
+                        status_error!("No tab has Pane(Play()): filter undo needs Music's filters");
+                    }
                 }
                 GlobalAction::ToggleRepeat => {
                     let repeat = !ctx.status.repeat;

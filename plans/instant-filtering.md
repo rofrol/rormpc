@@ -3,7 +3,7 @@
 Written 2026-10-10 from the code, measurements on the real library (read-only) and consult round
 `20261010-230739-29d8` (GPT-6.1 Sol `7f68ca37`, Xiaomi MiMo `829929fd`). Every open choice was decided by the user on
 2026-10-11 ("Decided choices" at the end; they override the design where they differ). Built: build order steps 1
-(rormpc-tools 0.2.50/0.2.51), 2 and 3 (rormpc). It changes the decision "a filter change prepares, Apply plays" of
+(rormpc-tools 0.2.50/0.2.51), 2, 3 and 4 (rormpc). It changes the decision "a filter change prepares, Apply plays" of
 plans/combined-view.md (open choice 2 there, decided 2026-10-09); the rest of that plan stays.
 
 ## Goal (the user's words, translated)
@@ -310,7 +310,13 @@ decision ids in brackets).
    toggle shows the full result (d-eaccjsts). Built in step 3 on `o` (TogglePlanView, which did nothing in Music)
    and a click on `[ o rows ⇄ plan ]`.
 4. Undo / redo: `z` undo, `Z` redo, as in the ki editor (d-7x5qkzms), everywhere; ToggleRepeat moves to `r`
-   (d-3wvtn5zn) and Rate to `y` (d-bcn65ven, d-wsmj4hvj). Step 4.
+   (d-3wvtn5zn) and Rate to `y` (d-bcn65ven, d-wsmj4hvj). Built in step 4: global `FilterUndo` / `FilterRedo`
+   (`rormpc_undo`); an entry is recorded when its generation's writes started on the MPD command thread
+   (`Generations::reached`); undo past the first touch restores the other source around the playing song (its
+   songs before it in front of it, Up next kept); `z` while a run is under way takes that change back; the Play
+   pane takes steps and results while another tab is shown (`Pane::background`). The default `y` copy of the
+   displayed value went to make room for Rate (`Y` still copies); the smart list picker's `r` renames through
+   ToggleRepeat.
 5. 0 owned songs: the upcoming songs go, it stops after the playing song (Sol; d-sy7ma764). Built in step 3.
 6. Previous sources records a rule set when it is left, or once a song of it has played (d-m7t2ldzp). Step 5;
    until then each applied change is recorded.

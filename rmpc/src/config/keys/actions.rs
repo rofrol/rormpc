@@ -53,6 +53,10 @@ pub enum GlobalAction {
     HeardEnough,
     /// rormpc: send the playing song's listen to `ListenBrainz` now, through the scrobbler (asks when its rule is not met)
     ScrobbleNow,
+    /// rormpc: undo the last change of Music's filters (its queue follows), from any tab
+    FilterUndo,
+    /// rormpc: redo the filter change an undo took back
+    FilterRedo,
     TogglePause,
     Pause,
     Unpause,
@@ -121,6 +125,10 @@ pub enum GlobalActionFile {
     HeardEnough,
     /// rormpc: send the playing song's listen to `ListenBrainz` now, through the scrobbler (asks when its rule is not met)
     ScrobbleNow,
+    /// rormpc: undo the last change of Music's filters (its queue follows), from any tab
+    FilterUndo,
+    /// rormpc: redo the filter change an undo took back
+    FilterRedo,
     TogglePause,
     Pause,
     Unpause,
@@ -218,6 +226,8 @@ impl From<GlobalActionFile> for GlobalAction {
             GlobalActionFile::ToggleWeightedShuffle => GlobalAction::ToggleWeightedShuffle,
             GlobalActionFile::HeardEnough => GlobalAction::HeardEnough,
             GlobalActionFile::ScrobbleNow => GlobalAction::ScrobbleNow,
+            GlobalActionFile::FilterUndo => GlobalAction::FilterUndo,
+            GlobalActionFile::FilterRedo => GlobalAction::FilterRedo,
             GlobalActionFile::Partition { name, autocreate } => {
                 GlobalAction::Partition { name, autocreate }
             }
@@ -277,6 +287,8 @@ impl ToDescription for GlobalAction {
             GlobalAction::ToggleWeightedShuffle => "Weighted shuffle on/off (mpd-player: by plays and likes)".into(),
             GlobalAction::HeardEnough => "Heard enough: the playing song rests in the weighted shuffle and skips".into(),
             GlobalAction::ScrobbleNow => "Send to ListenBrainz now: the playing song's listen, through the scrobbler".into(),
+            GlobalAction::FilterUndo => "Undo the last change of Music's filters (the queue follows)".into(),
+            GlobalAction::FilterRedo => "Redo the filter change an undo took back".into(),
             GlobalAction::Partition { name: Some(name), .. }=> format!("Switch to '{name}' partition").into(),
             GlobalAction::Partition { name: None, .. }=> "Open partition management modal".into(),
         }

@@ -152,8 +152,22 @@ The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowP
   queue keeps the last result). Its right end, `[ o rows ⇄ plan ]` (`[ o rows ⇄ queue ]` in normal mode), shows the
   `hits` result rows, missing songs dimmed, instead of the plan or the queue: `o` (TogglePlanView) or a click; Esc
   goes back.
-- `a` outside Browse says once "Filters apply at once; z undoes" and does nothing else (undo with `z` / `Z` comes
-  with the next stage). Esc stops a running `hits`; its result never reaches the queue.
+- `a` outside Browse says once "Filters apply at once; z undoes" and does nothing else. Esc stops a running
+  `hits`; its result never reaches the queue.
+- **Undo and redo** (`z` FilterUndo, `Z` FilterRedo, global: they act on Music's filters from any tab; decided by
+  the user 2026-10-11): each change that reached MPD records the filter state it replaced (a change a newer one
+  dropped before it reached MPD is none, so a held key is one entry), 20 deep; a new change drops the redo. Undo and
+  redo are filter changes themselves: the filters load the old rules, `hits` runs, and the queue follows by the same
+  reconcile; they restore which songs are members, never the playback time or a hand edit of the queue. The first
+  filter touch that replaced another kind of source records that source with its files in order: undo brings the
+  album (playlist, library, the queue as it was) back, its songs before the playing one in front of it and the rest
+  after Up next, and the filters go back to its starting point. `z` while a change is still running takes that
+  change back. The counts line names the last change and the keys:
+  `Filter: +rock · 287 owned · 25 missing · was 312 · z undoes`, `Undo: rock cleared · … · Z redoes`. Music's pane
+  takes the results while another tab is shown, so `z` there changes the queue too.
+- Keys moved for this (decided by the user 2026-10-11): ToggleRepeat is on `r` (global) and Rate on `y`
+  (navigation; the default `y` copy of the displayed value is gone, `Y` still copies), so `r` reaches repeat in every
+  pane and no pane takes `z` / `Z`.
 - `source.json` of a filter source: `kind: "hits"`, the result's `files` (owned, in rank order), the result's `args`
   as `rules` and their canonical hash `rules_hash` (sets, Rank by, Years of, period, Top %, genres and artists in any
   order, owned; not "show excluded"), `added`, `held` (songs of the source the newest rules left out but that could
@@ -240,10 +254,10 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
   becomes the open one.
 - `L` (`SmartLists`) opens the picker: Smart lists, Previous sources, then MPD playlists and Live playlists in their
   own sections (the "Smart …" exports are left out of the MPD section). Enter loads a list's rules into the filter
-  column, and they apply at once like any filter change (`a` on a list row does the same). `r` renames, `u` updates it
+  column, and they apply at once like any filter change (`a` on a list row does the same). `r` (ToggleRepeat, Rate or Rename) renames, `u` updates it
   with the filters on screen, `c` duplicates it (with its exceptions), `d` deletes it after a confirmation (its
   exceptions and its "Smart NAME" playlist go with it); Left/Right and a click pick the same buttons. The letters are
-  matched by what they are bound to (Add, Rate, Update, ToggleConsume/ConsumeOff, Delete), since a modal sees actions,
+  matched by what they are bound to (Add, ToggleRepeat/Rate/Rename, Update, ToggleConsume/ConsumeOff, Delete), since a modal sees actions,
   not keys. Enter on an MPD or Live playlist plays it as the source, after the same confirmation as "Sources…".
   "× Close the smart list" keeps the filters and leaves the list.
 - The open smart list is part of the filters: Music runs `hits --open-list ID`, so the list's own exceptions
@@ -843,7 +857,7 @@ is not subscribed to the channel, and rormpc says so instead of sending.
 Hits has a ♥ column (rmpc's like sticker: ♥ like, ✗ dislike; `·` for missing songs, which have no file to rate).
 In Hits and Queue (Music in both modes, the weighted plan view included), the like cell under the mouse is underlined
 so it reads as clickable: ♥ and ✗ also turn bold, an unrated song shows a dimmed ♥. A click on the cell toggles like and nothing
-else (no selection, no playback). `r` in Hits toggles like for the selected row; dislike is in the menu. `/` in
+else (no selection, no playback). `y` (Rate) in Hits toggles like for the selected row; dislike is in the menu. `/` in
 Hits searches artist and title (words in any order, diacritics folded) within the result, "23 shown / 410
 results"; Esc clears it. Mouse moves reach the active tab's panes (upstream drops them), without a render unless
 a pane's hover changed.

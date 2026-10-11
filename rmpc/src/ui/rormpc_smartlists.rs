@@ -408,8 +408,13 @@ fn is_apply(e: &ActionEvent) -> bool {
     e.actions.iter().any(|a| matches!(a.as_common(), Some(CommonAction::AddOptions { .. })))
 }
 
+/// `r` renames: it is the global `ToggleRepeat` (Rate moved to `y`, decided by the user 2026-10-11); Rate and
+/// Rename (`<C-r>`) still do.
 fn is_rename(e: &ActionEvent) -> bool {
-    e.actions.iter().any(|a| matches!(a.as_common(), Some(CommonAction::Rate { .. } | CommonAction::Rename)))
+    e.actions.iter().any(|a| {
+        matches!(a.as_common(), Some(CommonAction::Rate { .. } | CommonAction::Rename))
+            || matches!(a.as_global(), Some(GlobalAction::ToggleRepeat))
+    })
 }
 
 fn is_update(e: &ActionEvent) -> bool {

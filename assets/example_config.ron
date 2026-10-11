@@ -47,7 +47,9 @@
             "op":         ShowDecoders,
             "od":         ShowDownloads,
             "oP":         Partition(),
-            "z":          ToggleRepeat,
+            "z":          FilterUndo, // rormpc: undo the last change of Music's filters (the queue follows), from any tab
+            "Z":          FilterRedo,
+            "r":          ToggleRepeat,
             "x":          ToggleRandom,
             "w":          ToggleWeightedShuffle, // rormpc: mpd-player draws the next song; Music shows its plan
             "oL":         ScrobbleNow, // rormpc: send the playing song to ListenBrainz now (asks when the rule is not met)
@@ -133,12 +135,11 @@
             "<C-s>s":     Save(kind: Modal(all: false, duplicates_strategy: Ask)),
             "<C-s>c":     Save(kind: Modal(all: false, duplicates_strategy: Ask), current: true),
             "<C-s>a":     Save(kind: Modal(all: true, duplicates_strategy: Ask)),
-            "r":          Rate(),
             "Y":          CopyToClipboard(kind: Modal([
                               ("Displayed value", (content: DisplayedValue, all: false)),
                               ("Artist - Title", (content: Metadata([(kind: Property(Artist)), (kind: Text(" - ")), (kind: Property(Title))]), all: false)),
                           ])),
-            "y":          CopyToClipboard(kind: Content(content: DisplayedValue, all : false)),
+            "y":          Rate(), // rormpc: on y, so r reaches the global ToggleRepeat in every pane
             "P":          PlayReplace, // rormpc: Play's Browse plays the selection in its order, replacing the queue
             "t":          PlayNext, // rormpc: the selection goes into Up next
         },

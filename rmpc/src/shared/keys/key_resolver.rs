@@ -706,4 +706,22 @@ mod test {
         );
         assert_eq!(typed, "cl");
     }
+
+    /// The default keys (decided by the user 2026-10-11): `r` is only the global repeat, so no pane can take it
+    /// first; Rate is on `y`; `z` / `Z` are only the filter undo and redo (`z` waits for the `zt` / `zz` / `zb`
+    /// scrolls, which no pane binds alone).
+    #[test]
+    fn repeat_is_on_r_rate_on_y_and_z_undoes_filters() {
+        use crate::config::{Config, keys::GlobalAction};
+        let resolver = KeyResolver::new(&Config::default());
+        let actions = |keys: &[Key]| match resolver.traverse(keys, &resolver.normal_root) {
+            TraverseResult::Exact(a) | TraverseResult::Ambiguous(a) => a,
+            other => panic!("expected an action for {keys:?}, got {other:?}"),
+        };
+        assert!(matches!(actions(&[k('r')]).as_slice(), [Actions::Global(GlobalAction::ToggleRepeat)]));
+        assert!(matches!(actions(&[k('y')]).as_slice(), [Actions::Common(CommonAction::Rate { .. })]));
+        assert!(matches!(actions(&[k('z')]).as_slice(), [Actions::Global(GlobalAction::FilterUndo)]));
+        let shift_z = Key { key: KeyCode::Char('Z'), modifiers: KeyModifiers::SHIFT };
+        assert!(matches!(actions(&[shift_z]).as_slice(), [Actions::Global(GlobalAction::FilterRedo)]));
+    }
 }

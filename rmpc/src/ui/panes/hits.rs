@@ -860,6 +860,15 @@ impl HitsPane {
     /// Esc: stop the `hits` run in progress (and any queued after it); the table keeps the rows it shows.
     /// False when nothing runs.
     pub(crate) fn stop_run(&mut self) -> bool {
+        if !self.cancel_run() {
+            return false;
+        }
+        status_info!("Stopped hits: the table keeps the rows it shows (change a filter or Apply to run it again)");
+        true
+    }
+
+    /// Stop the `hits` run in progress without a word (undo takes over); false when nothing runs.
+    pub(crate) fn cancel_run(&mut self) -> bool {
         let mut job = self.job.lock().expect("hits job lock");
         if job.current.is_none() {
             return false;
@@ -867,8 +876,6 @@ impl HitsPane {
         job.queued = None;
         job.stopped = true;
         job.kill();
-        drop(job);
-        status_info!("Stopped hits: the table keeps the rows it shows (change a filter or Apply to run it again)");
         true
     }
 
@@ -905,6 +912,15 @@ impl HitsPane {
         let parsed = args.and_then(|a| serde_json::from_value::<HitsArgs>(a.clone()).ok());
         let filters = parsed.as_ref().map_or_else(Filters::default, Filters::from_args);
         crate::ui::rormpc_play::rules_hash(&filters.rules_key())
+    }
+
+    /// What going from the rules `old` to `new` (result files' `args`) changes, in a few words for the line under
+    /// Music's header: "+rock", "rock cleared", "Period 1985–1993", at most three parts.
+    pub(crate) fn describe_change(old: &serde_json::Value, new: &serde_json::Value) -> String {
+        let parse = |a: &serde_json::Value| {
+            serde_json::from_value::<HitsArgs>(a.clone()).ok().as_ref().map_or_else(Filters::default, Filters::from_args)
+        };
+        describe_filters_change(&parse(old), &parse(new))
     }
 
     /// The canonical hash of the filters on screen (`show excluded` is a view, not a rule).
@@ -3466,6 +3482,46 @@ impl Job {
 
 /// Start `run`, or, while one runs, stop that one and queue `run` to start when it exited (replacing an
 /// older queued run): the newest run wins, and a superseded result never replaces the table.
+/// `HitsPane::describe_change`: the genres and artists by name ("+rock", "-country", "rock cleared"), the other
+/// facets by their new value ("Period 1985–1993"); "same rules" when nothing differs.
+fn describe_filters_change(old: &Filters, new: &Filters) -> String {
+    fn signed(old: &[(String, i8)], new: &[(String, i8)], out: &mut Vec<String>) {
+        let sign_in = |items: &[(String, i8)], name: &str| items.iter().find(|(n, _)| n == name).map_or(0, |(_, s)| *s);
+        for (name, s) in new.iter().filter(|(_, s)| *s != 0) {
+            if sign_in(old, name) != *s {
+                out.push(format!("{}{name}", if *s > 0 { '+' } else { '-' }));
+            }
+        }
+        for (name, _) in old.iter().filter(|(_, s)| *s != 0) {
+            if sign_in(new, name) == 0 {
+                out.push(format!("{name} cleared"));
+            }
+        }
+    }
+    let mut parts = Vec::new();
+    let before = old.facets();
+    for (label, value) in new.facets() {
+        if matches!(label, "Genres" | "Artists" | "Show excluded") {
+            continue;
+        }
+        if !before.iter().any(|(l, v)| *l == label && *v == value) {
+            parts.push(format!("{label} {value}"));
+        }
+    }
+    signed(&old.genres, &new.genres, &mut parts);
+    signed(&old.artists, &new.artists, &mut parts);
+    if parts.is_empty() {
+        return "same rules".to_owned();
+    }
+    let more = parts.len() > 3;
+    parts.truncate(3);
+    let mut text = parts.join(", ");
+    if more {
+        text.push_str(", …");
+    }
+    text
+}
+
 fn start_run(job: &Arc<Mutex<Job>>, run: Run, command: &[String], path: &Path, sender: crossbeam::channel::Sender<AppEvent>) {
     let mut j = job.lock().expect("hits job lock");
     if j.current.is_some() {
@@ -4186,6 +4242,22 @@ printf '%s' "$1" > "$out""#;
         f.toggle(FilterRow::ClearGenres);
         assert_eq!(f.genres_heading(), "Genres: all");
         assert_eq!(f.genre_spec(), "");
+    }
+
+    #[test]
+    fn a_change_is_described_by_what_it_changed() {
+        let old = Filters::default();
+        let mut new = old.clone();
+        new.add_genres("+rock, -country");
+        assert_eq!(describe_filters_change(&old, &new), "+rock, -country");
+        assert_eq!(describe_filters_change(&new, &old), "rock cleared, country cleared");
+        let mut decade = old.clone();
+        decade.decades[4] = true;
+        assert_eq!(describe_filters_change(&old, &decade), "Period 1980–1989, 1990–1999");
+        assert_eq!(describe_filters_change(&old, &old), "same rules");
+        let mut many = old.clone();
+        many.add_genres("+a, +b, +c, +d");
+        assert_eq!(describe_filters_change(&old, &many), "+a, +b, +c, …");
     }
 
     #[test]

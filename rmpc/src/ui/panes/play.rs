@@ -12,6 +12,8 @@
 //!   on, Up next stays. A queue holding another kind of source is replaced by the first filter touch. There is no
 //!   preview and no Apply; the line under the header has the counts (`287 owned · 25 missing · was 312`), and `o`
 //!   switches the table between the result rows and the plan (weighted) or the queue.
+//! - `z` / `Z` (global `FilterUndo` / `FilterRedo`, from any tab) walk the filter history (`rormpc_undo`): an undo
+//!   is a filter change itself, and past the first touch it brings the replaced source back in its order.
 //! - The header line always says what plays and how: `▶ Playing from: … · weighted · round 12/84`, and the open
 //!   smart list (`Smart list: 80s party`, "changed" once the filters differ from its rules).
 //! - Smart lists (`rormpc_smartlists`): `S` saves the filters, `L` picks a list, a previous source or a playlist;
@@ -34,10 +36,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write as _,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, atomic::Ordering},
 };
 
 use anyhow::Result;
@@ -87,10 +86,11 @@ use crate::{
         modals::confirm_modal::{Action, ConfirmModal},
         rormpc_browse,
         rormpc_exceptions::{self, Kind},
-        rormpc_play,
+        rormpc_play::{self, LastChange, Step},
         rormpc_player,
         rormpc_smartlists::{self, Pick},
-        rormpc_upnext::{self, HitsSource},
+        rormpc_undo::{Departed, History, State},
+        rormpc_upnext::{self, Generations, HitsSource},
         rormpc_years::YearsPane,
     },
 };
@@ -144,6 +144,33 @@ enum Table {
     Rows,
 }
 
+/// An undo or redo whose rules' `hits` run has not reached the queue yet.
+#[derive(Debug)]
+struct Restoring {
+    /// the rules' hash: a result with other rules is a newer change of the user's
+    hash: String,
+    /// what the counts line says once it is in ("Undo: rock cleared")
+    label: String,
+}
+
+/// What a change from `before` to `rules` did, in a few words.
+fn describe(before: Option<&State>, rules: &serde_json::Value) -> String {
+    match before {
+        Some(State::Rules(old)) => HitsPane::describe_change(old, rules),
+        Some(State::Other(d)) => format!("replaced {}", departed_label(d)),
+        None => "applied".to_owned(),
+    }
+}
+
+/// "album Low", "playlist 80s", "the whole library".
+fn departed_label(d: &Departed) -> String {
+    match d.kind.as_str() {
+        "library" => "the whole library".to_owned(),
+        "selection" => d.name.clone(),
+        kind => format!("{} {}", rormpc_upnext::kind_label(kind), d.name),
+    }
+}
+
 /// Areas of Browse's last render, for the mouse.
 #[derive(Debug, Default)]
 struct BrowseAreas {
@@ -181,9 +208,17 @@ pub struct PlayPane {
     /// once taken
     source_hash: Option<String>,
     synced: bool,
-    /// the newest filter intent: every `hits` run the filters start bumps it, and a reconcile still queued for
-    /// an older one is dropped on the MPD command thread
-    generation: Arc<AtomicU64>,
+    /// the newest filter intent (every `hits` run the filters start bumps it, and a reconcile still queued for
+    /// an older one is dropped on the MPD command thread) and the newest one whose writes started
+    gens: Generations,
+    /// `z` / `Z`: the filter states the changes that reached MPD replaced (`rormpc_undo`)
+    history: History,
+    /// what the last change did ("Filter: +rock", "Undo: rock cleared"), for the counts line
+    last_change: Option<String>,
+    /// an undo or redo under way: its rules' run is no new history entry
+    restoring: Option<Restoring>,
+    /// an undo bringing another source back (kind, name): source.json naming it is no outside change
+    expect_other: Option<(String, String)>,
     /// rules hashes this pane reconciled the queue with: source.json naming one of them is ours, so it never
     /// resets the filters (a newer change may be on screen already)
     sent: HashSet<String>,
@@ -204,9 +239,9 @@ pub struct PlayPane {
 
 impl PlayPane {
     pub fn new(ctx: &Ctx) -> Self {
-        let generation = Arc::new(AtomicU64::new(0));
+        let gens = Generations::default();
         let mut s = Self {
-            hits: HitsPane::for_play(rormpc_play::PREVIEW_FILE.to_owned(), vec!["hits".to_owned()], Arc::clone(&generation)),
+            hits: HitsPane::for_play(rormpc_play::PREVIEW_FILE.to_owned(), vec!["hits".to_owned()], Arc::clone(&gens.latest)),
             queue: QueuePane::new(ctx),
             left: Left::Filters,
             browse_focus: false,
@@ -219,7 +254,11 @@ impl PlayPane {
             baseline: None,
             source_hash: None,
             synced: false,
-            generation,
+            gens,
+            history: History::default(),
+            last_change: None,
+            restoring: None,
+            expect_other: None,
             sent: HashSet::new(),
             owned: None,
             owned_was: None,
@@ -288,10 +327,83 @@ impl PlayPane {
         self.owned_was = self.owned;
         self.owned = Some(info.files.len());
         self.sent.insert(rules_hash.clone());
-        let generation = self.generation.load(Ordering::SeqCst);
+        let generation = self.gens.latest.load(Ordering::SeqCst);
+        // the history: an undo's or redo's own run is no entry; a user's change records what it replaced, the
+        // other kind of source in the queue on the first touch
+        let restore = self.restoring.take().filter(|r| r.hash == rules_hash);
+        if !rormpc_upnext::holds_filter_source() {
+            self.history.set_in_mpd(State::Other(rormpc_upnext::departed(ctx)));
+        }
+        self.last_change = Some(match &restore {
+            Some(r) => r.label.clone(),
+            None => format!("Filter: {}", describe(self.history.current(), &rules)),
+        });
+        let reached = self.gens.reached.load(Ordering::SeqCst);
+        self.history.sent(generation, State::Rules(rules.clone()), restore.is_none(), reached);
         let in_order = !rormpc_player::shuffle_state().enabled;
         let src = HitsSource { name, files: info.files, rules, rules_hash };
-        rormpc_upnext::reconcile_hits_source(ctx, src, generation, Arc::clone(&self.generation), in_order);
+        rormpc_upnext::reconcile_hits_source(ctx, src, generation, self.gens.clone(), in_order);
+    }
+
+    /// `z` / `Z` asked for since the last frame, from any tab, in order.
+    fn take_steps(&mut self, ctx: &Ctx) {
+        for step in rormpc_play::take_steps() {
+            self.step(step, ctx);
+        }
+    }
+
+    /// One undo or redo: itself a filter change (it bumps the generation and the queue follows), restoring the
+    /// membership, never the playback time. Undo while a change is still under way takes that change back.
+    fn step(&mut self, step: Step, ctx: &Ctx) {
+        let running = self.hits.preview_info().running;
+        if running && step == Step::Redo {
+            return status_info!("A filter change is under way: nothing to redo");
+        }
+        if running {
+            self.hits.cancel_run();
+            match self.history.current().cloned() {
+                Some(State::Rules(r)) => self.restore_rules(&r, "Undo: the change under way".to_owned()),
+                // the first touch was still running: the other source never left the queue
+                _ if !rormpc_upnext::holds_filter_source() => {
+                    self.gens.latest.fetch_add(1, Ordering::SeqCst);
+                    self.hits.reset_filters(self.baseline.as_ref());
+                    self.last_change = Some("Undo: the change under way".to_owned());
+                }
+                _ => {}
+            }
+            return;
+        }
+        let before = self.history.current().cloned();
+        let (target, verb) = match step {
+            Step::Undo => (self.history.undo(), "Undo"),
+            Step::Redo => (self.history.redo(), "Redo"),
+        };
+        match target {
+            None if step == Step::Undo => status_info!("Nothing to undo in Music's filters"),
+            None => status_info!("Nothing to redo in Music's filters"),
+            Some(State::Rules(r)) => {
+                let label = format!("{verb}: {}", describe(before.as_ref(), &r));
+                self.restore_rules(&r, label);
+            }
+            Some(State::Other(d)) => {
+                self.hits.cancel_run();
+                let generation = self.gens.latest.fetch_add(1, Ordering::SeqCst) + 1;
+                let label = format!("{verb}: back to {}", departed_label(&d));
+                self.last_change = Some(label);
+                self.restoring = None;
+                self.expect_other = Some((d.kind.clone(), d.name.clone()));
+                rormpc_upnext::restore_departed(ctx, d, generation, self.gens.clone());
+            }
+        }
+    }
+
+    /// Load `rules` into the filters: the next frame runs `hits` for them and the queue follows, as no new entry.
+    fn restore_rules(&mut self, rules: &serde_json::Value, label: String) {
+        if let Err(err) = self.hits.load_filters(rules) {
+            return status_error!("These rules cannot be loaded: {err}");
+        }
+        self.restoring = Some(Restoring { hash: HitsPane::rules_hash_of(Some(rules)), label });
+        rormpc_smartlists::set_open(self.open_list().map(|(id, name, _)| (id, name)));
     }
 
     /// `S`: save the filters on screen as a smart list.
@@ -334,6 +446,15 @@ impl PlayPane {
             self.sent.clear();
             self.owned = None;
             self.owned_was = None;
+            // an undo brought this source back: the history goes on; anything else starts a new one
+            let restored = self.expect_other.take().is_some_and(|(kind, name)| {
+                rormpc_upnext::source_info().is_some_and(|(k, n, _)| k == kind && n == name)
+            });
+            if !restored {
+                self.history.reset(self.baseline.clone().map(State::Rules));
+                self.last_change = None;
+                self.restoring = None;
+            }
         }
     }
 
@@ -801,8 +922,13 @@ impl PlayPane {
         let toggle = format!("[ o rows ⇄ {other} ]");
         let width = toggle.chars().count() as u16;
         let [t, b] = Layout::horizontal([Constraint::Min(1), Constraint::Length(width)]).spacing(1).areas(counts);
-        let asked = self.generation.load(Ordering::SeqCst) > 0;
-        let text = rormpc_play::counts_line(&self.hits.preview_info(), self.owned_was, asked);
+        let asked = self.gens.latest.load(Ordering::SeqCst) > 0;
+        let last = LastChange {
+            what: self.last_change.as_deref(),
+            undo: self.history.can_undo(),
+            redo: self.history.can_redo(),
+        };
+        let text = rormpc_play::counts_line(&self.hits.preview_info(), self.owned_was, asked, last);
         frame.render_widget(Paragraph::new(Line::from(Span::styled(text, ctx.config.theme.preview_label_style))), t);
         let on = ctx.config.theme.preview_label_style.add_modifier(Modifier::REVERSED | Modifier::BOLD);
         let off = Style::default().add_modifier(Modifier::DIM);
@@ -856,6 +982,7 @@ impl Pane for PlayPane {
         self.take_view_request(ctx);
         // a pick first: `prepare` then runs `hits` for the rules it loaded in this same frame
         self.take_pick();
+        self.take_steps(ctx);
         self.hits.prepare(ctx);
         self.apply_result(ctx);
         self.sync(ctx);
@@ -1160,6 +1287,15 @@ impl Pane for PlayPane {
 
     fn resize(&mut self, area: Rect, ctx: &Ctx) -> Result<()> {
         self.queue.resize(area, ctx)
+    }
+
+    /// Music in no shown tab: `z` / `Z` still go through the filters, and their results reach the queue.
+    fn background(&mut self, ctx: &Ctx) -> Result<()> {
+        self.take_steps(ctx);
+        self.hits.prepare(ctx);
+        self.apply_result(ctx);
+        self.sync(ctx);
+        Ok(())
     }
 }
 

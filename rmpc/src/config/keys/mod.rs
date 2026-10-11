@@ -24,8 +24,6 @@ use crate::config::keys::actions::CopyContentsFile;
 use crate::config::tabs::{PlayGrouping, PlayView};
 use crate::config::keys::{
     actions::{
-        CopyContentFile,
-        CopyContentsFile,
         CopyContentsKindFile,
         DuplicateStrategy,
         RateKind,
@@ -87,7 +85,10 @@ impl Default for KeyConfigFile {
             (s().char('o').char('p'),             G::ShowDecoders),
             (s().char('o').char('d'),             G::ShowDownloads),
             (s().char('o').char('P'),             G::Partition { name: None, autocreate: false }),
-            (s().char('z'),                       G::ToggleRepeat),
+            // rormpc: z / Z undo and redo Music's filter changes from any tab, repeat is on r (decided 2026-10-11)
+            (s().char('z'),                       G::FilterUndo),
+            (s().char('Z'),                       G::FilterRedo),
+            (s().char('r'),                       G::ToggleRepeat),
             (s().char('x'),                       G::ToggleRandom),
             (s().char('w'),                       G::ToggleWeightedShuffle),
             (s().char('o').char('L'),             G::ScrobbleNow),
@@ -166,7 +167,6 @@ impl Default for KeyConfigFile {
             (s().char(' '),                       C::Select),
             (s().char(' ').ctrl(),                C::InvertSelection),
             (s().char('Y'),                       C::CopyToClipboard { kind: CopyContentsKindFile::default() }),
-            (s().char('y'),                       C::CopyToClipboard { kind: CopyContentsKindFile::Content(CopyContentsFile { all: false, content: CopyContentFile::DisplayedValue })}),
             (s().char('a'),                       C::Add),
             (s().char('A'),                       C::AddAll),
             (s().char('D'),                       C::Delete),
@@ -177,7 +177,8 @@ impl Default for KeyConfigFile {
             (s().char('s').ctrl().char('s'),      C::Save { kind: SaveKind::Modal { all: false, duplicates_strategy: DuplicateStrategy::Ask }, current: false }),
             (s().char('s').ctrl().char('a'),      C::Save { kind: SaveKind::Modal { all: true, duplicates_strategy: DuplicateStrategy::Ask }, current: false }),
             (s().char('s').ctrl().char('c'),      C::Save { kind: SaveKind::Modal { all: false, duplicates_strategy: DuplicateStrategy::Ask }, current: true }),
-            (s().char('r'),                       C::Rate { kind: RateKind::default(), current: false, min_rating: 0, max_rating: 10 }),
+            // rormpc: Rate on y, so r reaches the global ToggleRepeat in every pane
+            (s().char('y'),                       C::Rate { kind: RateKind::default(), current: false, min_rating: 0, max_rating: 10 }),
             (s().char('P'),                       C::PlayReplace),
             (s().char('t'),                       C::PlayNext),
         ]);

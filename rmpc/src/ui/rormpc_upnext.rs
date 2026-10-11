@@ -43,6 +43,7 @@ use crate::{
             menu::modal::MenuModal,
         },
         rormpc_player,
+        rormpc_undo::Departed,
     },
 };
 
@@ -159,17 +160,149 @@ pub struct HitsSource {
     pub rules_hash: String,
 }
 
+/// The generation counters of Music's filters: `latest` is the newest intent, `reached` the newest generation
+/// whose queue writes started on the MPD command thread (the undo history's entries are the ones that did).
+#[derive(Debug, Clone, Default)]
+pub struct Generations {
+    pub latest: Arc<AtomicU64>,
+    pub reached: Arc<AtomicU64>,
+}
+
+impl Generations {
+    /// Whether `generation` is still the newest: then it counts as reached and its writes go ahead.
+    fn start(&self, generation: u64) -> bool {
+        if self.latest.load(Ordering::SeqCst) != generation {
+            return false; // a newer generation follows: it changes the queue from the state it is in then
+        }
+        self.reached.fetch_max(generation, Ordering::SeqCst);
+        true
+    }
+}
+
 /// Music's filters apply at once (plans/instant-filtering.md): generation `generation` reconciles the queue with
-/// `src` on the MPD command thread, unless a newer generation was asked for by then (`latest`): a backlog of
+/// `src` on the MPD command thread, unless a newer generation was asked for by then (`gens.latest`): a backlog of
 /// reconciles collapses to the newest, and one that has started finishes its command list. `in_order` (weighted
 /// shuffle off) also moves the source's songs after the playing one into rank order.
-pub fn reconcile_hits_source(ctx: &Ctx, src: HitsSource, generation: u64, latest: Arc<AtomicU64>, in_order: bool) {
+pub fn reconcile_hits_source(ctx: &Ctx, src: HitsSource, generation: u64, gens: Generations, in_order: bool) {
     ctx.command(move |_, client| {
-        if latest.load(Ordering::SeqCst) != generation {
-            return Ok(()); // a newer generation follows: it reconciles from the queue as it is then
+        if !gens.start(generation) {
+            return Ok(());
         }
         reconcile(client, src, in_order)
     });
+}
+
+/// Whether the queue holds Music's filter source (else another kind of source, which a filter change replaces).
+pub fn holds_filter_source() -> bool {
+    state().lock().is_ok_and(|g| g.source.as_ref().is_some_and(|s| s.kind == "hits" && s.source_id.is_some()))
+}
+
+/// The source in the queue as undo brings it back: source.json's, with its files in order; a queue without one
+/// (or a source that kept no files) is taken as it is, without the Up next requests.
+pub fn departed(ctx: &Ctx) -> Departed {
+    let src = state().lock().ok().and_then(|g| g.source.clone());
+    let up_next = up_next_ids();
+    let queue_files = || ctx.queue.iter().filter(|s| !up_next.contains(&s.id)).map(|s| s.file.clone()).collect();
+    match src {
+        Some(s) if matches!(s.kind.as_str(), "library" | "playlist") => Departed { kind: s.kind, name: s.name, files: Vec::new() },
+        Some(s) if !s.files.is_empty() => Departed { kind: s.kind, name: s.name, files: s.files },
+        Some(s) => Departed { kind: s.kind, name: s.name, files: queue_files() },
+        None => Departed { kind: "selection".to_owned(), name: "the queue before the filters".to_owned(), files: queue_files() },
+    }
+}
+
+/// Undo past the first filter touch: `d` comes back as the source, in its order around the playing song (the
+/// songs before it in `d` go before it), Up next stays; generation-tagged like a reconcile.
+pub fn restore_departed(ctx: &Ctx, d: Departed, generation: u64, gens: Generations) {
+    ctx.command(move |_, client| {
+        if !gens.start(generation) {
+            return Ok(());
+        }
+        restore(client, d)
+    });
+}
+
+/// What a restore does: every entry but the playing song and the Up next requests leaves; `files` come back
+/// with the ones before the playing song's file (when it is one of them) in front of it, the rest at the end.
+fn plan_restore(queue: &[(u32, &str)], playing: Option<u32>, up_next: &[u32], files: &[String]) -> Vec<Cmd> {
+    let kept = |id: u32| Some(id) == playing || up_next.contains(&id);
+    let mut cmds: Vec<Cmd> = queue.iter().filter(|(id, _)| !kept(*id)).map(|(id, _)| Cmd::Delete(*id)).collect();
+    let playing_file = queue.iter().find(|(id, _)| Some(*id) == playing).map(|(_, f)| *f);
+    let at = playing_file.and_then(|p| files.iter().position(|f| f == p));
+    for (i, f) in files.iter().enumerate() {
+        match at {
+            Some(k) if i < k => cmds.push(Cmd::Add(f.clone(), Some(i))),
+            Some(k) if i == k => {}
+            _ => cmds.push(Cmd::Add(f.clone(), None)),
+        }
+    }
+    cmds
+}
+
+/// One restore (see `plan_restore`): source.json first, then one command list; a file MPD no longer has is
+/// left out and the rest planned again from the queue as it then is.
+fn restore(client: &mut rmpc_mpd::client::Client<'_>, d: Departed) -> Result<()> {
+    let Departed { kind, name, mut files } = d;
+    match kind.as_str() {
+        "playlist" => files = client.list_playlist(&name)?.0,
+        "library" => files = vec!["/".to_owned()],
+        _ => {}
+    }
+    let members = if kind == "library" { Vec::new() } else { files.clone() };
+    let mut src = Source {
+        kind,
+        name,
+        len: members.len(),
+        files: members,
+        rules: None,
+        rules_hash: None,
+        added: Vec::new(),
+        source_id: None,
+        generation: None,
+        held: Vec::new(),
+    };
+    publish(Some(src.clone()));
+    let mut gone = 0;
+    loop {
+        let status = client.get_status()?;
+        let queue = client.playlist_info()?.unwrap_or_default();
+        let entries: Vec<(u32, &str)> = queue.iter().map(|s| (s.id, s.file.as_str())).collect();
+        let cmds = plan_restore(&entries, status.songid, &up_next_ids(), &files);
+        if cmds.is_empty() {
+            break;
+        }
+        client.send_start_cmd_list()?;
+        for cmd in &cmds {
+            match cmd {
+                Cmd::Delete(id) => client.send_delete_id(*id)?,
+                Cmd::Add(f, at) => client.send_add(f, at.map(QueuePosition::Absolute))?,
+                Cmd::Move(id, to) => client.send_move_id(*id, QueuePosition::Absolute(*to))?,
+            }
+        }
+        client.send_execute_cmd_list()?;
+        match client.read_ok() {
+            Ok(()) => break,
+            Err(MpdError::Mpd(e)) if e.is_no_exist() => {
+                let Some(Cmd::Add(f, _)) = cmds.get(e.command_list_index) else { return Err(MpdError::Mpd(e).into()) };
+                let f = f.clone();
+                files.retain(|t| *t != f);
+                src.files.retain(|t| *t != f);
+                gone += 1;
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+    let len = client.playlist_info()?.map_or(0, |q| q.len());
+    let up = upnext_file();
+    src.len = len.saturating_sub(up.entries.iter().chain(up.playing.iter()).filter(|e| e.added).count());
+    let what = match src.kind.as_str() {
+        "library" => "the whole library".to_owned(),
+        "playlist" => format!("playlist {}", src.name),
+        kind => format!("{} {}", kind_label(kind), src.name),
+    };
+    publish(Some(src));
+    status_info!("Back to {what}{}", left_out_note(gone));
+    Ok(())
 }
 
 /// Hits "Play these results": the owned rows replace the queue as the source, after a confirmation.
@@ -1256,6 +1389,36 @@ mod tests {
         assert_eq!(at(1, &["gone"]), Some(1)); // its own song is gone: "b" starts
         assert_eq!(at(0, &["gone"]), Some(0));
         assert_eq!(at(2, &["gone", "b", "c"]), Some(0)); // nothing from the start on: the last one MPD took
+    }
+
+    #[test]
+    fn a_restored_album_comes_back_in_its_order_around_the_playing_song() {
+        // the filters' songs x, y and a phone's z go; track 2 plays on, Up next 9 stays
+        let q = [(1, "x"), (2, "t2"), (9, "req"), (3, "y"), (4, "z")];
+        let cmds = plan_restore(&q, Some(2), &[9], &strings(&["t1", "t2", "t3"]));
+        assert_eq!(cmds, vec![
+            Cmd::Delete(1),
+            Cmd::Delete(3),
+            Cmd::Delete(4),
+            Cmd::Add("t1".into(), Some(0)),
+            Cmd::Add("t3".into(), None),
+        ]);
+        // the playing song is not the album's: it plays on and the album follows Up next
+        let cmds = plan_restore(&[(1, "x"), (2, "y")], Some(1), &[], &strings(&["t1", "t2"]));
+        assert_eq!(cmds, vec![Cmd::Delete(2), Cmd::Add("t1".into(), None), Cmd::Add("t2".into(), None)]);
+        // nothing plays: the whole queue is the album again
+        let cmds = plan_restore(&[(1, "x")], None, &[], &strings(&["t1"]));
+        assert_eq!(cmds, vec![Cmd::Delete(1), Cmd::Add("t1".into(), None)]);
+    }
+
+    #[test]
+    fn a_generation_counts_as_reached_only_while_it_is_the_newest() {
+        let gens = Generations::default();
+        gens.latest.store(3, Ordering::SeqCst);
+        assert!(!gens.start(2), "a stale generation never writes");
+        assert_eq!(gens.reached.load(Ordering::SeqCst), 0);
+        assert!(gens.start(3));
+        assert_eq!(gens.reached.load(Ordering::SeqCst), 3);
     }
 
     #[test]

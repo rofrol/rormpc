@@ -5,7 +5,8 @@
 //! - Browse's `P` (phase 3b) replaces the queue with an album, folder, artist or list in its order, and starts it
 //!   at once. It asks first only when the source kind changes or more than a quarter of the queue would go; the
 //!   replace carries the queue's `playlist` version and refuses when MPD's moved since. No retry, no delay.
-//! - `ShowPlay` (5-9, 0, gl) leaves the view it asks for here; Play takes it on its next render.
+//! - `ShowPlay` (5-9, 0, gl) leaves the view it asks for here; Play takes it on its next render. `z` / `Z`
+//!   (`FilterUndo` / `FilterRedo`) leave their steps here too, taken by Play whether its tab is shown or not.
 
 use std::{collections::HashSet, sync::Mutex};
 
@@ -47,12 +48,22 @@ pub fn rules_hash(key: &str) -> String {
     format!("{h:016x}")
 }
 
+/// What the last filter change did, for the line under Music's header ("Filter: +rock", "Undo: rock cleared"),
+/// and whether `z` / `Z` have something to do.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LastChange<'a> {
+    pub what: Option<&'a str>,
+    pub undo: bool,
+    pub redo: bool,
+}
+
 /// The line under Music's header: what the filters made of the queue. `was`: the owned songs of the generation
 /// before the newest one sent to MPD; `asked`: a filter change ran `hits` in this session (until then the file
-/// on disk, or its absence, says nothing about the queue).
-pub fn counts_line(info: &PreviewInfo, was: Option<usize>, asked: bool) -> String {
+/// on disk, or its absence, says nothing about the queue); `last`: the last change and the undo keys.
+pub fn counts_line(info: &PreviewInfo, was: Option<usize>, asked: bool, last: LastChange<'_>) -> String {
+    const IDLE: &str = "Filters apply at once · o: the result rows";
     if !asked {
-        return "Filters apply at once · o: the result rows".to_owned();
+        return IDLE.to_owned();
     }
     if info.running {
         return "updating for the new filters · Esc stops".to_owned();
@@ -60,16 +71,46 @@ pub fn counts_line(info: &PreviewInfo, was: Option<usize>, asked: bool) -> Strin
     if let Some(err) = &info.error {
         return format!("not applied: {err} (the queue keeps the last result)");
     }
-    if !info.ready {
-        return "Filters apply at once · o: the result rows".to_owned();
+    let mut keys = String::new();
+    if last.undo {
+        keys.push_str(" · z undoes");
     }
+    if last.redo {
+        keys.push_str(" · Z redoes");
+    }
+    if !info.ready {
+        // another source came back (undo past the first touch): the filters have no result of their own
+        return last.what.map_or_else(|| IDLE.to_owned(), |w| format!("{w}{keys}"));
+    }
+    let what = last.what.map_or(String::new(), |w| format!("{w} · "));
     let owned = info.files.len();
     let missing = info.matched.saturating_sub(owned);
     let was = was.filter(|w| *w != owned).map_or(String::new(), |w| format!(" · was {w}"));
     if owned == 0 {
-        return format!("0 owned · {missing} missing{was} · the upcoming songs went: it stops after the playing song");
+        return format!("{what}0 owned · {missing} missing{was} · the upcoming songs went: it stops after the playing song{keys}");
     }
-    format!("{owned} owned · {missing} missing{was}")
+    format!("{what}{owned} owned · {missing} missing{was}{keys}")
+}
+
+/// `z` / `Z` (`FilterUndo` / `FilterRedo`) from any tab: a step through Music's filter history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    Undo,
+    Redo,
+}
+
+static STEPS: Mutex<Vec<Step>> = Mutex::new(Vec::new());
+
+/// Leave an undo or redo for the Play pane, which takes them in order on its next frame (shown or not).
+pub fn request_step(step: Step) {
+    if let Ok(mut s) = STEPS.lock() {
+        s.push(step);
+    }
+}
+
+/// The steps asked for since the last call, in order.
+pub fn take_steps() -> Vec<Step> {
+    STEPS.lock().map(|mut s| std::mem::take(&mut *s)).unwrap_or_default()
 }
 
 /// One queue entry as the confirmation rule sees it.
@@ -244,19 +285,40 @@ mod tests {
 
     #[test]
     fn the_counts_line_says_what_the_filters_made_of_the_queue() {
-        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(5), true), "2 owned · 1 missing · was 5");
-        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(2), true), "2 owned · 1 missing");
-        assert_eq!(counts_line(&info(&["a"], 1), None, true), "1 owned · 0 missing");
-        let zero = counts_line(&info(&[], 4), Some(3), true);
+        let none = LastChange::default();
+        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(5), true, none), "2 owned · 1 missing · was 5");
+        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(2), true, none), "2 owned · 1 missing");
+        assert_eq!(counts_line(&info(&["a"], 1), None, true, none), "1 owned · 0 missing");
+        let zero = counts_line(&info(&[], 4), Some(3), true, none);
         assert_eq!(zero, "0 owned · 4 missing · was 3 · the upcoming songs went: it stops after the playing song");
         let running = PreviewInfo { running: true, ..info(&["a"], 1) };
-        assert!(counts_line(&running, None, true).starts_with("updating"));
+        assert!(counts_line(&running, None, true, none).starts_with("updating"));
         let failed = PreviewInfo { error: Some("hits failed".to_owned()), ..info(&["a"], 1) };
-        assert_eq!(counts_line(&failed, None, true), "not applied: hits failed (the queue keeps the last result)");
+        assert_eq!(counts_line(&failed, None, true, none), "not applied: hits failed (the queue keeps the last result)");
         let other = PreviewInfo { ready: false, ..info(&["a"], 1) };
-        assert!(counts_line(&other, None, true).starts_with("Filters apply at once"));
+        assert!(counts_line(&other, None, true, none).starts_with("Filters apply at once"));
         // before any filter change: a missing or old file is no error of the queue
         let missing = PreviewInfo { error: Some("no hits file".to_owned()), ready: false, ..info(&[], 0) };
-        assert!(counts_line(&missing, None, false).starts_with("Filters apply at once"));
+        assert!(counts_line(&missing, None, false, none).starts_with("Filters apply at once"));
+    }
+
+    #[test]
+    fn the_counts_line_names_the_last_change_and_the_undo_keys() {
+        let last = LastChange { what: Some("Filter: +rock"), undo: true, redo: false };
+        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(5), true, last), "Filter: +rock · 2 owned · 1 missing · was 5 · z undoes");
+        let both = LastChange { what: Some("Undo: rock cleared"), undo: true, redo: true };
+        assert_eq!(counts_line(&info(&["a"], 1), None, true, both), "Undo: rock cleared · 1 owned · 0 missing · z undoes · Z redoes");
+        // an album came back: the filters have no result of their own
+        let back = LastChange { what: Some("Undo: back to album Low"), undo: false, redo: true };
+        let other = PreviewInfo { ready: false, ..info(&["a"], 1) };
+        assert_eq!(counts_line(&other, None, true, back), "Undo: back to album Low · Z redoes");
+    }
+
+    #[test]
+    fn steps_are_taken_once_in_order() {
+        request_step(Step::Undo);
+        request_step(Step::Redo);
+        assert_eq!(take_steps(), vec![Step::Undo, Step::Redo]);
+        assert!(take_steps().is_empty());
     }
 }
