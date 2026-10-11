@@ -1818,3 +1818,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11: a separate uv tool with an inline-dependency script (d-5z76bdt3).
 - [x] [t-a66m24n7] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
       Decided by the user 2026-10-11: yes, the whole evaluation set (d-j6gatiuc); it needs an API key the user has.
+
+- [ ] rormpc-tools items while herdr todo run cannot serve them (reports r-8, r-9; d-rp6cp5mq): herdr's round of [t-lwdzxibp]
+      2026-10-12 (sol, MiMo, DeepSeek; queued in herdr TODO 7e8d6163) plans `todo run --repo <path>` (the item stays
+      here, slot/checks/commit/install/push from the target, default branch read from git), release recipes in the
+      target's .herdr run by the driver (staged, resumable), and a two-repository change as two chained items (the
+      dependency first). Meanwhile it recommends (sol, MiMo; DeepSeek only once): start each blocked rormpc-tools item
+      the old way with the allowlist override, one start per item, rormpc-tools' own `uv run pytest -q`, the one commit
+      verified before landing on `main`; releases by hand with a checklist; split two-repository features now.
+      Should the coordinator do that (the user said "what overrides?" before the round and chose none meanwhile)?
+      Options: accept the round's meanwhile plan | wait for herdr's `todo run --repo`
+      Checked: herdr-85's message of 2026-10-12 (d-s2mkmlzc).
