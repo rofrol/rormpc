@@ -10,6 +10,7 @@
 //!   still plays a song (added after the current one, not removed afterwards) and Play next reports it.
 
 use std::{
+    fmt::Write as _,
     path::PathBuf,
     sync::{Mutex, OnceLock},
     time::SystemTime,
@@ -65,9 +66,30 @@ struct Source {
     /// source line says "+N added"; the next Apply drops them like any hand edit
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     added: Vec<String>,
+    /// a filter source's identity, mpd-player's round key: a new one when the queue starts holding a filter
+    /// source, kept by every later filter change (plans/instant-filtering.md, "Rounds belong to the source")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_id: Option<String>,
+    /// how many generations of this filter source reached MPD (1 for the first), counted across rormpc runs
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    generation: Option<u64>,
 }
 
 impl Source {
+    /// The identity and generation a new filter source of `kind` takes after `previous`: a filter source going
+    /// on keeps its id and counts one more generation, anything else starts a new id at generation 1.
+    fn next_identity(kind: &str, previous: Option<&Source>) -> (Option<String>, Option<u64>) {
+        if kind != "hits" {
+            return (None, None);
+        }
+        match previous {
+            Some(p) if p.kind == "hits" && p.source_id.is_some() => {
+                (p.source_id.clone(), Some(p.generation.unwrap_or(0) + 1))
+            }
+            _ => (Some(new_source_id()), Some(1)),
+        }
+    }
+
     /// Count `appended` (just added to the end of the queue) into the source: its length follows them so the
     /// header does not call it modified, and on a Hits source the files it does not hold join it (`added`).
     /// Returns how many files joined.
@@ -85,6 +107,24 @@ impl Source {
         }
         joined
     }
+}
+
+/// A random UUID (version 4) from the system's random device; the clock and pid when it cannot be read.
+fn new_source_id() -> String {
+    use std::io::Read as _;
+    let mut b = [0u8; 16];
+    let read = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b));
+    if read.is_err() {
+        let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        b = (nanos ^ (u128::from(std::process::id()) << 96)).to_le_bytes();
+    }
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let hex = b.iter().fold(String::with_capacity(32), |mut hex, x| {
+        let _ = write!(hex, "{x:02x}");
+        hex
+    });
+    format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
 }
 
 /// The source being played: (kind, name, snapshot files for a Hits source).
@@ -149,6 +189,15 @@ fn save(s: &State) {
     {
         let _ = std::fs::rename(&tmp, &p); // atomic: a crash never leaves half a file
     }
+}
+
+/// Make `source` the one being played: in memory and in source.json (atomically).
+fn publish(source: Option<Source>) {
+    let st = State { source };
+    if let Ok(mut g) = state().lock() {
+        *g = st.clone();
+    }
+    save(&st);
 }
 
 /// One Up next entry from mpd-player's upnext.json.
@@ -511,9 +560,25 @@ impl Replace {
         }
         let current = status.songid;
         let old_len = status.playlistlength as usize;
+        // source.json names the new source before the queue changes: mpd-player plans from `queue ∩ files`, so
+        // members not queued yet are harmless, and the idle events of the writes below find the new members
+        let previous = state().lock().ok().and_then(|g| g.source.clone());
+        let (source_id, generation) = Source::next_identity(&kind, previous.as_ref());
+        let mut src = Source {
+            kind,
+            name,
+            len: files.len(),
+            files: files.clone(),
+            rules,
+            rules_hash,
+            added: Vec::new(),
+            source_id,
+            generation,
+        };
+        publish(Some(src.clone()));
         // the new songs go after the old queue first: MPD's database decides which files still exist (a stale
         // preview can name deleted songs), and nothing old leaves unless something new came in
-        let (files, start, gone) = match kind.as_str() {
+        let (files, start, gone) = match src.kind.as_str() {
             "library" => {
                 client.add("/", None)?;
                 (files, start, 0)
@@ -524,21 +589,23 @@ impl Replace {
                     Ok(added) => added,
                     Err(err) => {
                         // not a missing file: take back what came in (best effort, the add's error is the
-                        // one to report), the queue stays as it was
+                        // one to report), the queue and source.json stay as they were
                         if client.get_status().is_ok_and(|s| s.playlistlength as usize > old_len) {
                             let _ = client.execute(&format!("delete {old_len}:")).and_then(|()| client.read_ok());
                         }
+                        publish(previous);
                         return Err(err.into());
                     }
                 };
                 if added.files.is_empty() {
+                    publish(previous);
                     status_warn!("None of the {total} songs is in the library any more: the queue stays as it was");
                     return Ok(());
                 }
                 (added.files, added.start, added.gone)
             }
             _ => {
-                client.load_playlist(&name, None)?;
+                client.load_playlist(&src.name, None)?;
                 (files, start, 0)
             }
         };
@@ -586,23 +653,23 @@ impl Replace {
         }
         let len = client.playlist_info()?.map_or(0, |q| q.len());
         // Play's Apply: Previous sources remembers the rules, a smart list's playlist is exported
-        if let (Some(r), Some(h)) = (&rules, &rules_hash) {
-            crate::ui::rormpc_smartlists::after_apply(&name, r, h);
+        if let (Some(r), Some(h)) = (&src.rules, &src.rules_hash) {
+            crate::ui::rormpc_smartlists::after_apply(&src.name, r, h);
         }
-        let st = State { source: Some(Source { kind, name, len, files, rules, rules_hash, added: Vec::new() }) };
-        if let Ok(mut g) = state().lock() {
-            *g = st.clone();
-        }
-        save(&st);
+        // the members MPD took and the queue's length (the header's "modified" compares it)
+        src.files = files;
+        src.len = len;
+        let kind = src.kind.clone();
+        publish(Some(src));
         if current.is_none() && start.is_none() {
             client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
         }
         status_info!(
             "Playing from {} · {len} songs{}{}, prepared in {:.1} s",
-            match st.source.as_ref().map(|s| s.kind.as_str()) {
-                Some("library") => "the whole library",
-                Some("hits") => "the Hits result",
-                Some(kind @ ("album" | "artist" | "directory" | "selection")) => kind_label(kind),
+            match kind.as_str() {
+                "library" => "the whole library",
+                "hits" => "the Hits result",
+                kind @ ("album" | "artist" | "directory" | "selection") => kind_label(kind),
                 _ => "the playlist",
             },
             if start.is_some() { " in their order" } else { "" },
@@ -745,6 +812,8 @@ mod tests {
             rules: None,
             rules_hash: Some("h".to_owned()),
             added: Vec::new(),
+            source_id: None,
+            generation: None,
         }
     }
 
@@ -763,6 +832,32 @@ mod tests {
         assert_eq!(album.append(&appended), 0);
         assert!(album.added.is_empty() && album.len == 4);
         assert!(serde_json::to_value(&album).expect("source.json").get("added").is_none());
+    }
+
+    #[test]
+    fn a_filter_source_keeps_its_id_and_counts_generations_another_source_starts_a_new_one() {
+        let id = new_source_id();
+        assert_eq!(id.len(), 36);
+        assert_eq!(id.as_bytes()[14], b'4'); // version 4
+        assert_ne!(id, new_source_id());
+        // the first filter source after an album, or after nothing: a new id, generation 1
+        let (first, g) = Source::next_identity("hits", Some(&source("album", &["a"])));
+        assert!(first.is_some());
+        assert_eq!(g, Some(1));
+        assert!(Source::next_identity("hits", None).0.is_some_and(|other| Some(&other) != first.as_ref()));
+        // a filter change keeps it and counts one more
+        let mut hits = source("hits", &["a"]);
+        hits.source_id.clone_from(&first);
+        hits.generation = Some(4);
+        assert_eq!(Source::next_identity("hits", Some(&hits)), (first, Some(5)));
+        // an older source.json without an id: a new one
+        assert!(Source::next_identity("hits", Some(&source("hits", &["a"]))).0.is_some());
+        // other kinds carry neither
+        assert_eq!(Source::next_identity("album", Some(&hits)), (None, None));
+        let json = serde_json::to_value(&hits).expect("source.json");
+        assert_eq!(json["generation"], 4);
+        assert!(json["source_id"].is_string());
+        assert!(serde_json::to_value(source("album", &["a"])).expect("source.json").get("source_id").is_none());
     }
 
     /// An `add` as MPD answers it: files in `missing` are not in its database.
