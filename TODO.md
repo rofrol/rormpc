@@ -718,6 +718,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       library by plays warm 0.254 → 0.147 / 0.158 s, cold 0.347 s. Billboard is still over the 0.15 s line, and every
       play changes the play DB, so the run after a song is cold. Per the user's rule (hits serve only if still over
       0.15 s after caching), the cheaper caching the worker found comes first: next item, stage 6b.
+      Stage 6b done in rormpc-tools (worker, cherry-picked; 586 tests): the library index no longer keys on the play
+      DB (play counts recounted with an event→file memo, without MPD), chart matches cached per year list. Measured
+      (median / p90): billboard warm 0.104 / 0.111 s, warm after a play 0.129 / 0.144 s, cold 0.245 s; library by
+      plays warm 0.132 s, after a play 0.344 s (measured under heavy load; to be measured again on a quiet machine).
+      Below 0.15 s for billboard: `hits serve` is not built (the user's rule).
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
@@ -826,7 +831,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       checks at once, labelled machine-transcribed; model large-v3 (not the measured turbo); a separate uv tool with an
       inline-dependency script; one commercial API tried on the whole evaluation set as an upper bound (needs the
       user's API key: a worker that has none reports it, never signs up).
-- [ ] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a
+- [x] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a
       play must not make the next run cold) and cache the chart matching (chart_candidates: name normalisation and
       matching of ~2000 chart rows), then measure again; `hits serve` only if the warm median is still over 0.15 s
       (the user's rule, 2026-10-11).
@@ -847,6 +852,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] Media key Next in Music, weighted (asked 2026-10-11: "I am in Music, weighted, I press the media Next, it goes
       to the next song, but the current one is not seen as the previous one, it is removed from the view. Ask the
       models."): find why the skipped song disappears from the plan view instead of showing as the last play.
+      Checked 2026-10-11 (coordinator): afterwards the data is right: the skipped song (id 1893) is still queued with
+      the same file, shuffle.json history ends with it as `early`, and the projection
+      (rormpc_queue_plan.rs `project`) must then show it as -1; shuffle.json is watched by directory
+      (rormpc_upnext.rs watch_path → invalidate + RequestRender). The user's rormpc ran since 12:17, before the
+      three rormpc installs of the day (12:47, 13:17, 13:41); mpd-player 0.2.52 since 14:42. Round
+      20261011-145943-d46f (Sol 772e3520 useful, MiMo df6b7c2c partial): both put the old running binary first, then
+      a render between MPD's song change and mpd-player's history write; dismissed MiMo's "no redraw on shuffle.json"
+      (the directory watcher exists). Next step for a worker: reproduce on a scratch MPD with its own mpd-player and
+      the current build (Music, weighted, `mpd-player send next` to the scratch socket), read the view right after
+      and once shuffle.json changes, log the projection's inputs for the skipped id (plan, history, requests,
+      queue file); fix what it shows (Sol: decide whether Past should outrank Forecast; MiMo: one shuffle.json write
+      per transition). The user restarts rormpc to rule out the old binary.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
