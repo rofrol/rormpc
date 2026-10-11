@@ -895,6 +895,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       reset) whose offset is saved per song with an undo; the automatic alignment comes with the transcription build
       (the same Whisper and demucs), MONTERO as its first test.
 
+- [ ] Replace "Sweet Nothing" (Calvin Harris ft. Florence Welch), a 4:29 official-video rip with extra video parts [t-is2eqcck]
+      (bit.do--spotify2015/364--Calvin_Harris--Calvin_Harris_-_Sweet_Nothing_(Official_Video)_ft._Florence_Welch--17ozSeGw-fY--20120920.mp3),
+      with the clean 3:29 track from the official "Calvin Harris - Topic" channel (https://youtu.be/TawoXhEN2tE),
+      reported by the music-mpd session (passed on by the user 2026-10-11). Decided by the user 2026-10-11: replace
+      (d-hj7az67n); not D.O.D & Calvin Harris - Sweet Nothing (2025 Edit) (d-dse2zosm). How: `yt-mp3-mb --yes URL`,
+      then `musicdb versions same NEW OLD` (the video goes to the quarantine with an alias, its plays and likes
+      follow the new file); the coordinator runs it (a library change the user decided).
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
