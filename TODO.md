@@ -885,6 +885,56 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       on rormpc-tools"; rormpc's install script pins rormpc-tools' tag. Follows from that decision; text only.
       Done 2026-10-12 (b285c42, through herdr todo run r-ykgns7lf; pushed by the run).
 
+- [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:" [t-j74galug]
+      decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
+      the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
+      tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
+      download a video match without an audio alternative is swapped to the same-length audio recording through
+      the work. MusicBrainz at 1 req/s (~66 min for the library, cached), run as a herdr-job.
+      Stage A done 2026-10-11: rormpc-tools b758320 (worker): `musicdb years` (--dry-run report with stable ids,
+      every row undecided; --accept/--reject/--undecide; --mbid ROW MBID; --apply only accepted rows whose audio md5
+      and date tags are unchanged, years-backup.jsonl fsynced first, temp copy + os.replace, `mpc update --wait`;
+      --rollback only when the file still has what that apply wrote; --json for rormpc); hits reads originaldate,
+      falling back to date; downloads write TDRC = the recording's first release, TDOR = the rule. Values the worker
+      chose (accepted by the coordinator): a proposal keeps the file's current TDRC (album rips keep their dates);
+      a download never takes a TDOR later than its recording's first release (rule `first-release`); a row whose
+      year stays but whose release group is earlier goes to review as `keeps-year`; at most 200 candidate
+      recordings per work (`candidates-truncated`). 15-file sample: 3 right proposals, 2 wrong from MusicBrainz's
+      own dates (one rated high, so the row-by-row review is needed), 6 "needs MBID". Not released. The full dry
+      run: herdr-job 20261011-001830-7e3a. Stage B (rormpc view, MBID picker, views read originaldate) next;
+      stage C (video to audio through the work on download) after it.
+      Stage B1 done 2026-10-11: rormpc 6492b39 (worker): "Years to review" panel over Music (`gY`, ShowPlay(Years);
+      gy is Lyrics): counts, rows with evidence, a/D accept/reject (again: undecided), Space marks, h/l and menu
+      filters, "Apply accepted…" and "Roll back…" with result dialogs; "needs MBID" rows read-only (the picker,
+      stage B2, waits for its two decisions); the Year column and the album browser read OriginalDate, else Date
+      (album_date_tags default [OriginalDate, Date]). Released with rormpc-tools v0.2.49 (stage A) and installed;
+      dotfiles 22957db (gY, album_date_tags, the theme's Year column). Skipped-row messages go only to the status
+      bar. Not seen on the full report yet (the dry run is still running).
+      Stage C done 2026-10-11: rormpc-tools 877205d (worker): resolve() swaps a video or DJ-mix match with no audio
+      alternative to the work's same-length audio recording (years.audio_for, the same cache, 1 req/s), evidence in
+      row["swap"] (from, to, rule, why), method ends ">work"; a failed lookup keeps the match. Not released. The
+      MBID picker (stage B2) waits for its two decisions.
+      Full dry run 2026-10-11 (herdr-job 20261011-001830-7e3a, nothing written): 517 rows in
+      music-data/years-report.json: 59 high and 67 review proposals, 391 without one; 352 need an MBID (165
+      no-recording, 187 no-work); classes: video 51, dj-mix 27, version 21, rg-earlier 21, later 14, undated 21.
+      Sweet Dreams (row 348) 2000 → 1983 high, Livin' on a Prayer (row 362) 1988 → 1986 high. Ready for the
+      user's review in `gY`.
+      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): its stage B2 backend is rormpc-tools t-bd3334hn (UFID rewrite,
+      no-recording marking); rormpc's MBID picker in the Years panel follows its "landed <tag>".
+      Landed 2026-10-12 (todo-rormpc-tools): rormpc-tools v0.2.54 (f15e775, 2a10a4f): `musicdb years --apply` writes a
+      --mbid pick into the file's recording tag (UFID / MUSICBRAINZ_TRACKID) even when the year holds, rollback restores
+      it, mb: keys follow; rows without a recording MBID carry class no-recording; the json only gained fields (file_mbid
+      on rows, recording in the apply output); the contract test passes unchanged. Back in "Next, in order".
+
+- [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
+      filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
+      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): the report's no-recording marking is part of rormpc-tools
+      t-bd3334hn; rormpc's separate, off-by-default filter in the Years panel follows its "landed <tag>".
+      Landed 2026-10-12 (todo-rormpc-tools): rormpc-tools v0.2.54 (f15e775, 2a10a4f): `musicdb years --apply` writes a
+      --mbid pick into the file's recording tag (UFID / MUSICBRAINZ_TRACKID) even when the year holds, rollback restores
+      it, mb: keys follow; rows without a recording MBID carry class no-recording; the json only gained fields (file_mbid
+      on rows, recording in the apply output); the contract test passes unchanged. Back in "Next, in order".
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
@@ -1805,43 +1855,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 Items that consume rormpc-tools work and wait on its coordinator's "landed <tag>" (cross-repository rule in AGENTS.md "Coordination", 2026-10-12). They move back to "Next, in order" when it replies.
 
-- [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:" [t-j74galug]
-      decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
-      the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
-      tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
-      download a video match without an audio alternative is swapped to the same-length audio recording through
-      the work. MusicBrainz at 1 req/s (~66 min for the library, cached), run as a herdr-job.
-      Stage A done 2026-10-11: rormpc-tools b758320 (worker): `musicdb years` (--dry-run report with stable ids,
-      every row undecided; --accept/--reject/--undecide; --mbid ROW MBID; --apply only accepted rows whose audio md5
-      and date tags are unchanged, years-backup.jsonl fsynced first, temp copy + os.replace, `mpc update --wait`;
-      --rollback only when the file still has what that apply wrote; --json for rormpc); hits reads originaldate,
-      falling back to date; downloads write TDRC = the recording's first release, TDOR = the rule. Values the worker
-      chose (accepted by the coordinator): a proposal keeps the file's current TDRC (album rips keep their dates);
-      a download never takes a TDOR later than its recording's first release (rule `first-release`); a row whose
-      year stays but whose release group is earlier goes to review as `keeps-year`; at most 200 candidate
-      recordings per work (`candidates-truncated`). 15-file sample: 3 right proposals, 2 wrong from MusicBrainz's
-      own dates (one rated high, so the row-by-row review is needed), 6 "needs MBID". Not released. The full dry
-      run: herdr-job 20261011-001830-7e3a. Stage B (rormpc view, MBID picker, views read originaldate) next;
-      stage C (video to audio through the work on download) after it.
-      Stage B1 done 2026-10-11: rormpc 6492b39 (worker): "Years to review" panel over Music (`gY`, ShowPlay(Years);
-      gy is Lyrics): counts, rows with evidence, a/D accept/reject (again: undecided), Space marks, h/l and menu
-      filters, "Apply accepted…" and "Roll back…" with result dialogs; "needs MBID" rows read-only (the picker,
-      stage B2, waits for its two decisions); the Year column and the album browser read OriginalDate, else Date
-      (album_date_tags default [OriginalDate, Date]). Released with rormpc-tools v0.2.49 (stage A) and installed;
-      dotfiles 22957db (gY, album_date_tags, the theme's Year column). Skipped-row messages go only to the status
-      bar. Not seen on the full report yet (the dry run is still running).
-      Stage C done 2026-10-11: rormpc-tools 877205d (worker): resolve() swaps a video or DJ-mix match with no audio
-      alternative to the work's same-length audio recording (years.audio_for, the same cache, 1 req/s), evidence in
-      row["swap"] (from, to, rule, why), method ends ">work"; a failed lookup keeps the match. Not released. The
-      MBID picker (stage B2) waits for its two decisions.
-      Full dry run 2026-10-11 (herdr-job 20261011-001830-7e3a, nothing written): 517 rows in
-      music-data/years-report.json: 59 high and 67 review proposals, 391 without one; 352 need an MBID (165
-      no-recording, 187 no-work); classes: video 51, dj-mix 27, version 21, rg-earlier 21, later 14, undated 21.
-      Sweet Dreams (row 348) 2000 → 1983 high, Livin' on a Prayer (row 362) 1988 → 1986 high. Ready for the
-      user's review in `gY`.
-      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): its stage B2 backend is rormpc-tools t-bd3334hn (UFID rewrite,
-      no-recording marking); rormpc's MBID picker in the Years panel follows its "landed <tag>".
-
 - [ ] Lyrics for songs without any, transcribed (asked 2026-10-10 about the radio tracks: "extract them with whisper or [t-dmpfe6gj]
       something? see ~/scripts/yt-wh"): a worker looks at ~/scripts/yt-wh (yt-dlp + wh-speakers-diarize), consults
       the models on transcribing sung lyrics (whisper models and their accuracy on music, vocal separation first,
@@ -1860,8 +1873,3 @@ Items that consume rormpc-tools work and wait on its coordinator's "landed <tag>
       user's API key: a worker that has none reports it, never signs up).
       Waiting on rormpc-tools (2026-10-12, d-33kat4ps): the tool is rormpc-tools t-jsjs5ngd; rormpc's display of
       <song>.transcript.json (labelled machine-transcribed) follows its "landed <tag>".
-
-- [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
-      filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
-      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): the report's no-recording marking is part of rormpc-tools
-      t-bd3334hn; rormpc's separate, off-by-default filter in the Years panel follows its "landed <tag>".
