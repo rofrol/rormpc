@@ -619,3 +619,133 @@ fn j_k_never_swap_across_the_round_boundary(mut ctx: Ctx) {
     view.move_selected(1, &ctx); // within the next round
     assert!(view.pending.is_some());
 }
+
+fn played(entries: &[(u32, f64)]) -> Vec<rormpc_player::Past> {
+    entries
+        .iter()
+        .map(|(id, t)| rormpc_player::Past {
+            id: Some(*id),
+            file: format!("s{id}"),
+            t: *t,
+            ..Default::default()
+        })
+        .collect()
+}
+fn past_rows(view: &PlanView) -> Vec<(Option<u32>, Turn)> {
+    view.rows.iter().filter(|r| matches!(r.turn, Turn::Past(_))).map(|r| (r.id, r.turn)).collect()
+}
+
+#[rstest]
+fn the_skipped_song_stays_minus_one_until_mpd_player_writes_its_history(mut ctx: Ctx) {
+    live(&mut ctx);
+    let mut sh = shuffle(&[5, 6, 7]);
+    sh.history = played(&[(2, 1.0), (3, 2.0)]);
+    publish(sh.clone());
+    let mut view = PlanView::new();
+    ctx.status.songid = Some(4);
+    view.refresh(&ctx, false);
+    assert_eq!(past_rows(&view), vec![(Some(2), Turn::Past(-2)), (Some(3), Turn::Past(-1))]);
+    // Next: MPD plays 5 before mpd-player has written 4's entry
+    ctx.status.songid = Some(5);
+    sh.plan.remove(0);
+    publish(sh.clone());
+    view.refresh(&ctx, false);
+    view.refresh(&ctx, false);
+    assert_eq!(past_rows(&view), vec![(Some(3), Turn::Past(-2)), (Some(4), Turn::Past(-1))]);
+    // the entry written: the history alone has it, once
+    sh.history.extend(played(&[(4, 3.0)]));
+    publish(sh.clone());
+    view.refresh(&ctx, false);
+    assert_eq!(past_rows(&view), vec![(Some(3), Turn::Past(-2)), (Some(4), Turn::Past(-1))]);
+    assert!(view.skipped.held.is_empty());
+}
+
+#[rstest]
+fn an_entry_written_before_the_song_change_holds_nothing(mut ctx: Ctx) {
+    live(&mut ctx);
+    let mut sh = shuffle(&[5, 6]);
+    sh.history = played(&[(3, 1.0)]);
+    publish(sh.clone());
+    let mut view = PlanView::new();
+    ctx.status.songid = Some(4);
+    view.refresh(&ctx, false);
+    sh.history.extend(played(&[(4, 2.0)]));
+    publish(sh.clone());
+    view.refresh(&ctx, false);
+    ctx.status.songid = Some(5);
+    view.refresh(&ctx, false);
+    assert!(view.skipped.held.is_empty());
+    assert_eq!(past_rows(&view), vec![(Some(3), Turn::Past(-2)), (Some(4), Turn::Past(-1))]);
+    // the next entry is a later song's: nothing stays held from before
+    ctx.status.songid = Some(6);
+    view.refresh(&ctx, false);
+    assert_eq!(view.skipped.held, vec![(5, "s5".to_owned())]);
+}
+
+#[test]
+fn a_newer_entry_releases_the_held_song_and_a_repeat_is_told_apart_by_its_time() {
+    let queue = songs();
+    let mut skipped = Skipped::default();
+    let history = played(&[(4, 1.0)]);
+    skipped.update(&queue, Some(4), &history);
+    skipped.update(&queue, Some(4), &history);
+    // 4 plays again right after itself (a repeated queue entry): its new entry differs only in time
+    skipped.update(&queue, Some(5), &history);
+    assert_eq!(skipped.held, vec![(4, "s4".to_owned())]);
+    let history = played(&[(4, 1.0), (4, 9.0)]);
+    skipped.update(&queue, Some(5), &history);
+    assert!(skipped.held.is_empty());
+    // two quick skips: an entry for the later one is newer than both
+    skipped.update(&queue, Some(6), &history);
+    skipped.update(&queue, Some(7), &history);
+    assert_eq!(skipped.held, vec![(5, "s5".to_owned()), (6, "s6".to_owned())]);
+    let history = played(&[(4, 1.0), (4, 9.0), (6, 10.0)]);
+    skipped.update(&queue, Some(7), &history);
+    assert!(skipped.held.is_empty());
+}
+
+#[rstest]
+fn a_held_song_removed_from_the_queue_is_dropped(mut ctx: Ctx) {
+    live(&mut ctx);
+    let mut sh = shuffle(&[5, 6]);
+    sh.history = played(&[(3, 1.0)]);
+    publish(sh);
+    let mut view = PlanView::new();
+    ctx.status.songid = Some(4);
+    view.refresh(&ctx, false);
+    ctx.status.songid = Some(5);
+    view.refresh(&ctx, false);
+    assert_eq!(past_rows(&view), vec![(Some(3), Turn::Past(-2)), (Some(4), Turn::Past(-1))]);
+    ctx.queue.retain(|s| s.id != 4);
+    view.refresh(&ctx, false);
+    assert_eq!(past_rows(&view), vec![(Some(3), Turn::Past(-1))]);
+    assert!(view.skipped.held.is_empty());
+    // the id coming back with another file is not the held song
+    ctx.queue.push(Song { id: 4, file: "other".into(), ..Default::default() });
+    view.refresh(&ctx, false);
+    assert!(view.skipped.held.is_empty());
+}
+
+#[rstest]
+fn previous_plays_the_held_song_and_holds_the_one_left(mut ctx: Ctx) {
+    live(&mut ctx);
+    let mut sh = shuffle(&[6, 7]);
+    sh.history = played(&[(3, 1.0)]);
+    publish(sh.clone());
+    let mut view = PlanView::new();
+    ctx.status.songid = Some(4);
+    view.refresh(&ctx, false);
+    ctx.status.songid = Some(5);
+    view.refresh(&ctx, false);
+    // Previous before mpd-player wrote 4's entry: 4 plays, 5 waits as -1
+    ctx.status.songid = Some(4);
+    view.refresh(&ctx, false);
+    assert_eq!(view.rows.iter().find(|r| r.id == Some(4)).unwrap().turn, Turn::Current);
+    assert_eq!(past_rows(&view), vec![(Some(3), Turn::Past(-2)), (Some(5), Turn::Past(-1))]);
+    // mpd-player's entries: 4 skipped, then 5 left with Previous
+    sh.history.extend(played(&[(4, 2.0), (5, 3.0)]));
+    publish(sh);
+    view.refresh(&ctx, false);
+    assert!(view.skipped.held.is_empty());
+    assert_eq!(past_rows(&view), vec![(Some(5), Turn::Past(-1))]);
+}

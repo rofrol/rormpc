@@ -309,7 +309,7 @@ pub struct PlanAck {
 }
 
 /// A song mpd-player saw play, with how it ended.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct Past {
     /// the queue entry that played (the same file may be queued twice)
     #[serde(default)]
@@ -318,6 +318,9 @@ pub struct Past {
     /// "finished", "early" or "late" (skips)
     #[serde(default)]
     pub kind: String,
+    /// when it stopped playing (seconds), telling a song played twice in a row apart
+    #[serde(default)]
+    pub t: f64,
 }
 
 /// shuffle.json, read again only when the file changed (it is looked at while rendering).

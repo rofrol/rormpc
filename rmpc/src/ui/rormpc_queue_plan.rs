@@ -80,6 +80,9 @@ pub struct PlanRow {
     pub turn: Turn,
 }
 
+/// The past rows the plan shows: -1 and -2.
+const PAST_ROWS: usize = 2;
+
 pub fn project(
     queue: &[Song],
     current: Option<u32>,
@@ -90,7 +93,7 @@ pub fn project(
     let mut turns = HashMap::new();
     // One row per queue id, even if a history entry also appears in the current
     // plan.
-    for (n, past) in sh.history.iter().rev().take(2).enumerate() {
+    for (n, past) in sh.history.iter().rev().take(PAST_ROWS).enumerate() {
         if let Some(id) = past.id
             && by_id.get(&id).copied() == Some(past.file.as_str())
         {
@@ -178,6 +181,83 @@ pub fn header_line(n: usize, width: u16) -> String {
     format!("{text}{}", "─".repeat(fill))
 }
 
+/// The songs MPD moved on from that shuffle.json's history has no entry for yet. MPD's song change renders first;
+/// mpd-player writes the history entry after it, so in between the song left behind would be neither current, nor
+/// planned, nor past. Such a song shows as -1 until the history has its entry or a newer one, it plays again (Previous)
+/// or it leaves the queue: each a published state, never a timer.
+#[derive(Debug, Default)]
+pub struct Skipped {
+    primed: bool,
+    current: Option<(u32, String)>,
+    /// the history's newest entry at the last update, to find the entries written since
+    tail: Option<rormpc_player::Past>,
+    /// entries written before rormpc saw the song change they belong to (oldest first)
+    early: Vec<(u32, String)>,
+    /// oldest first
+    held: Vec<(u32, String)>,
+}
+
+impl Skipped {
+    pub fn update(
+        &mut self,
+        queue: &[Song],
+        current: Option<u32>,
+        history: &[rormpc_player::Past],
+    ) {
+        let fresh = if self.primed {
+            let seen = self.tail.as_ref().and_then(|tail| history.iter().rposition(|p| p == tail));
+            &history[seen.map_or(0, |i| i + 1)..]
+        } else {
+            &[]
+        };
+        for entry in fresh {
+            let key = entry.id.map(|id| (id, entry.file.clone()));
+            if let Some(i) = self.held.iter().position(|h| Some(h) == key.as_ref()) {
+                self.held.drain(..=i);
+            } else if !self.held.is_empty() {
+                // newer than every held song
+                self.held.clear();
+            } else if let Some(key) = key {
+                self.early.push(key);
+            }
+        }
+        self.early.drain(..self.early.len().saturating_sub(PAST_ROWS));
+        self.tail = history.last().cloned();
+        self.primed = true;
+        let now = current
+            .and_then(|id| queue.iter().find(|s| s.id == id))
+            .map(|s| (s.id, s.file.clone()));
+        if let (Some(old), Some(new)) = (&self.current, &now)
+            && old != new
+        {
+            if let Some(i) = self.early.iter().position(|e| e == old) {
+                self.early.drain(..=i);
+            } else {
+                self.held.retain(|h| h != old);
+                self.held.push(old.clone());
+                self.held.drain(..self.held.len().saturating_sub(PAST_ROWS));
+            }
+            self.early.clear();
+        }
+        if now.is_some() || current.is_none() {
+            self.current = now;
+        }
+        self.held.retain(|h| {
+            Some(h) != self.current.as_ref() && queue.iter().any(|s| s.id == h.0 && s.file == h.1)
+        });
+    }
+
+    /// The history with the held songs as its newest entries.
+    pub fn history(&self, history: &[rormpc_player::Past]) -> Vec<rormpc_player::Past> {
+        let held = self.held.iter().map(|(id, file)| rormpc_player::Past {
+            id: Some(*id),
+            file: file.clone(),
+            ..Default::default()
+        });
+        history.iter().cloned().chain(held).collect()
+    }
+}
+
 fn now() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64()
 }
@@ -209,6 +289,7 @@ pub struct PlanView {
     query: String,
     saved_id: Option<u32>,
     snapshot: ShuffleState,
+    skipped: Skipped,
     pub is_stale: bool,
     pending: Option<(String, Instant)>,
     ack_timer: Id,
@@ -239,6 +320,7 @@ impl PlanView {
             query: String::new(),
             saved_id: None,
             snapshot: ShuffleState::default(),
+            skipped: Skipped::default(),
             is_stale: true,
             pending: None,
             ack_timer: id::new(),
@@ -267,6 +349,8 @@ impl PlanView {
             rormpc_player::invalidate_shuffle_state();
         }
         self.snapshot = rormpc_player::shuffle_state();
+        self.skipped.update(&ctx.queue, ctx.status.songid, &self.snapshot.history);
+        self.snapshot.history = self.skipped.history(&self.snapshot.history);
         let present = ctx.player_present.load(std::sync::atomic::Ordering::Relaxed);
         #[cfg(not(test))]
         let present = present
