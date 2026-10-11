@@ -665,6 +665,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       dropped by generation, rounds scoped to the playing source, undo instead of Apply; one hits run 0.19-0.31 s.
       Found: Replace::run writes source.json after changing the queue (mpd-player can draw from the old source for
       ~30 s); the plan fixes the order in its step 2. Eight open choices in "Needs a decision" ("Instant filtering:").
+      All choices decided by the user 2026-10-11 (the "Instant filtering:" and "Banned:" entries in "Needs a
+      decision"), with two additions: a hand removal from the queue bans the song into a separate Banned list (file
+      kept, ListenBrainz untouched), and Rate moves to y so r can be ToggleRepeat and z / Z undo / redo everywhere.
 - [x] Omarchy Radio: a daily check (decided 2026-10-10): a conditional GET once a day (launchd on macOS, a systemd
       user timer on Linux, installed by rormpc_install.sh companions) that only adds new items as pending and
       notifies; nothing is accepted or downloaded by itself.
@@ -1650,16 +1653,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       almost nowhere (2026-10-11). Free single keys: B E F H I L M O Q S T W y.
 - [x] Instant filtering: A filter with 0 owned songs?
       Decided by the user 2026-10-11: the upcoming songs go, it stops after the playing song (Sol; d-sy7ma764).
-- [ ] Instant filtering: When does Previous sources record a rule set, now that every click applies?
-      Options: When the source is left, or once a song of it has played | On every applied change | Only when saved as a smart list
-      Checked: plans/instant-filtering.md (2026-10-10).
-      Asked 2026-10-11; the user asked what Previous sources is; explained and asked again.
+- [x] Instant filtering: When does Previous sources record a rule set, now that every click applies?
+      Decided by the user 2026-10-11: when the rule set is left, or once a song of it has played (d-m7t2ldzp).
 - [x] Instant filtering: Should a round count a song as heard only after a scrobble-qualifying play instead of on start (Sol)?
       Decided by the user 2026-10-11: yes, heard only after a scrobble-qualifying play ("as in scrobble"), in step 1
       (d-yxxlysnq).
-- [ ] Instant filtering: Keep `hits` warm beyond the cached library index?
-      Options: Only if the end-to-end time after the cache is over 0.15 s | Build `hits serve` in step 6 anyway | Never
-      Checked: plans/instant-filtering.md (2026-10-10).
+- [x] Instant filtering: Keep `hits` warm beyond the cached library index?
+      Decided by the user 2026-10-11: only if the end-to-end time after the cache is over 0.15 s (d-ed7ivr5u).
 - [ ] Media keys: What should `pause` (key, Now Playing, MPRIS) do while "Pause for…" already holds the pause?
       Options: cancel the timer and stay paused | leave it, the timer resumes at its deadline (today)
       Checked: rormpc-tools f4120da player/control.py `_pause` (2026-10-11).
