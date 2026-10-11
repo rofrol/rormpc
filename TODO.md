@@ -925,6 +925,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       --mbid pick into the file's recording tag (UFID / MUSICBRAINZ_TRACKID) even when the year holds, rollback restores
       it, mb: keys follow; rows without a recording MBID carry class no-recording; the json only gained fields (file_mbid
       on rows, recording in the apply output); the contract test passes unchanged. Back in "Next, in order".
+      Stage B2 rormpc side done 2026-10-12 (ef27a12, installed and pushed by the run) through herdr todo run r-a7sefsnf (worker; reviewed by the coordinator):
+      in the Years panel `a` on a needs-MBID row (or the menu's "Pick the recording (MBID)…") takes a MusicBrainz
+      recording URL or MBID, validated, runs `musicdb years --mbid` in the background; picked rows can be accepted;
+      the details, the Apply confirmation and the result show the recording-tag rewrite; RORMPC_TOOLS_TAG v0.2.54.
+      rormpc-tools has no candidate list, so the pick is pasted. Not tried live (the sandbox). The companions
+      install of 0.2.54 follows (the run installs rormpc only).
 
 - [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
       filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
