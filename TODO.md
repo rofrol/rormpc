@@ -810,6 +810,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       no-recording, 187 no-work); classes: video 51, dj-mix 27, version 21, rg-earlier 21, later 14, undated 21.
       Sweet Dreams (row 348) 2000 → 1983 high, Livin' on a Prayer (row 362) 1988 → 1986 high. Ready for the
       user's review in `gY`.
+      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): its stage B2 backend is rormpc-tools t-bd3334hn (UFID rewrite,
+      no-recording marking); rormpc's MBID picker in the Years panel follows its "landed <tag>".
 - [x] Release years: write the match's swap evidence (row["swap"]) into yt_mp3_mb's log.jsonl and its --batch [t-rkvdgpp6]
       proposal, so a swapped download shows from → to and why (found by the stage C worker 2026-10-11; today only
       the ">work" method suffix shows; logging only, one revert).
@@ -831,6 +833,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       checks at once, labelled machine-transcribed; model large-v3 (not the measured turbo); a separate uv tool with an
       inline-dependency script; one commercial API tried on the whole evaluation set as an upper bound (needs the
       user's API key: a worker that has none reports it, never signs up).
+      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): the tool is rormpc-tools t-jsjs5ngd; rormpc's display of
+      <song>.transcript.json (labelled machine-transcribed) follows its "landed <tag>".
 - [x] Instant filtering stage 6b (follows from stage 6): keep the play counts out of the library index's key (a [t-jbqu432z]
       play must not make the next run cold) and cache the chart matching (chart_candidates: name normalisation and
       matching of ~2000 chart rows), then measure again; `hits serve` only if the warm median is still over 0.15 s
@@ -861,11 +865,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       MPD `next`) and the status bar says so once per outage; the rewind rule comes first as before. Not tried live: the
       worker's sandbox cannot bind sockets; one watcher test timed out in the sandbox (rormpc_upnext atomic replacements),
       left to the verify outside it.
-- [ ] Media keys: `pause` (key, Now Playing, MPRIS) while "Pause for…" holds the pause cancels the timer and stays [t-il2f5mdd]
+- [x] Media keys: `pause` (key, Now Playing, MPRIS) while "Pause for…" holds the pause cancels the timer and stays [t-il2f5mdd]
       paused (decided by the user 2026-10-11, d-h2in7kd6). rormpc-tools player/control.py `_pause`.
+      Moved to rormpc-tools' TODO (t-jeibd5n3) on 2026-10-12 (d-33kat4ps): it is rormpc-tools code only.
 - [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
       filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
-- [ ] Media key Next in Music, weighted (asked 2026-10-11: "I am in Music, weighted, I press the media Next, it goes [t-a3axjgzk]
+      Waiting on rormpc-tools (2026-10-12, d-33kat4ps): the report's no-recording marking is part of rormpc-tools
+      t-bd3334hn; rormpc's separate, off-by-default filter in the Years panel follows its "landed <tag>".
+- [x] Media key Next in Music, weighted (asked 2026-10-11: "I am in Music, weighted, I press the media Next, it goes [t-a3axjgzk]
       to the next song, but the current one is not seen as the previous one, it is removed from the view. Ask the
       models."): find why the skipped song disappears from the plan view instead of showing as the last play.
       Checked 2026-10-11 (coordinator): afterwards the data is right: the skipped song (id 1893) is still queued with
@@ -883,7 +890,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Confirmed by the user 2026-10-12 with the current build: the skipped song disappears, then appears again as -1,
       so the view renders between MPD's song change and mpd-player's history write (the round's second cause).
       The fix goes in rormpc (a todo run): keep the song that was playing as -1 until shuffle.json has it.
-- [ ] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move [t-7cqbsitp]
+      Fixed 2026-10-12 (7f8ae30, installed and pushed by the run) through herdr todo run r-kbykv266 (worker; reviewed by the coordinator): the plan view keeps the
+      song MPD moved on from as -1 until shuffle.json's history has it or a newer entry, it plays again (Previous) or it left
+      the queue; no timer; shuffle.json history entries' `t` now read to tell a repeat from an old entry. Not tried live
+      (the sandbox). Not covered: the ShuffleNext column of the plain queue may still lose -1 for a moment.
+- [x] Lyrics scroll wrong for "MONTERO (Call Me by Your Name)" by Lil Nas X (asked 2026-10-11: "the lyrics move [t-7cqbsitp]
       badly for MONTERO (Call Me by Your Name), Lil Nas X"): find whether the .lrc timing or rormpc's scrolling is off.
       Checked 2026-10-11 (coordinator): the file is the official video rip (189.8 s); LRCLIB entry 37216484 (chosen
       automatically, within 2 s) says 190 s but its lines run 0:06.77-2:13.72, the ~2:17 audio's timing, so every
@@ -910,6 +921,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "lyrics +X s · =: reset". Refetching the lyrics overwrites the file and drops the shift. Not tried live (the sandbox
       cannot bind MPD's port). Still open in this item: the suspicious-entry flag (rormpc-tools) and the automatic alignment
       (with the transcription work).
+      The rest (the suspicious-entry flag, the automatic alignment) moved to rormpc-tools' TODO (t-fb4wapwk) on
+      2026-10-12 (d-33kat4ps); rormpc's nudge keys are done (5ff3403), so this item is done here.
 
 - [x] Replace "Sweet Nothing" (Calvin Harris ft. Florence Welch), a 4:29 official-video rip with extra video parts [t-is2eqcck]
       (bit.do--spotify2015/364--Calvin_Harris--Calvin_Harris_-_Sweet_Nothing_(Official_Video)_ft._Florence_Welch--17ozSeGw-fY--20120920.mp3),
