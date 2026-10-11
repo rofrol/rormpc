@@ -1,8 +1,9 @@
 # Instant filtering in the Music view, without Apply (plan)
 
-Design only, nothing here is built yet. Written 2026-10-10 from the code, measurements on the real library
-(read-only) and consult round `20261010-230739-29d8` (GPT-6.1 Sol `7f68ca37`, Xiaomi MiMo `829929fd`). The choices
-still open are at the end, each with options. It changes the decision "a filter change prepares, Apply plays" of
+Written 2026-10-10 from the code, measurements on the real library (read-only) and consult round
+`20261010-230739-29d8` (GPT-6.1 Sol `7f68ca37`, Xiaomi MiMo `829929fd`). Every open choice was decided by the user on
+2026-10-11 ("Decided choices" at the end; they override the design where they differ). Built: build order steps 1
+(rormpc-tools 0.2.50/0.2.51), 2 and 3 (rormpc). It changes the decision "a filter change prepares, Apply plays" of
 plans/combined-view.md (open choice 2 there, decided 2026-10-09); the rest of that plan stays.
 
 ## Goal (the user's words, translated)
@@ -61,7 +62,7 @@ Three things, each reflecting one generation (MiMo; Sol the same in other words)
 
 In weighted mode the table is the plan projection as today, so the user sees the result as the forecast changing;
 the counts (`312 matched · 287 owned · 25 missing`) move into the header line. A toggle shows the `hits` result
-rows (with missing songs dimmed) instead of the plan; open choice 3.
+rows (with missing songs dimmed) instead of the plan; decided choice 3.
 
 In normal mode the table is the queue; after the playing song it is in rank order (below).
 
@@ -69,7 +70,8 @@ In normal mode the table is the queue; after the playing song it is in rank orde
 
 Each applied generation reconciles the queue with its target instead of replacing it (both models):
 
-- **target** = the result's owned files ∪ `added` (hand-appended to this source) − `removed` (hand-removed, below);
+- **target** = the result's owned files ∪ `added` (hand-appended to this source); `removed` is obsolete: a hand
+  removal will ban the song (decided 2026-10-11, stage 5), and `hits` leaves banned songs out;
 - **delete** only queue entries that the previous generation put there (its `files`) and that are not in the target,
   never the playing song, never Up next requests, never an entry nobody can attribute (a phone's or mpc's add):
   unknown entries stay (MiMo, Sol: "never delete what you cannot attribute");
@@ -122,7 +124,7 @@ With instant filtering the rules hash changes on every click, so today's key wou
   reading an older `source.json` (no `source_id`) the old way.
 
 Sol would mark "heard" only on a scrobble-qualifying play instead of on start; that changes rounds beyond this
-plan and goes to "Proposed" (see Open choice 7).
+plan and went to step 1 instead (decided choice 7).
 
 ### Undo instead of the confirmation
 
@@ -137,10 +139,10 @@ Apply's confirmation (source kind change, more than 25% of the queue) is gone wi
   files in order), so undo brings the album back in its order (Sol);
 - the header line says what the last change did: `Filter: +rock · 287 songs (was 312) · Backspace undoes`;
 - keys: `u` (Update), `<C-r>` (Rename) and `<C-z>` (ContextMenu) are bound in the user's config; `<BS>` and `Z` are
-  free in both configs (checked 2026-10-10). Open choice 4.
+  free in both configs (checked 2026-10-10). Decided: `z` / `Z` (decided choice 4).
 
 Previous sources (the last 10 applied rule sets) keeps working; it now records a rule set when the source is left or
-after it played a song, not on every click (open choice 6).
+after it played a song, not on every click (decided choice 6).
 
 ### Esc and `a`
 
@@ -154,22 +156,23 @@ after it played a song, not on every click (open choice 6).
 When the queue holds another kind of source (an album or artist played with `P`, a stored playlist, the whole
 library, Sources…, an unknown queue), the first filter touch replaces it by the filter's result: the playing song
 goes on, Up next stays, the old source is the undo entry. Sol: do it at once, show it, keep undo; the old
-confirmation rule would bring back a modal on the first click. Open choice 2.
+confirmation rule would bring back a modal on the first click. Decided: at once (decided choice 2).
 
 ### Edge cases
 
-- **Zero owned songs**: the queue is not touched; the header says `0 owned · the queue keeps <previous>` (MiMo).
-  Sol would empty the upcoming songs ("stops after this song"); open choice 5.
+- **Zero owned songs**: decided (the user, 2026-10-11, Sol's option): the upcoming songs go and it stops after the
+  playing song; the counts line says so. Entries nobody can attribute (a phone's add) stay (MiMo's "the queue keeps
+  <previous>" was not taken).
 - **Hand-appended songs** (`a` / `A` in Browse) stay in `added` and survive every reconcile (as today).
 - **Hand-removed songs**: today a removal is a one-off undone by the next Apply; with instant filtering the next
-  click would bring the song back (MiMo: "the most visible it's-broken bug"). Removals of source songs from the
-  queue in rormpc are recorded in `source.json` `removed` (session scope: cleared when the source is left), not as
-  exceptions; `-` (exclude…) stays the lasting way. A phone's delete is seen as a missing source song and is
-  re-added by the next reconcile, as the next Apply did. Open choice 1.
+  click would bring the song back (MiMo: "the most visible it's-broken bug"). Obsolete design: removals recorded in
+  `source.json` `removed`. Decided instead (the user, 2026-10-11): a hand removal from the queue bans the song into a
+  separate Banned list (the file stays, ListenBrainz untouched), which filters and the shuffle never bring back
+  (stage 5). A phone's delete is seen as a missing source song and is re-added by the next reconcile.
 - **Exceptions** (`+` / `-` on a row, the Exceptions list): `hits` applies them, so recording one is a filter change:
   `hits` runs and the queue reconciles at once (was: "the next Apply takes it into account").
 - **Smart lists**: `L` → Enter loads the list's rules and they apply at once (was: a preview); the list's own
-  `a` (apply) goes. Saving (`S`) is unchanged.
+  `a` (apply) does the same as Enter. Saving (`S`) is unchanged.
 - **Outdated results**: each change runs `hits`, so a result is never older than the filters; `add_known` still skips
   files deleted since. The "Preview outdated, recomputing" path goes with Apply.
 - **The playing song outside the new result** plays on, marked `▶ off-source`, out of the round (as today).
@@ -230,9 +233,10 @@ rormpc:
   line; `a` hint; the rows ⇄ plan toggle (if chosen);
 - `panes/hits.rs`: the run carries its generation; `[ Apply ]` hidden in Play mode (the Hits pane in explicit
   configs keeps its Apply);
-- `rormpc_upnext.rs`: a `Reconcile` next to `Replace` (attribution base = the previous `files`, `added`,
-  `removed`; command list; `moveid` in normal mode; `source.json` written first with `source_id` and
-  `generation`); hand removals in Music record `removed`; `Replace` itself keeps serving Sources… and Browse `P`;
+- `rormpc_upnext.rs`: a `Reconcile` next to `Replace` (attribution base = the previous `files`, `added` and `held`,
+  the source's songs it could not remove: the playing song, an Up next request; command list; `moveid` in normal mode;
+  `source.json` written first with `source_id` and `generation`); hand removals in Music ban (stage 5; `removed` is
+  obsolete); `Replace` itself keeps serving Sources… and Browse `P`;
 - `rormpc_play.rs`: `confirm_reason` no longer used by Music's filters (Browse `P` keeps it); `preview_outdated`
   and the banner go;
 - `rormpc_smartlists.rs`: Enter on a list applies its rules; Previous sources records on leaving or after a play;
@@ -240,15 +244,16 @@ rormpc:
 
 rormpc-tools:
 - `player/shuffle.py`: round key = `source_id` when present (else today's rules hash or name); `heard` kept across
-  member changes; members = `files ∪ added − removed`; tests for a filter change keeping the round and the
+  member changes; members = `files ∪ added` − banned; tests for a filter change keeping the round and the
   forecast entries still queued;
 - `hits` / musicdb: the cached library index (warm step 1); a stable-order test; later `hits serve` if needed;
-- `tests/test_rormpc_contract.py` and rormpc's side: `source.json` gains `source_id`, `generation`, `removed`
-  (mpd-player must read old files too).
+- `tests/test_rormpc_contract.py` and rormpc's side: `source.json` gains `source_id`, `generation` and `held`
+  (mpd-player must read old files too; `removed` is obsolete).
 
 ## Build order
 
-1. mpd-player: `source_id` round key, `heard` kept across member changes, `removed`; reads old `source.json`.
+1. mpd-player: `source_id` round key, `heard` kept across member changes (`removed` obsolete: bans instead);
+   reads old `source.json`.
    Released and installed first (rormpc's new fields are ignored by an older mpd-player, but the round would reset
    on every click).
 2. rormpc: write `source.json` before the queue writes (fixes today's 30 s window; useful alone with Apply).
@@ -257,7 +262,8 @@ rormpc-tools:
    rule; `a` hint; RORMPC.md. Tested on a scratch MPD (AGENTS.md: never the user's queue), including a held key, a
    phone `mpc add` between generations, Up next, normal and weighted mode.
 4. Undo/redo history with its keys; leaving another source as the first undo entry; header's last-change line.
-5. Hand removals → `removed`; exceptions and smart list picks apply at once; Previous sources' new recording rule.
+5. Hand removals → Banned (`removed` obsolete); exceptions and smart list picks apply at once; Previous sources' new
+   recording rule.
 6. Warm step 1: cached library index in `hits`; measure end to end; step 2 only if still over 0.15 s.
 
 Each step ships on its own; steps 1-2 change no behaviour the user sees.
@@ -279,9 +285,9 @@ already sent"; the departed source as the first undo entry; cache the library in
 hand removals must persist or every click resurrects them; `heard` survives a song leaving and re-joining;
 deterministic order or normal mode churns.
 
-Diverged: zero results (Sol: upcoming songs go, "stops after this song"; MiMo: the queue untouched) → open choice
-5; undo depth (Sol 50, MiMo 10-20) → 20; an undo entry per "gesture" (Sol, by input events) vs per applied
-generation (ours, needs no gesture detection); suspend mpd-player's planning during a reconcile (Sol) vs converge
+Diverged: zero results (Sol: upcoming songs go, "stops after this song"; MiMo: the queue untouched) → decided
+choice 5 (Sol's); undo depth (Sol 50, MiMo 10-20) → 20; an undo entry per "gesture" (Sol, by input events) vs per
+applied generation (ours, needs no gesture detection); suspend mpd-player's planning during a reconcile (Sol) vs converge
 (MiMo) → converge, since `source.json` written first already gives mpd-player the members before the queue moves.
 
 Dismissed: MiMo's "full replace churns the playing song's id" (today's Replace deletes around the playing song and
@@ -289,21 +295,26 @@ keeps its id; the diff is chosen for the forecast and the phone edits instead); 
 (duplicates `hits`' rules); MiMo's latest-generation drop inside mpd-player (it already converges per idle event
 and writes only changed priorities); Sol's `u` / `Ctrl-r` and MiMo's `u` / `U` / `Ctrl-z` (all bound in the user's config).
 
-## Open choices
+## Decided choices
 
-1. What does removing a source song from the queue in Music do, now that the next click would bring it back?
-   Options: Remembered for this source (`removed`), cleared when the source is left; `-` stays the lasting exclusion (recommended) | It becomes an exclusion scoped to the source (Sol) | Nothing: the next filter change brings it back
-2. Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
-   Options: At once; the old source is the first undo entry (recommended, Sol) | Ask once per source, then instant | Never: filters apply only while a filter source plays
-3. In weighted mode, what does the table show while filtering?
-   Options: The forecast, with the counts in the header and a rows ⇄ plan toggle for the full result (recommended) | The result rows while the filter column has the keys, the forecast otherwise | Always the result rows
-4. Which keys undo and redo a filter change?
-   Options: Backspace undo, Z redo (recommended, both free) | Z undo, no redo | Other keys (name them)
-5. A filter with 0 owned songs?
-   Options: The queue stays as it was, the header says so (recommended, MiMo) | The upcoming songs go, it stops after the playing song (Sol)
-6. When does Previous sources record a rule set, now that every click applies?
-   Options: When the source is left, or once a song of it has played (recommended) | On every applied change | Only when saved as a smart list
-7. Should a round count a song as heard only after a scrobble-qualifying play instead of on start (Sol)?
-   Options: Not in this plan, add it to Proposed (recommended) | Yes, in step 1
-8. Keep `hits` warm beyond the cached library index?
-   Options: Only if the end-to-end time after the cache is over 0.15 s (recommended) | Build `hits serve` in step 6 anyway | Never
+All decided by the user on 2026-10-11 (TODO.md "Needs a decision", the "Instant filtering:" and "Banned:" entries;
+decision ids in brackets).
+
+1. Removing a song from the queue in Music: lasting, not a session omission: it bans the song into a separate
+   Banned list, like Deleted but the file stays on disk; banned songs never come back through filters or the
+   shuffle, the Banned list restores them, `z` undoes a ban (d-6xjfvyp3, d-x3g5wgkv). ListenBrainz: nothing, listens
+   stay, no feedback (d-a7xehj4c). This replaces `removed` (stage 5).
+2. The first filter touch replaces another kind of source at once; the old source is the first undo entry
+   (d-s6fcqo5u). Built in step 3; the undo entry comes with step 4.
+3. Weighted mode: the table shows the forecast, the counts are in the line under the header, and a rows ⇄ plan
+   toggle shows the full result (d-eaccjsts). Built in step 3 on `o` (TogglePlanView, which did nothing in Music)
+   and a click on `[ o rows ⇄ plan ]`.
+4. Undo / redo: `z` undo, `Z` redo, as in the ki editor (d-7x5qkzms), everywhere; ToggleRepeat moves to `r`
+   (d-3wvtn5zn) and Rate to `y` (d-bcn65ven, d-wsmj4hvj). Step 4.
+5. 0 owned songs: the upcoming songs go, it stops after the playing song (Sol; d-sy7ma764). Built in step 3.
+6. Previous sources records a rule set when it is left, or once a song of it has played (d-m7t2ldzp). Step 5;
+   until then each applied change is recorded.
+7. A round counts a song as heard only after a scrobble-qualifying play, by the user's scrobbler rule (d-yxxlysnq).
+   Built in step 1 (rormpc-tools 0.2.50, the scrobbler's own rule in 0.2.51).
+8. `hits` is kept warm beyond the cached library index only if the end-to-end time after the cache is over 0.15 s
+   (d-ed7ivr5u). Step 6.

@@ -122,28 +122,45 @@ The tab was called "Play" until 2026-10-10; the pane type `Pane(Play())`, `ShowP
 
 - The left column (Filters | Browse) is always open, in both modes (decided by the user 2026-10-10; until then
   normal mode collapsed it to a `Source: …` line). `h` gives it the keys, `l` gives them back to the table.
-- **Normal mode** (weighted off): the table is MPD's queue in its order, as in the Queue pane.
+- **Normal mode** (weighted off): the table is MPD's queue in its order, as in the Queue pane; after the playing
+  song (and the Up next requests) the filters' songs stand in rank order.
 - **Weighted mode** (`w`, ToggleWeightedShuffle, now also in the default keys): the table is the plan projection of
-  the Queue plan view (past plays, `0 ▶`, `↑n` requests and the forecast, nothing after it). `o` does nothing
-  here: the table follows `w`. Turning weighted off keeps the queue as it is.
-- **A filter change prepares**: `hits` runs at once (one run at a time, as Hits' Apply) into its own file,
-  `~/.cache/rormpc/hits/preview.json` (`current.json` stays the Hits pane's), and the table shows that result under
-  a banner: `Preview · <label> · 312 matched · 287 owned · 25 missing · playing song: outside  [ a Apply ]`. MPD is
-  not touched. Esc drops the preview and brings the filters back to the rules being played.
-- **Apply plays**: `a`, the banner's button, the column's `[ Apply ]` or the row menu's "Apply" replace the queue
-  with the preview's owned songs like "Play these N songs": the playing song goes on (outside the new source it
-  plays on and is not in the round), Up next is kept, and `source.json` gets the result's `args` as `rules` and
-  their canonical hash `rules_hash` (sets, Rank by, Years of, period, Top %, genres and artists in any order,
-  owned; not "show excluded"). mpd-player keys its round by that hash: the same rules keep the round, other rules
-  start a new one. Apply asks first only when the queue holds another kind of source (the whole library, a
-  playlist, nothing known) or more than a quarter of the queue (the playing song and Up next not counted) would
-  go. With 0 owned songs it is off ("widen the filter"); the queue is never emptied.
-- **The queue version**: the counts and the confirmation are judged on the queue as it is when `a` is pressed;
-  the replace carries MPD's `playlist` version of that moment and refuses with "The queue changed, preview again"
-  when MPD's differs (a phone, mpc, another rormpc changed it meanwhile). No retry, no delay: `a` again judges the
-  new queue. mpd-player's priority updates count as changes too, so a confirmation left open across a song change
-  is refused.
-- Pins and exclusions: `+` / `-` on a row (queue, plan or preview) open the scope menu with the `+` sets of the
+  the Queue plan view (past plays, `0 ▶`, `↑n` requests and the forecast, nothing after it). Turning weighted off
+  keeps the queue as it is.
+- **Filters apply at once** (plans/instant-filtering.md, decided by the user 2026-10-11; there is no preview and
+  no Apply any more): every filter change (a chip, a period, Rank by, Top %, an artist, a picked smart list, a pin
+  or exclusion) runs `hits` into `~/.cache/rormpc/hits/preview.json` (`current.json` stays the Hits pane's), and
+  its result, once in and still the newest, changes the queue:
+  - only by difference: songs in both the old and the new result keep their MPD entries (mpd-player's planned songs
+    stay planned), the old result's songs the new one leaves out go, new ones are added; the playing song plays on
+    (outside the new result it is marked off-source and stays out of the round), Up next is never touched, and an
+    entry nobody can attribute (a phone's or mpc's add) stays. Songs appended by hand (`added`) stay members;
+  - in one MPD command list (deletes, adds, and in normal mode the moves into rank order); a file MPD's database no
+    longer has is left out and said so;
+  - `source.json` is written first (atomically), then the queue: mpd-player plans from the queue's members, so the
+    new members are there before the queue's idle events wake it;
+  - the first filter touch while the queue holds another kind of source (an album or artist played with `P`, a
+    playlist, the whole library, Sources…, an unknown queue) replaces it at once (decided by the user 2026-10-11);
+  - with 0 owned songs the upcoming songs go and it stops after the playing song (decided by the user 2026-10-11);
+    only an entry nobody can attribute (a phone's add) would still follow it.
+- **The newest change wins**: each change bumps a generation; a run asked for while another runs stops that one,
+  and a reconcile still waiting on the MPD command thread when a newer change came is dropped, so a held key or
+  three quick clicks reach MPD as one change, without any delay or timer. A reconcile that started finishes; the
+  next one starts from the queue as it then is.
+- **The counts line** under the header: `287 owned · 25 missing · was 312` (was: the owned songs before the last
+  change), `updating for the new filters · Esc stops` while `hits` runs, `not applied: <error>` when it failed (the
+  queue keeps the last result). Its right end, `[ o rows ⇄ plan ]` (`[ o rows ⇄ queue ]` in normal mode), shows the
+  `hits` result rows, missing songs dimmed, instead of the plan or the queue: `o` (TogglePlanView) or a click; Esc
+  goes back.
+- `a` outside Browse says once "Filters apply at once; z undoes" and does nothing else (undo with `z` / `Z` comes
+  with the next stage). Esc stops a running `hits`; its result never reaches the queue.
+- `source.json` of a filter source: `kind: "hits"`, the result's `files` (owned, in rank order), the result's `args`
+  as `rules` and their canonical hash `rules_hash` (sets, Rank by, Years of, period, Top %, genres and artists in any
+  order, owned; not "show excluded"), `added`, `held` (songs of the source the newest rules left out but that could
+  not leave: the playing song, an Up next request), a `source_id` (a new UUID when the queue starts holding a filter
+  source, kept by every later filter change: mpd-player's round key, so filter changes keep the round) and
+  `generation` (how many changes of this source reached MPD).
+- Pins and exclusions: `+` / `-` on a row (queue, plan or result rows) open the scope menu with the `+` sets of the
   rules being played; queue and plan rows (in the Queue pane too) show `✚` / `⊘` for a file an exception names
   (`hits exceptions --json`, read in the background and again after `+` / `-` or the Exceptions list).
 
@@ -164,18 +181,15 @@ still load from an explicit config.
 - **Actions on any row**: Enter plays a song now (the queue stays) or opens a container; `P` (PlayReplace) plays
   the selection replacing the queue and starts it at once, in its order (an album in disc/track order, an artist by
   album date then disc/track, a folder in filename order, a list in its order; on a song, its album/folder/list
-  from that song), with weighted shuffle and random off; it asks first under Apply's rule (another source kind, or
-  more than a quarter of the queue would go) and refuses when the queue changed meanwhile. `source.json` gets the
+  from that song), with weighted shuffle and random off; it asks first when the queue holds another source kind or
+  more than a quarter of the queue would go, and refuses when the queue changed meanwhile. `source.json` gets the
   kind (`album`, `artist`, `directory`, `playlist`, `selection`), a name and the files. `t` (PlayNext) puts the
-  selection into Up next; `a` / `A` append. Never Apply: in Browse `a` appends, elsewhere in Music it applies (the
-  header says `Browse › Albums (a appends)` while Browse has the keys).
+  selection into Up next; `a` / `A` append (the header says `Browse › Albums (a appends)` while Browse has the
+  keys).
 - **Appending to a Hits source**: songs appended with `a` / `A` while the queue holds a Hits result join its files:
   `source.json` lists them in `added` (the rules hash stays), the source line says `+N added`, and mpd-player
-  (rormpc-tools newer than 0.2.39) draws them in the same round (a round already done opens again for them). The
-  next Apply drops them like any hand edit. It is recorded with weighted off too, so turning it on later still
-  draws them.
-- **An unapplied preview stays** when a Browse action changes the queue: the banner keeps its counts (they do not
-  depend on the queue) and Apply judges its confirmation against the queue as it is when `a` is pressed.
+  (rormpc-tools newer than 0.2.39) draws them in the same round (a round already done opens again for them). Filter
+  changes keep them. It is recorded with weighted off too, so turning it on later still draws them.
 - **The playlist editor** opens as a panel over Music when a playlist is entered in Lists (`l` on it):
   `Editing "melancholic" · changes are saved at once`. J/K move the song (marked songs together), `D` removes it,
   Ctrl-r renames (at the Lists level); every edit is an immediate MPD command, as before. `D` at the Lists level
@@ -207,7 +221,8 @@ still load from an explicit config.
   | `[` / `]` | queue | PreviousGrouping / NextGrouping in Browse |
   | `P` | navigation | PlayReplace: play the selection replacing the queue (Browse) |
   | `t` | navigation | PlayNext: the selection into Up next (Browse, the browser tabs, the Queue) |
-  | `a` / `A` | navigation | append (Browse); Apply elsewhere in Music |
+  | `a` / `A` | navigation | append (Browse); elsewhere in Music a hint that filters apply at once |
+  | `o` | queue | TogglePlanView: the result rows ⇄ the plan or the queue |
   | Esc | navigation | Browse: marks first, then the editor panel, then back to the filters |
 
   A config that binds `P` in its queue map (e.g. `"P": SortByColumn(4)`) drops the built-in navigation `P`: a key
@@ -220,28 +235,28 @@ still load from an explicit config.
 A smart list is Music's filters saved under a name (plans/combined-view.md, phase 4), kept by `hits lists` in the
 data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `hits` arguments).
 
-- `S` (QueueActions `SaveSmartList`) saves the filters on screen: a name prompt with the rules and the preview's
+- `S` (QueueActions `SaveSmartList`) saves the filters on screen: a name prompt with the rules and the result's
   counts shown. A name that exists asks "Update it" (with the filters on screen) or "Another name". The saved list
   becomes the open one.
 - `L` (`SmartLists`) opens the picker: Smart lists, Previous sources, then MPD playlists and Live playlists in their
   own sections (the "Smart …" exports are left out of the MPD section). Enter loads a list's rules into the filter
-  column as a preview: nothing plays until Apply. On a list row `a` applies it (the preview is made, then played as
-  Apply plays it), `r` renames, `u` updates it with the filters on screen, `c` duplicates it (with its exceptions),
-  `d` deletes it after a confirmation (its exceptions and its "Smart NAME" playlist go with it); Left/Right and a
-  click pick the same buttons. The letters are matched by what they are bound to (Add, Rate, Update,
-  ToggleConsume/ConsumeOff, Delete), since a modal sees actions, not keys. Enter on an MPD or Live playlist plays it
-  as the source, after the same confirmation as "Sources…". "× Close the smart list" keeps the filters and leaves
-  the list.
+  column, and they apply at once like any filter change (`a` on a list row does the same). `r` renames, `u` updates it
+  with the filters on screen, `c` duplicates it (with its exceptions), `d` deletes it after a confirmation (its
+  exceptions and its "Smart NAME" playlist go with it); Left/Right and a click pick the same buttons. The letters are
+  matched by what they are bound to (Add, Rate, Update, ToggleConsume/ConsumeOff, Delete), since a modal sees actions,
+  not keys. Enter on an MPD or Live playlist plays it as the source, after the same confirmation as "Sources…".
+  "× Close the smart list" keeps the filters and leaves the list.
 - The open smart list is part of the filters: Music runs `hits --open-list ID`, so the list's own exceptions
   (scope `list:ID`) apply, and its id is part of the rules hash. The header names it (`Smart list: 80s party`,
   "(changed)" once the filters differ from its rules), and a list applied as saved plays as "Hits · smart list 80s party". A new pin or exclusion defaults to the open
   list ("in the smart list 80s party only (while it is open)"), else library.
-- Export: Apply of a list writes it as the MPD playlist "Smart NAME" (`hits lists export ID` in the background) and
-  `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The export is a
-  snapshot for phones, never read back as rules, and `hits`' "my playlists" set leaves "Smart " playlists out.
-- Previous sources: each Apply in Music is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json` (the last 10
-  rule sets, the same rules once; local state, not the data repo). Enter loads one as a preview, `a` applies it, so
-  "weighted off, now give me the old queue back" is one explicit Apply.
+- Export: each change applied with a list open writes it as the MPD playlist "Smart NAME" (`hits lists export ID` in
+  the background) and `musicdb update` writes every list hourly; the picker shows "287 songs · exported 3 h ago". The
+  export is a snapshot for phones, never read back as rules, and `hits`' "my playlists" set leaves "Smart " playlists
+  out.
+- Previous sources: each change applied in Music is remembered in `$XDG_STATE_HOME/rormpc/previous-sources.json`
+  (the last 10 rule sets, the same rules once; local state, not the data repo; recording only when a rule set is
+  left or after one of its songs played comes with a later stage). Enter loads one, and it applies at once.
 - A list whose rules or events this version cannot read shows `! NAME · made by a newer rormpc-tools, update it`
   and is never loaded or exported (its last export stays).
 - A smart list can use another one as a set ("+ set…"); updating a list so that it leads back to itself is
@@ -380,8 +395,9 @@ dim and marked; "⋯ exceptions…" lists every exception by scope (`hits except
 is gone shows `!`) and Enter removes the one under the cursor (a hide is unhidden). In the filter column the same
 `+` / `-` set the set, genre or artist row under the cursor (pressed again: off). Only these keys record an
 exception: "Remove from queue" and a song added by hand stay one-offs, and the queue itself never changes when an
-exception is recorded; the next "Play these" (or Apply in Music) takes it into account. The log is
-`<data_dir>/exceptions.jsonl`, keyed by music-data's song id (songs.jsonl), so a pin follows a moved or merged file.
+exception is recorded; the next "Play these" takes it into account (in Music its `hits` run applies at once).
+The log is `<data_dir>/exceptions.jsonl`, keyed by music-data's song id (songs.jsonl), so a pin follows a moved or
+merged file.
 
 ```ron
 (name: "Hits", pane: Split(size: "100%", direction: Vertical, panes: [

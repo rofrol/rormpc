@@ -188,16 +188,6 @@ pub(crate) fn run(args: &[&str]) -> Result<String, String> {
     }
 }
 
-/// A journal row's `deleted_at` ("2026-10-03T12:00:00", local time, or RFC 3339 with an offset).
-fn deleted_at(text: &str) -> Option<std::time::SystemTime> {
-    use chrono::TimeZone;
-    if let Ok(t) = chrono::DateTime::parse_from_rfc3339(text) {
-        return Some(t.into());
-    }
-    let naive = text.parse::<chrono::NaiveDateTime>().ok()?;
-    chrono::Local.from_local_datetime(&naive).earliest().map(Into::into)
-}
-
 impl DeletedPane {
     pub fn new() -> Self {
         // the pane is built at startup: say once if deletion cleanup steps are failing, even when it is not shown
@@ -276,11 +266,6 @@ impl DeletedPane {
     /// Deletions with failed or unresolved steps (Music's `Deleted ! N` badge), as of the last load.
     pub fn attention(&self) -> usize {
         self.rows.iter().filter(|r| r.needs_attention()).count()
-    }
-
-    /// When the newest deletion of the last load happened (its `deleted_at`: local time, or with an offset).
-    pub fn newest_deletion(&self) -> Option<std::time::SystemTime> {
-        self.rows.iter().filter_map(|r| deleted_at(&r.deleted_at)).max()
     }
 
     fn selected(&self) -> Option<&Deleted> {
@@ -591,9 +576,7 @@ impl Pane for DeletedPane {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-
-    use super::{Deleted, RestorePlan, deleted_at, plan_message};
+    use super::{Deleted, RestorePlan, plan_message};
 
     #[test]
     fn the_restore_plan_becomes_the_confirmation() {
@@ -624,18 +607,6 @@ mod tests {
         assert!(row(r#""restored""#).restored());
         assert!(!row(r#""partial""#).restored() && row(r#""partial""#).restore.is_some());
         assert!(!row("null").restored() && row("null").restore.is_none());
-    }
-
-    #[test]
-    fn the_newest_deletion_is_read_in_local_time_or_with_its_offset() {
-        let utc = deleted_at("2026-10-10T14:31:00+00:00").expect("RFC 3339");
-        let local = deleted_at("2026-10-10T16:31:00").expect("local time");
-        let naive = "2026-10-10T16:31:00".parse::<chrono::NaiveDateTime>().expect("a local time");
-        let expected: std::time::SystemTime =
-            chrono::Local.from_local_datetime(&naive).earliest().expect("a time that exists here").into();
-        assert_eq!(local, expected);
-        assert!(utc > std::time::SystemTime::UNIX_EPOCH);
-        assert!(deleted_at("yesterday").is_none());
     }
 
     #[test]

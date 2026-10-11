@@ -16,7 +16,7 @@ use std::{
     process::{Command, Stdio},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant, SystemTime},
 };
@@ -524,12 +524,13 @@ pub struct HitsPane {
     /// the pins file as last read: a genre pinned elsewhere (Queue's "Pin genre…") gets its checkbox on the next render
     pins_mtime: Option<SystemTime>,
     job: Arc<Mutex<Job>>,
-    /// rormpc Play: the filter column of the Play pane. A filter change runs `hits` into the preview file at once
-    /// (`requested`: the arguments of the last run asked for); Apply (the button, Enter on it, the row menu)
-    /// sets `commit` for Play to replace the queue instead of running `hits`.
+    /// rormpc Play: the filter column of the Play pane, without Apply. A filter change runs `hits` into the Play
+    /// file at once (`requested`: the arguments of the last run asked for) and bumps `generation`, the newest
+    /// intent; `fresh` says a newest run's result came in, which Play applies to the queue.
     play_mode: bool,
     requested: Option<Vec<String>>,
-    commit: Arc<AtomicBool>,
+    generation: Arc<AtomicU64>,
+    fresh: bool,
     /// the result file's `args` as written: what Play stores in source.json as the rules it played
     raw_args: Option<serde_json::Value>,
 }
@@ -551,10 +552,12 @@ pub(crate) struct PreviewInfo {
 }
 
 impl HitsPane {
-    /// The Hits filter column and result table inside Play, writing the preview file `path`.
-    pub fn for_play(path: String, command: Vec<String>) -> Self {
+    /// The Hits filter column and result table inside Play, writing the file `path`; every run it starts bumps
+    /// `generation`.
+    pub fn for_play(path: String, command: Vec<String>, generation: Arc<AtomicU64>) -> Self {
         let mut pane = Self::new(path, command);
         pane.play_mode = true;
+        pane.generation = generation;
         pane
     }
 
@@ -562,7 +565,8 @@ impl HitsPane {
         Self {
             play_mode: false,
             requested: None,
-            commit: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(AtomicU64::new(0)),
+            fresh: false,
             raw_args: None,
             command: command.iter().map(|c| expand_home(c)).collect(),
             filters: None,
@@ -848,6 +852,7 @@ impl HitsPane {
     /// through the JSON file.
     fn apply(&mut self, ctx: &Ctx) {
         let Some(filters) = &self.filters else { return };
+        self.generation.fetch_add(1, Ordering::SeqCst); // a newer intent: older results no longer reach MPD
         let run = Run { args: filters.args(&self.path.to_string_lossy()), filters: filters.clone(), asked: Instant::now() };
         start_run(&self.job, run, &self.command, &self.path, ctx.app_event_sender.clone());
     }
@@ -867,15 +872,6 @@ impl HitsPane {
         true
     }
 
-    /// The Apply button: run `hits` (Hits), or ask Play to play the preview (Play runs `hits` on every change).
-    fn apply_pressed(&mut self, ctx: &Ctx) {
-        if self.play_mode {
-            self.commit.store(true, Ordering::Relaxed);
-        } else {
-            self.apply(ctx);
-        }
-    }
-
     /// Play: the filters changed since the last run asked for: run `hits` for them (the queued-run rule of
     /// `apply` keeps it to one run at a time).
     fn preview_if_changed(&mut self, ctx: &Ctx) {
@@ -886,23 +882,14 @@ impl HitsPane {
         }
     }
 
-    /// Play: run `hits` again for the filters on screen (Apply found the preview older than the library).
-    pub(crate) fn recompute(&mut self, ctx: &Ctx) {
-        self.apply(ctx);
+    /// Play: a newest run's result came in since the last call (its filters may have changed since: check
+    /// `preview_info().ready`).
+    pub(crate) fn take_fresh(&mut self) -> bool {
+        std::mem::take(&mut self.fresh)
     }
 
-    /// When the result on screen was written (the file's mtime as last read).
-    pub(crate) fn result_mtime(&self) -> Option<SystemTime> {
-        self.loaded_mtime
-    }
-
-    /// Play: Apply was pressed in the column or the row menu since the last call.
-    pub(crate) fn take_commit(&self) -> bool {
-        self.commit.swap(false, Ordering::Relaxed)
-    }
-
-    /// Play: set the filters to `args` (a result file's `args`; None: the defaults) without running `hits`.
-    /// What Play starts from, and what Esc returns to.
+    /// Play: set the filters to `args` (a result file's `args`; None: the defaults) without running `hits`:
+    /// the rules being played, which Play starts from.
     pub(crate) fn reset_filters(&mut self, args: Option<&serde_json::Value>) {
         let parsed = args.and_then(|a| serde_json::from_value::<HitsArgs>(a.clone()).ok());
         let filters = parsed.as_ref().map_or_else(Filters::default, Filters::from_args);
@@ -931,7 +918,7 @@ impl HitsPane {
     }
 
     /// Play: load a smart list's or a previous source's rules (a result file's `args`) into the filters; the
-    /// next frame runs `hits` for them as a preview. Nothing plays.
+    /// next frame runs `hits` for them, and its result applies like any filter change.
     pub(crate) fn load_filters(&mut self, args: &serde_json::Value) -> Result<(), String> {
         let parsed = serde_json::from_value::<HitsArgs>(args.clone()).map_err(|e| e.to_string())?;
         self.filters = Some(Filters::from_args(&parsed));
@@ -1017,8 +1004,13 @@ impl HitsPane {
         self.downloads
     }
 
+    /// The column's rows; Play has no Apply (its filters apply at once).
     fn filter_rows(&self) -> Vec<FilterRow> {
-        self.filters.as_ref().map(Filters::rows).unwrap_or_default()
+        let mut rows = self.filters.as_ref().map(Filters::rows).unwrap_or_default();
+        if self.play_mode {
+            rows.retain(|r| *r != FilterRow::Apply);
+        }
+        rows
     }
 
     fn filter_action(&mut self, action: &CommonAction, ctx: &Ctx) -> bool {
@@ -1032,7 +1024,7 @@ impl HitsPane {
             CommonAction::Bottom => self.filter_sel = snap(&rows, rows.len() - 1, false),
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Apply => {
                 self.leave_downloads();
-                self.apply_pressed(ctx);
+                self.apply(ctx);
             }
             CommonAction::Confirm | CommonAction::Select if row == FilterRow::Downloads => {
                 if self.downloads {
@@ -1378,9 +1370,6 @@ impl HitsPane {
         let running = self.job.lock().expect("hits job lock").current.is_some();
         let changed = self.applied_args.as_ref() != Some(&filters.args(&self.path.to_string_lossy()));
         let state = match (running, changed) {
-            // Play runs hits on every change; the banner says whether Apply would play anything
-            (true, _) if self.play_mode => " preview…",
-            _ if self.play_mode => " (a)",
             (true, _) => " running… (Esc stops)",
             (false, true) => " • changed",
             (false, false) => "",
@@ -1527,18 +1516,8 @@ impl HitsPane {
         // the whole result as a playlist: owned rows in ranking order, missing ones skipped (and said so)
         let owned: Vec<String> = self.all_rows.iter().filter_map(|x| x.file.clone()).collect();
         let missing = self.all_rows.len() - owned.len();
-        if !owned.is_empty() && self.play_mode {
-            // Play's Apply: its version check and confirmation rule, the rules in source.json
-            let (commit, sender) = (Arc::clone(&self.commit), ctx.app_event_sender.clone());
-            menu = menu.list_section(ctx, move |mut section| {
-                section.add_item("Apply: play this preview (a)", move |_| {
-                    commit.store(true, Ordering::Relaxed);
-                    let _ = sender.send(AppEvent::RequestRender);
-                    Ok(())
-                });
-                Some(section)
-            });
-        } else if !owned.is_empty() {
+        // Play's filters apply at once: the result already is the queue's source
+        if !owned.is_empty() && !self.play_mode {
             let (name, files) = (self.label.clone(), owned.clone());
             let label = format!("Play these {} songs (as the source)…", owned.len());
             menu = menu.list_section(ctx, move |mut section| {
@@ -2174,6 +2153,7 @@ impl HitsPane {
         if let Some(run) = self.job.lock().expect("hits job lock").ok.take() {
             self.applied_args = Some(run.args);
             self.shown = Some(run.filters);
+            self.fresh = self.play_mode;
         }
         if let Some(sets) = rormpc_sets::take_ready(&self.set_picker) {
             let added: Vec<String> = self.filters.as_ref().map(|f| f.named.iter().map(|n| n.key.clone()).collect()).unwrap_or_default();
@@ -2246,8 +2226,9 @@ impl HitsPane {
             let hint = self.row_hint().map_or(0, |h| rormpc_hits_rules::wrap(h, width).len());
             (hint + rormpc_hits_rules::wrap(&self.summary(f), width).len().min(4)) as u16
         });
+        let apply_height = u16::from(!self.play_mode);
         let [list_area, summary_area, apply_area] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(summary_lines), Constraint::Length(1)])
+            Layout::vertical([Constraint::Min(0), Constraint::Length(summary_lines), Constraint::Length(apply_height)])
                 .areas(filter_area);
         self.summary_area = summary_area;
         if list_area != self.filter_area {
@@ -2433,7 +2414,7 @@ impl HitsPane {
         // what plays vs what is browsed: the snapshot is never changed by moving a filter
         let playing = match &source {
             // Play says what plays in its own header and banner
-            _ if self.play_mode => " a: Apply (play these, replacing the queue) · Esc: drop the preview · / search".to_owned(),
+            _ if self.play_mode => " Filters apply at once (missing songs dimmed) · W: the plan again · / search".to_owned(),
             Some((_, name, files)) => {
                 let round = shuffle.round.as_ref().map_or(String::new(), |r| {
                     if r.done { " · round done (a queue song's menu in Music: new round)".to_owned() } else { format!(" · heard {}/{}", r.heard.len(), r.total) }
@@ -2500,7 +2481,7 @@ impl Pane for HitsPane {
                 self.focus_filters = true;
                 self.filter_sel = self.filter_rows().len().saturating_sub(1);
                 self.leave_downloads();
-                self.apply_pressed(ctx);
+                self.apply(ctx);
                 ctx.render()?;
             }
             return Ok(());
@@ -4043,7 +4024,7 @@ printf '%s' "$1" > "$out""#;
         let list = serde_json::json!({"period": "1985-1992", "top": "1-100", "genre": "+rock", "artist": "",
             "owned": false, "rank": "billboard", "years_of": "chart", "sets": ["+billboard"],
             "show_excluded": false, "source": null, "open_list": "L1", "open_list_name": "80s party"});
-        let mut play = HitsPane::for_play("/nonexistent/preview.json".into(), vec!["hits".into()]);
+        let mut play = HitsPane::for_play("/nonexistent/preview.json".into(), vec!["hits".into()], Arc::default());
         play.load_filters(&list).expect("a list's args load");
         assert_eq!(play.open_list(), Some(("L1".to_owned(), "80s party".to_owned())));
         let f = play.filters.clone().expect("filters");
@@ -4106,14 +4087,14 @@ printf '%s' "$1" > "$out""#;
         // Play keeps the result file's args in source.json and hashes them back on the next start
         let raw = serde_json::json!({"period": "1980-1989", "top": "1-10", "genre": "+rock, -country",
             "artist": "+Toto", "owned": false, "sets": ["+billboard"], "rank": "billboard", "years_of": "chart"});
-        let mut play = HitsPane::for_play("/nonexistent/preview.json".into(), vec!["hits".into()]);
+        let mut play = HitsPane::for_play("/nonexistent/preview.json".into(), vec!["hits".into()], Arc::default());
         play.reset_filters(Some(&raw));
         assert_eq!(play.rules_hash(), Some(HitsPane::rules_hash_of(Some(&raw))));
         assert_eq!(play.rules_hash(), Some(crate::ui::rormpc_play::rules_hash(&a.rules_key())));
-        // nothing ran for these filters: no preview to apply yet
+        // nothing ran for these filters: no result to apply yet
         let info = play.preview_info();
         assert!(!info.ready && info.files.is_empty());
-        assert!(!play.take_commit());
+        assert!(!play.take_fresh());
     }
 
     #[test]

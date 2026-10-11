@@ -1,31 +1,13 @@
-//! rormpc: the preview and Apply of the Play pane (plans/combined-view.md "A filter change prepares, Apply plays").
+//! rormpc: the Play pane's helpers outside the pane itself.
 //!
-//! - A filter change runs `hits` into its own preview file (`PREVIEW_FILE`); `current.json` keeps meaning the Hits
-//!   pane's result. Play shows the preview's counts in a banner; nothing in MPD changes.
-//! - Apply (`a`, the banner's button, the column's Apply) replaces the queue with the preview's owned songs as
-//!   "Play these N songs" does: the playing song goes on, Up next is kept, source.json names the rules and their
-//!   canonical hash (mpd-player's round key: the same rules keep the round, other rules start a new one).
-//! - It asks first only when the source kind changes or more than a quarter of the queue would go.
-//! - The counts and the confirmation are judged on MPD's queue at that moment; the replace carries that queue's
-//!   `playlist` version and refuses ("the queue changed, preview again") when MPD's differs. No retry, no delay.
-//! - Browse's `P` (phase 3b) replaces the queue with an album, folder, artist or list in its order under the same
-//!   confirmation rule, and starts it at once.
+//! - Music's filters apply at once (plans/instant-filtering.md): every finished newest `hits` run into
+//!   `PREVIEW_FILE` reconciles the queue (`rormpc_upnext::reconcile_hits_source`); there is no preview and no Apply.
+//! - Browse's `P` (phase 3b) replaces the queue with an album, folder, artist or list in its order, and starts it
+//!   at once. It asks first only when the source kind changes or more than a quarter of the queue would go; the
+//!   replace carries the queue's `playlist` version and refuses when MPD's moved since. No retry, no delay.
 //! - `ShowPlay` (5-9, 0, gl) leaves the view it asks for here; Play takes it on its next render.
-//! - A preview older than the library's last change (MPD's database update, the deletion journal's newest
-//!   entry) is recomputed before Apply plays it; the banner says "Preview outdated, recomputing" meanwhile. The
-//!   replace itself leaves out files MPD no longer has and never deletes the old queue before the new songs are in.
 
-use std::{
-    collections::HashSet,
-    sync::Mutex,
-    time::{Duration, SystemTime},
-};
-
-use rmpc_mpd::{
-    errors::MpdError,
-    from_mpd::{FromMpd, LineHandled},
-    proto_client::ProtoClient,
-};
+use std::{collections::HashSet, sync::Mutex};
 
 use crate::{
     config::tabs::PlayView,
@@ -34,7 +16,7 @@ use crate::{
     ui::{
         modals::confirm_modal::{Action, ConfirmModal},
         panes::hits::PreviewInfo,
-        rormpc_upnext::{self, Collection, HitsSource},
+        rormpc_upnext::{self, Collection},
     },
 };
 
@@ -65,6 +47,31 @@ pub fn rules_hash(key: &str) -> String {
     format!("{h:016x}")
 }
 
+/// The line under Music's header: what the filters made of the queue. `was`: the owned songs of the generation
+/// before the newest one sent to MPD; `asked`: a filter change ran `hits` in this session (until then the file
+/// on disk, or its absence, says nothing about the queue).
+pub fn counts_line(info: &PreviewInfo, was: Option<usize>, asked: bool) -> String {
+    if !asked {
+        return "Filters apply at once · o: the result rows".to_owned();
+    }
+    if info.running {
+        return "updating for the new filters · Esc stops".to_owned();
+    }
+    if let Some(err) = &info.error {
+        return format!("not applied: {err} (the queue keeps the last result)");
+    }
+    if !info.ready {
+        return "Filters apply at once · o: the result rows".to_owned();
+    }
+    let owned = info.files.len();
+    let missing = info.matched.saturating_sub(owned);
+    let was = was.filter(|w| *w != owned).map_or(String::new(), |w| format!(" · was {w}"));
+    if owned == 0 {
+        return format!("0 owned · {missing} missing{was} · the upcoming songs went: it stops after the playing song");
+    }
+    format!("{owned} owned · {missing} missing{was}")
+}
+
 /// One queue entry as the confirmation rule sees it.
 #[derive(Debug, Clone, Copy)]
 pub struct Entry<'a> {
@@ -72,20 +79,9 @@ pub struct Entry<'a> {
     pub file: &'a str,
 }
 
-/// Why Apply asks before replacing the queue, or None to replace it at once. The playing song (it goes on) and
-/// Up next requests (they are kept) never count; an empty rest never asks.
-pub fn confirm_reason(
-    current_kind: Option<&str>,
-    queue: &[Entry<'_>],
-    playing: Option<u32>,
-    up_next: &[u32],
-    files: &HashSet<&str>,
-) -> Option<String> {
-    confirm_reason_for("hits", current_kind, queue, playing, up_next, files)
-}
-
-/// Apply's rule for any new source kind (Browse's `P`: "album", "directory", ...): ask only when the kind
-/// changes or more than a quarter of the queue would go.
+/// Why Browse's `P` asks before replacing the queue with a source of `new_kind` ("album", "directory", ...), or
+/// None to replace it at once: only when the kind changes or more than a quarter of the queue would go. The
+/// playing song (it goes on) and Up next requests (they are kept) never count; an empty rest never asks.
 pub fn confirm_reason_for(
     new_kind: &str,
     current_kind: Option<&str>,
@@ -107,109 +103,11 @@ pub fn confirm_reason_for(
             Some(kind) => format!("{} source", with_article(rormpc_upnext::kind_label(kind))),
             None => "songs from no known source".to_owned(),
         };
-        let makes = match new_kind {
-            "hits" => "Apply makes it a Hits result".to_owned(),
-            kind => format!("P makes it {}", with_article(rormpc_upnext::kind_label(kind))),
-        };
+        let makes = format!("P makes it {}", with_article(rormpc_upnext::kind_label(new_kind)));
         return Some(format!("The queue holds {what} ({} songs); {makes}.", rest.len()));
     }
     let gone = rest.iter().filter(|e| !files.contains(e.file)).count();
     (gone * 4 > rest.len()).then(|| format!("{gone} of the {} songs in the queue would go.", rest.len()))
-}
-
-/// MPD's `stats`, of which only the database's last update counts here.
-#[derive(Debug, Default)]
-struct DbStats {
-    db_update: Option<u64>,
-}
-
-impl FromMpd for DbStats {
-    fn next_internal(&mut self, key: &str, value: String) -> Result<LineHandled, MpdError> {
-        if key == "db_update" {
-            self.db_update = Some(value.parse().map_err(|_| MpdError::Parse(format!("db_update: {value}")))?);
-        }
-        Ok(LineHandled::Yes)
-    }
-}
-
-/// When MPD's database last changed (`stats` `db_update`), None when it never did or MPD cannot say.
-pub fn db_updated_at(ctx: &Ctx) -> Option<SystemTime> {
-    let stats = ctx.query_sync(|client| {
-        client.execute("stats")?;
-        Ok(client.read_response::<DbStats>()?)
-    });
-    stats.ok()?.db_update.map(|secs| SystemTime::UNIX_EPOCH + Duration::from_secs(secs))
-}
-
-/// Whether a preview written at `preview` is older than the library's last change (MPD's database update, the
-/// deletion journal's newest entry). MPD counts whole seconds: a change in the preview's own second counts as
-/// newer, so a preview is never trusted over a deletion it may not have seen.
-pub fn preview_outdated(preview: Option<SystemTime>, changes: &[Option<SystemTime>]) -> bool {
-    let secs = |t: SystemTime| t.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let Some(preview) = preview.map(secs) else { return false };
-    changes.iter().flatten().any(|&t| secs(t) >= preview)
-}
-
-/// The banner over a preview and whether its Apply would play anything. `recomputing`: Apply found the preview
-/// older than the library and runs `hits` again before it plays.
-pub fn banner(info: &PreviewInfo, playing_file: Option<&str>, recomputing: bool) -> (String, bool) {
-    if info.running && recomputing {
-        return ("Preview outdated, recomputing… (Apply plays it when the counts are in)".to_owned(), false);
-    }
-    if info.running {
-        return ("Preview · running hits… (Apply waits for it · Esc stops it)".to_owned(), false);
-    }
-    if let Some(err) = &info.error {
-        return (format!("Preview · {err}"), false);
-    }
-    if !info.ready {
-        return ("Preview · not made yet".to_owned(), false);
-    }
-    let owned = info.files.len();
-    let missing = info.matched.saturating_sub(owned);
-    let head = format!("Preview · {} · {} matched · {owned} owned · {missing} missing", info.label, info.matched);
-    if owned == 0 {
-        return (format!("{head} · nothing to play: widen the filter"), false);
-    }
-    let playing = match playing_file {
-        Some(f) if info.files.iter().any(|x| x == f) => " · playing song: in it",
-        Some(_) => " · playing song: outside (plays on, not in the round)",
-        None => "",
-    };
-    (format!("{head}{playing}"), true)
-}
-
-/// Apply: replace the queue with `src`, asking first when `confirm_reason` says so. The queue version is the
-/// one the decision was made on: the replace refuses if MPD's queue moved since.
-pub fn apply(ctx: &Ctx, src: HitsSource) {
-    let version = ctx.status.playlist;
-    let kind = rormpc_upnext::source_info().map(|(kind, _, _)| kind);
-    let entries: Vec<Entry<'_>> = ctx.queue.iter().map(|s| Entry { id: s.id, file: s.file.as_str() }).collect();
-    let files: HashSet<&str> = src.files.iter().map(String::as_str).collect();
-    let reason = confirm_reason(kind.as_deref(), &entries, ctx.status.songid, &rormpc_upnext::up_next_ids(), &files);
-    let Some(reason) = reason else {
-        rormpc_upnext::apply_hits_source(ctx, src, version);
-        return;
-    };
-    let waiting = rormpc_upnext::up_next_ids().len();
-    let message = vec![format!(
-        "Play {} songs of {}?\n\n{reason}\nThe song playing now goes on, then the new source plays.{}",
-        src.files.len(),
-        src.name,
-        if waiting > 0 { format!("\nUp next ({waiting}) is kept and plays first.") } else { String::new() }
-    )];
-    let go = move |ctx: &Ctx| -> anyhow::Result<()> {
-        rormpc_upnext::apply_hits_source(ctx, src, version);
-        Ok(())
-    };
-    modal!(
-        ctx,
-        ConfirmModal::builder()
-            .ctx(ctx)
-            .message(message)
-            .action(Action::CustomButtons { buttons: vec![("Cancel", Box::new(|_: &Ctx| Ok(()))), ("Apply", Box::new(go))] })
-            .build()
-    );
 }
 
 /// "an album", "a folder".
@@ -218,7 +116,7 @@ fn with_article(word: &str) -> String {
     format!("{} {word}", if an { "an" } else { "a" })
 }
 
-/// Browse's `P`: replace the queue with `col` and start it now, asking first under Apply's rule. The queue
+/// Browse's `P`: replace the queue with `col` and start it now, asking first under `confirm_reason_for`. The queue
 /// version is the one the decision was made on: the replace refuses if MPD's queue moved since.
 pub fn play_collection(ctx: &Ctx, col: Collection) {
     if col.files.is_empty() {
@@ -271,27 +169,37 @@ mod tests {
         assert_ne!(rules_hash(r#"{"top":"1-10"}"#), rules_hash(r#"{"top":"11-20"}"#));
     }
 
+    fn confirm_reason(
+        current_kind: Option<&str>,
+        queue: &[Entry<'_>],
+        playing: Option<u32>,
+        up_next: &[u32],
+        files: &HashSet<&str>,
+    ) -> Option<String> {
+        confirm_reason_for("album", current_kind, queue, playing, up_next, files)
+    }
+
     #[test]
-    fn a_hits_queue_asks_only_when_more_than_a_quarter_goes() {
+    fn an_album_queue_asks_only_when_more_than_a_quarter_goes() {
         let q = queue(&["a", "b", "c", "d", "e"]);
         let keep: HashSet<&str> = ["a", "b", "c", "d"].into();
         // 1 of 5 goes: no question
-        assert_eq!(confirm_reason(Some("hits"), &q, None, &[], &keep), None);
+        assert_eq!(confirm_reason(Some("album"), &q, None, &[], &keep), None);
         let half: HashSet<&str> = ["a", "b", "c"].into();
         assert_eq!(
-            confirm_reason(Some("hits"), &q, None, &[], &half).as_deref(),
+            confirm_reason(Some("album"), &q, None, &[], &half).as_deref(),
             Some("2 of the 5 songs in the queue would go.")
         );
         // exactly a quarter: no question
         let q4 = queue(&["a", "b", "c", "d"]);
-        assert_eq!(confirm_reason(Some("hits"), &q4, None, &[], &keep.iter().copied().take(3).collect()), None);
+        assert_eq!(confirm_reason(Some("album"), &q4, None, &[], &keep.iter().copied().take(3).collect()), None);
     }
 
     #[test]
     fn the_playing_song_and_up_next_never_count() {
         let q = queue(&["playing", "request", "a", "b"]);
         let files: HashSet<&str> = ["a", "b"].into();
-        assert_eq!(confirm_reason(Some("hits"), &q, Some(1), &[2], &files), None);
+        assert_eq!(confirm_reason(Some("album"), &q, Some(1), &[2], &files), None);
         // only the playing song and a request left: nothing to lose, whatever the kind
         let q = queue(&["playing", "request"]);
         assert_eq!(confirm_reason(Some("library"), &q, Some(1), &[2], &HashSet::new()), None);
@@ -335,46 +243,20 @@ mod tests {
     }
 
     #[test]
-    fn the_banner_counts_and_disables_apply_without_owned_songs() {
-        let (text, on) = banner(&info(&["a", "b"], 3), Some("x"), false);
-        assert_eq!(text, "Preview · 1980s · 3 matched · 2 owned · 1 missing · playing song: outside (plays on, not in the round)");
-        assert!(on);
-        let (text, on) = banner(&info(&["a"], 1), Some("a"), false);
-        assert!(text.ends_with("playing song: in it"), "{text}");
-        assert!(on);
-        let (text, on) = banner(&info(&[], 4), None, false);
-        assert!(text.contains("0 owned · 4 missing · nothing to play"), "{text}");
-        assert!(!on);
+    fn the_counts_line_says_what_the_filters_made_of_the_queue() {
+        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(5), true), "2 owned · 1 missing · was 5");
+        assert_eq!(counts_line(&info(&["a", "b"], 3), Some(2), true), "2 owned · 1 missing");
+        assert_eq!(counts_line(&info(&["a"], 1), None, true), "1 owned · 0 missing");
+        let zero = counts_line(&info(&[], 4), Some(3), true);
+        assert_eq!(zero, "0 owned · 4 missing · was 3 · the upcoming songs went: it stops after the playing song");
         let running = PreviewInfo { running: true, ..info(&["a"], 1) };
-        assert!(!banner(&running, None, false).1);
-        let stale = PreviewInfo { ready: false, ..info(&["a"], 1) };
-        assert!(!banner(&stale, None, false).1);
-        let (text, on) = banner(&running, None, true);
-        assert!(text.starts_with("Preview outdated, recomputing"), "{text}");
-        assert!(!on);
-    }
-
-    #[test]
-    fn a_preview_older_than_the_library_is_outdated() {
-        let at = |secs: u64, nanos: u32| Some(SystemTime::UNIX_EPOCH + Duration::new(secs, nanos));
-        // made at 15:30, a song deleted at 16:31 (the reported case): recomputed
-        assert!(preview_outdated(at(1_000, 0), &[at(4_660, 0), None]));
-        // the journal alone is enough
-        assert!(preview_outdated(at(1_000, 0), &[None, at(1_001, 0)]));
-        // MPD counts whole seconds: a change in the preview's own second is not trusted
-        assert!(preview_outdated(at(1_000, 900_000_000), &[at(1_000, 0)]));
-        // made after every change, or nothing known: played as it is
-        assert!(!preview_outdated(at(1_001, 0), &[at(1_000, 0), at(999, 0)]));
-        assert!(!preview_outdated(at(1_000, 0), &[None, None]));
-        assert!(!preview_outdated(None, &[at(1_000, 0)]));
-    }
-
-    #[test]
-    fn db_update_is_read_from_mpd_stats() {
-        let mut stats = DbStats::default();
-        for line in ["artists: 3", "uptime: 10", "db_update: 1760104260", "playtime: 0"] {
-            stats.next(line.to_owned()).expect("a stats line");
-        }
-        assert_eq!(stats.db_update, Some(1_760_104_260));
+        assert!(counts_line(&running, None, true).starts_with("updating"));
+        let failed = PreviewInfo { error: Some("hits failed".to_owned()), ..info(&["a"], 1) };
+        assert_eq!(counts_line(&failed, None, true), "not applied: hits failed (the queue keeps the last result)");
+        let other = PreviewInfo { ready: false, ..info(&["a"], 1) };
+        assert!(counts_line(&other, None, true).starts_with("Filters apply at once"));
+        // before any filter change: a missing or old file is no error of the queue
+        let missing = PreviewInfo { error: Some("no hits file".to_owned()), ready: false, ..info(&[], 0) };
+        assert!(counts_line(&missing, None, false).starts_with("Filters apply at once"));
     }
 }

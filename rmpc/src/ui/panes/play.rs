@@ -6,29 +6,39 @@
 //! - Normal mode (weighted off): MPD's queue in its order.
 //! - Weighted mode (`w`): the plan projection (past plays, `0 ▶`, Up next and the forecast; a pool song shows
 //!   only as a `/` match). Turning weighted off keeps the queue as it is.
-//! - A filter change prepares a preview (`hits` into its own file, MPD untouched): the table shows it under a
-//!   banner with its counts; `a` (or Apply) plays it, Esc drops it and shows the playing source again. See
-//!   `rormpc_play` for Apply's confirmation and race rules.
+//! - Filters apply at once (plans/instant-filtering.md, decided by the user 2026-10-11): every filter change runs
+//!   `hits`, bumps the generation, and its result, once in and still the newest, reconciles the queue
+//!   (`rormpc_upnext::reconcile_hits_source`): only the songs the filters put there change, the playing song plays
+//!   on, Up next stays. A queue holding another kind of source is replaced by the first filter touch. There is no
+//!   preview and no Apply; the line under the header has the counts (`287 owned · 25 missing · was 312`), and `o`
+//!   switches the table between the result rows and the plan (weighted) or the queue.
 //! - The header line always says what plays and how: `▶ Playing from: … · weighted · round 12/84`, and the open
 //!   smart list (`Smart list: 80s party`, "changed" once the filters differ from its rules).
 //! - Smart lists (`rormpc_smartlists`): `S` saves the filters, `L` picks a list, a previous source or a playlist;
-//!   a picked list loads as a preview, `a` plays it.
+//!   a picked list's rules apply like any filter change.
 //! - Phase 3b (decided by the user 2026-10-10): the left column switches Filters | Browse (`B`, or a click on
 //!   the switch). Browse has the groupings Artists · Album artists · Albums · Folders · Lists (`[` `]`, the chip
 //!   row, or 5-9 from anywhere); each is the browser pane of the old tab, owned here and created on first use, with
 //!   its own query target (`PaneType::PlayBrowse`). In Browse `P` plays the selection replacing the queue (in its
-//!   order, Apply's confirmation rule), `t` puts it into Up next, `a`/`A` append (a Hits source takes the appended
-//!   songs into its round). A stored playlist opened in Lists is edited in a panel over Play (moves, removals and
+//!   order; it asks first only on another source kind or more than a quarter of the queue going), `t` puts it
+//!   into Up next, `a`/`A` append (a Hits source takes the appended songs into its round). A stored playlist opened in Lists is edited in a panel over Play (moves, removals and
 //!   renames are saved at once; generated playlists are read-only), and the Live playlists inbox is a panel too
-//!   (`0`, `gl`, or the `Live N` badge in the header). An unapplied preview stays open through all of it.
+//!   (`0`, `gl`, or the `Live N` badge in the header).
 //! - The Deleted pane is a panel over Music too (decided by the user 2026-10-10): `gd`, or the `Deleted ! N` badge,
 //!   shown only while deletions have failed or unresolved steps.
 //! - "Years to review" (`gY`, `rormpc_years`) is a panel over Music like Deleted.
 //!
-//! It is composed, not copied: the filter column and the preview table are a `HitsPane` in Play mode, the table
+//! It is composed, not copied: the filter column and the result rows are a `HitsPane` in Play mode, the table
 //! is a `QueuePane` whose view follows the weighted shuffle, Browse's groupings are the browser panes.
 
-use std::{collections::HashMap, fmt::Write as _};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Write as _,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use anyhow::Result;
 use ratatui::{
@@ -87,7 +97,6 @@ use crate::{
 
 /// Width of the filter column, as in the Hits pane.
 const COLUMN_WIDTH: u16 = 24;
-const APPLY_BUTTON: &str = "[ a Apply ]";
 
 /// What Play's left column shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +135,15 @@ enum Overlay {
     Years,
 }
 
+/// What the table right of the column shows (`o` switches it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Table {
+    /// the plan projection (weighted) or MPD's queue
+    Queue,
+    /// the `hits` result rows, missing songs dimmed
+    Rows,
+}
+
 /// Areas of Browse's last render, for the mouse.
 #[derive(Debug, Default)]
 struct BrowseAreas {
@@ -138,16 +156,6 @@ struct BrowseAreas {
     badge: Rect,
     /// the Deleted badge (empty while nothing needs attention)
     deleted_badge: Rect,
-}
-
-/// What an Apply waits for before it plays the preview.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ApplyWait {
-    No,
-    /// a picked list's or previous source's Apply: its preview is being made
-    Ready,
-    /// Apply found the preview older than the library: `hits` runs again, the Apply that follows trusts it
-    Recomputing,
 }
 
 #[derive(Debug)]
@@ -166,29 +174,39 @@ pub struct PlayPane {
     /// the release years to review (`gY`)
     years: YearsPane,
     overlay: Overlay,
-    /// the rules the source being played was applied with (source.json), None for any other source; Esc brings
-    /// the filters back to them (or to the defaults)
+    /// the rules the source being played was applied with (source.json), None for any other source: the
+    /// filters start from them
     baseline: Option<serde_json::Value>,
-    /// the hash those rules give the filters: filters with another hash on screen are a preview
-    baseline_hash: String,
-    /// source.json's rules hash when `baseline` was taken (an Apply anywhere moves it); `synced` once taken
+    /// source.json's rules hash when `baseline` was taken (a reconcile or another source moves it); `synced`
+    /// once taken
     source_hash: Option<String>,
     synced: bool,
+    /// the newest filter intent: every `hits` run the filters start bumps it, and a reconcile still queued for
+    /// an older one is dropped on the MPD command thread
+    generation: Arc<AtomicU64>,
+    /// rules hashes this pane reconciled the queue with: source.json naming one of them is ours, so it never
+    /// resets the filters (a newer change may be on screen already)
+    sent: HashSet<String>,
+    /// owned songs of the last two generations sent to MPD (the counts line's "was")
+    owned: Option<usize>,
+    owned_was: Option<usize>,
+    /// `o`: the table shows the `hits` result rows instead of the plan or the queue
+    table: Table,
+    /// `a` in the Queue body said once that filters apply at once
+    a_hint_said: bool,
     /// what the list picker and the Save modal hand back (`rormpc_smartlists::Pick`)
     inbox: rormpc_smartlists::Inbox,
-    /// an Apply waiting for its preview (a picked list's or previous source's, or one that found the preview
-    /// outdated): it plays once the preview is in
-    wait: ApplyWait,
     /// areas of the last render, for the mouse
-    apply_area: Rect,
+    toggle_area: Rect,
     queue_area: Rect,
     areas: BrowseAreas,
 }
 
 impl PlayPane {
     pub fn new(ctx: &Ctx) -> Self {
+        let generation = Arc::new(AtomicU64::new(0));
         let mut s = Self {
-            hits: HitsPane::for_play(rormpc_play::PREVIEW_FILE.to_owned(), vec!["hits".to_owned()]),
+            hits: HitsPane::for_play(rormpc_play::PREVIEW_FILE.to_owned(), vec!["hits".to_owned()], Arc::clone(&generation)),
             queue: QueuePane::new(ctx),
             left: Left::Filters,
             browse_focus: false,
@@ -199,12 +217,16 @@ impl PlayPane {
             years: YearsPane::new(),
             overlay: Overlay::None,
             baseline: None,
-            baseline_hash: String::new(),
             source_hash: None,
             synced: false,
+            generation,
+            sent: HashSet::new(),
+            owned: None,
+            owned_was: None,
+            table: Table::Queue,
+            a_hint_said: false,
             inbox: rormpc_smartlists::Inbox::default(),
-            wait: ApplyWait::No,
-            apply_area: Rect::default(),
+            toggle_area: Rect::default(),
             queue_area: Rect::default(),
             areas: BrowseAreas::default(),
         };
@@ -224,42 +246,52 @@ impl PlayPane {
         Some((id, name, changed))
     }
 
-    /// Take what the list picker or the Save modal left: load rules as a preview (Apply waits for it), or leave
-    /// the open list.
+    /// Take what the list picker or the Save modal left: load rules (they apply like any filter change), or
+    /// leave the open list.
     fn take_pick(&mut self) {
         let pick = self.inbox.lock().ok().and_then(|mut p| p.take());
-        let (args, apply) = match pick {
-            Some(Pick::Load(args)) => (args, false),
-            Some(Pick::Apply(args)) => (args, true),
+        let args = match pick {
+            Some(Pick::Load(args) | Pick::Apply(args)) => args,
             Some(Pick::CloseList) => {
                 self.hits.close_list();
-                (serde_json::Value::Null, false)
+                serde_json::Value::Null
             }
-            None => (serde_json::Value::Null, false),
+            None => serde_json::Value::Null,
         };
         if !args.is_null() {
+            let same = Some(HitsPane::rules_hash_of(Some(&args))) == self.source_hash;
             if let Err(err) = self.hits.load_filters(&args) {
                 status_error!("These rules cannot be loaded: {err}");
-            } else if apply {
-                self.wait = ApplyWait::Ready;
-            } else {
-                self.wait = ApplyWait::No;
-                if !self.preview_active() {
-                    status_info!("The queue already plays these rules");
-                }
+            } else if same {
+                status_info!("The queue already plays these rules");
             }
         }
         rormpc_smartlists::set_open(self.open_list().map(|(id, name, _)| (id, name)));
     }
 
-    /// A picked Apply waits for its preview: play it once `hits` wrote it (its run ends with a render).
-    fn apply_if_ready(&mut self, ctx: &Ctx) {
-        if self.wait != ApplyWait::No {
-            let info = self.hits.preview_info();
-            if info.error.is_some() || info.ready {
-                self.apply(ctx); // it takes `wait`
-            }
+    /// A newest `hits` result came in and the filters on screen made it: the queue follows it (generation
+    /// tagged, so a newer change still under way drops it on the MPD command thread).
+    fn apply_result(&mut self, ctx: &Ctx) {
+        if !self.hits.take_fresh() {
+            return;
         }
+        let info = self.hits.preview_info();
+        if !info.ready {
+            return; // the filters moved on: their own run follows
+        }
+        let (Some(rules), Some(rules_hash)) = (self.hits.applied_rules(), self.hits.rules_hash()) else { return };
+        // a smart list played as saved is named after it ("Playing from: Hits · smart list 80s party")
+        let name = match self.open_list() {
+            Some((_, name, false)) => format!("smart list {name}"),
+            _ => info.label,
+        };
+        self.owned_was = self.owned;
+        self.owned = Some(info.files.len());
+        self.sent.insert(rules_hash.clone());
+        let generation = self.generation.load(Ordering::SeqCst);
+        let in_order = !rormpc_player::shuffle_state().enabled;
+        let src = HitsSource { name, files: info.files, rules, rules_hash };
+        rormpc_upnext::reconcile_hits_source(ctx, src, generation, Arc::clone(&self.generation), in_order);
     }
 
     /// `S`: save the filters on screen as a smart list.
@@ -284,8 +316,8 @@ impl PlayPane {
         rormpc_smartlists::open_picker(ctx, &self.inbox, self.hits.rule_args(), open.as_ref());
     }
 
-    /// Follow what changed outside: the weighted shuffle switches the table's view, and a new source (Apply
-    /// here, Sources…, another rormpc) becomes the baseline. An open preview stays open over a new source.
+    /// Follow what changed outside: the weighted shuffle switches the table's view, and a source this pane did
+    /// not reconcile (Sources…, Browse's `P`, another rormpc) becomes the filters' starting point.
     fn sync(&mut self, ctx: &Ctx) {
         self.queue.follow_weighted(rormpc_player::shuffle_state().enabled, ctx);
         let rules = rormpc_upnext::source_rules();
@@ -293,24 +325,21 @@ impl PlayPane {
         if self.synced && self.source_hash == hash {
             return;
         }
-        let previewing = self.synced && self.preview_active();
+        let ours = self.synced && hash.as_ref().is_some_and(|h| self.sent.contains(h));
         self.synced = true;
         self.source_hash = hash;
         self.baseline = rules.map(|(r, _)| r);
-        self.baseline_hash = HitsPane::rules_hash_of(self.baseline.as_ref());
-        if !previewing {
+        if !ours {
             self.hits.reset_filters(self.baseline.as_ref());
+            self.sent.clear();
+            self.owned = None;
+            self.owned_was = None;
         }
     }
 
-    /// The filters on screen differ from the rules being played.
-    fn preview_active(&self) -> bool {
-        self.hits.rules_hash().is_some_and(|h| h != self.baseline_hash)
-    }
-
-    /// The table right of the column is the Hits result (a preview, or the Downloads view), not the queue.
+    /// The table right of the column is the Hits result (`o`, or the Downloads view), not the queue.
     fn shows_hits_table(&self) -> bool {
-        self.preview_active() || self.hits.in_downloads()
+        self.table == Table::Rows || self.hits.in_downloads()
     }
 
     /// Keys go to the Hits part (the column, or its table) rather than the queue.
@@ -373,10 +402,13 @@ impl PlayPane {
             Some(PlayView::UpNext) => {
                 self.overlay = Overlay::None;
                 self.show_filters(false);
-                if self.shows_hits_table() {
-                    status_info!("Esc drops the preview first, then gu");
-                } else if !self.queue.jump_to_up_next(ctx) {
-                    status_info!("Up next is empty: t puts a song there");
+                if self.hits.in_downloads() {
+                    status_info!("Leave Downloads first, then gu");
+                } else {
+                    self.table = Table::Queue;
+                    if !self.queue.jump_to_up_next(ctx) {
+                        status_info!("Up next is empty: t puts a song there");
+                    }
                 }
             }
             None => {}
@@ -699,56 +731,33 @@ impl PlayPane {
 
     // ---------------------------------------------------------------- Queue body
 
-    /// `a`: play the preview. With the filters equal to the source's, Apply plays them again (keeping the round)
-    /// once their result is on screen.
-    fn apply(&mut self, ctx: &Ctx) {
-        let info = self.hits.preview_info();
-        if info.running || (!info.ready && info.error.is_none()) {
-            if self.preview_active() || info.running {
-                return status_info!("The preview is still running: Apply when its counts are in the banner");
-            }
-            return status_info!("The queue already plays these filters: change one to prepare another source");
+    /// `a` in the Queue body: filters apply at once, so it only says so, once.
+    fn a_hint(&mut self) {
+        if !std::mem::replace(&mut self.a_hint_said, true) {
+            status_info!("Filters apply at once; z undoes");
         }
-        let recomputed = std::mem::replace(&mut self.wait, ApplyWait::No) == ApplyWait::Recomputing;
-        if let Some(err) = info.error {
-            return status_error!("No preview to apply: {err}");
-        }
-        // a song deleted since the preview was made is not played from it: hits runs again first (once)
-        if !recomputed {
-            let changes = [rormpc_play::db_updated_at(ctx), self.deleted.newest_deletion()];
-            if rormpc_play::preview_outdated(self.hits.result_mtime(), &changes) {
-                self.wait = ApplyWait::Recomputing;
-                self.hits.recompute(ctx);
-                return status_info!("Preview outdated (the library changed since), recomputing: Apply follows");
-            }
-        }
-        if info.files.is_empty() {
-            return status_info!("0 owned songs: widen the filter (the queue stays as it is)");
-        }
-        let (Some(rules), Some(rules_hash)) = (self.hits.applied_rules(), self.hits.rules_hash()) else {
-            return status_info!("The preview is still running: Apply when its counts are in the banner");
-        };
-        // a smart list played as saved is named after it ("Playing from: Hits · smart list 80s party")
-        let name = match self.open_list() {
-            Some((_, name, false)) => format!("smart list {name}"),
-            _ => info.label,
-        };
-        rormpc_play::apply(ctx, HitsSource { name, files: info.files, rules, rules_hash });
     }
 
-    /// Esc with nothing left to close inside the table: drop the preview.
-    /// False when Play has nothing to do with it.
+    /// Esc with nothing left to close inside the table: stop a running `hits` (its result never reaches the
+    /// queue), else leave the result rows (`o`). False when Play has nothing to do with it.
     fn escape(&mut self) -> bool {
         if self.hits.stop_run() {
-            return true; // a running preview stops first; the next Esc drops it
+            return true;
         }
-        if self.preview_active() {
-            self.hits.reset_filters(self.baseline.as_ref());
-            self.wait = ApplyWait::No;
-            status_info!("Preview dropped: the table shows the playing source again");
+        if self.table == Table::Rows && !self.hits.in_downloads() {
+            self.table = Table::Queue;
             return true;
         }
         false
+    }
+
+    /// `o`: the result rows ⇄ the plan (weighted) or the queue.
+    fn toggle_rows(&mut self) {
+        self.table = if self.table == Table::Rows { Table::Queue } else { Table::Rows };
+        if self.table == Table::Rows {
+            self.browse_focus = false;
+            self.hits.set_focus_filters(false);
+        }
     }
 
     fn header_line(&self, ctx: &Ctx) -> String {
@@ -770,7 +779,7 @@ impl PlayPane {
         };
         // the open list, unless the source line already names it as played
         let list = match self.open_list() {
-            Some((_, name, changed)) if changed || self.preview_active() => {
+            Some((_, name, changed)) if changed => {
                 format!(" · Smart list: {name}{}", if changed { " (changed)" } else { "" })
             }
             _ => String::new(),
@@ -785,27 +794,28 @@ impl PlayPane {
     }
 
     fn render_queue_body(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> Result<()> {
-        let preview = self.preview_active();
-        let [banner, rest] =
-            Layout::vertical([Constraint::Length(u16::from(preview)), Constraint::Min(1)]).areas(area);
-        self.apply_area = Rect::default();
-        if preview {
-            let (text, enabled) = rormpc_play::banner(
-                &self.hits.preview_info(),
-                ctx.current_song().map(|s| s.file.as_str()),
-                self.wait == ApplyWait::Recomputing,
-            );
-            let width = APPLY_BUTTON.chars().count() as u16;
-            let [t, b] = Layout::horizontal([Constraint::Min(1), Constraint::Length(width)]).spacing(1).areas(banner);
-            frame.render_widget(Paragraph::new(Line::from(Span::styled(text, ctx.config.theme.preview_label_style))), t);
-            let button = if enabled {
-                self.apply_area = b;
-                ctx.config.theme.preview_label_style.add_modifier(Modifier::REVERSED | Modifier::BOLD)
-            } else {
-                Style::default().add_modifier(Modifier::DIM)
-            };
-            frame.render_widget(Paragraph::new(Line::from(Span::styled(APPLY_BUTTON, button))), b);
-        }
+        // the counts line: what the filters made of the queue, and the rows ⇄ plan switch
+        let [counts, rest] = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
+        let weighted = rormpc_player::shuffle_state().enabled;
+        let other = if weighted { "plan" } else { "queue" };
+        let toggle = format!("[ o rows ⇄ {other} ]");
+        let width = toggle.chars().count() as u16;
+        let [t, b] = Layout::horizontal([Constraint::Min(1), Constraint::Length(width)]).spacing(1).areas(counts);
+        let asked = self.generation.load(Ordering::SeqCst) > 0;
+        let text = rormpc_play::counts_line(&self.hits.preview_info(), self.owned_was, asked);
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(text, ctx.config.theme.preview_label_style))), t);
+        let on = ctx.config.theme.preview_label_style.add_modifier(Modifier::REVERSED | Modifier::BOLD);
+        let off = Style::default().add_modifier(Modifier::DIM);
+        let (rows_style, other_style) = if self.table == Table::Rows { (on, off) } else { (off, on) };
+        let line = Line::from(vec![
+            Span::styled("[ o ", off),
+            Span::styled("rows", rows_style),
+            Span::styled(" ⇄ ", off),
+            Span::styled(other, other_style),
+            Span::styled(" ]", off),
+        ]);
+        frame.render_widget(Paragraph::new(line), b);
+        self.toggle_area = b;
         self.areas.switch_filters = Rect::default();
         self.areas.switch_browse = Rect::default();
         self.areas.chips.clear();
@@ -847,10 +857,7 @@ impl Pane for PlayPane {
         // a pick first: `prepare` then runs `hits` for the rules it loaded in this same frame
         self.take_pick();
         self.hits.prepare(ctx);
-        if self.hits.take_commit() {
-            self.apply(ctx);
-        }
-        self.apply_if_ready(ctx);
+        self.apply_result(ctx);
         self.sync(ctx);
         // the badges follow the inbox and the journal while their panels are closed
         if self.overlay != Overlay::Live {
@@ -1003,12 +1010,17 @@ impl Pane for PlayPane {
         if self.browse_has_keys() {
             return self.browse_action(event, ctx);
         }
-        // `a` is Apply everywhere else in Play (the row menu keeps "Add to queue")
-        if matches!(common, Some(CommonAction::AddOptions { .. })) && event.claim_common().is_some() {
-            self.apply(ctx);
+        // `a` outside Browse: filters apply at once, it only says so (the row menu keeps "Add to queue")
+        if matches!(common, Some(CommonAction::AddOptions { .. })) && !typing && event.claim_common().is_some() {
+            self.a_hint();
             return Ok(ctx.render()?);
         }
-        // S / L: smart lists, from the column, the preview or the queue alike (not while typing a search)
+        // o: the result rows ⇄ the plan or the queue
+        if matches!(queue_action, Some(QueueActions::TogglePlanView)) && !typing && event.claim_queue().is_some() {
+            self.toggle_rows();
+            return Ok(ctx.render()?);
+        }
+        // S / L: smart lists, from the column, the result rows or the queue alike (not while typing a search)
         if matches!(queue_action, Some(QueueActions::SaveSmartList | QueueActions::SmartLists))
             && !typing
             && event.claim_queue().is_some()
@@ -1051,10 +1063,7 @@ impl Pane for PlayPane {
                 _ => self.queue.handle_action(event, ctx)?,
             }
         }
-        if self.hits.take_commit() {
-            self.apply(ctx);
-        }
-        // Esc the Hits part left alone: drop the preview, or close the column
+        // Esc the Hits part left alone: stop a run, or leave the result rows
         match event.claim_common() {
             Some(CommonAction::Close) if self.escape() => ctx.render()?,
             Some(_) => event.abandon(),
@@ -1127,9 +1136,9 @@ impl Pane for PlayPane {
             let child = self.ensure_child(grouping, ctx);
             return with_child!(child, b => b.handle_mouse_event(event, ctx));
         }
-        if self.apply_area.contains(at) {
+        if self.toggle_area.contains(at) {
             if click {
-                self.apply(ctx);
+                self.toggle_rows();
                 ctx.render()?;
             }
             return Ok(());
@@ -1143,14 +1152,10 @@ impl Pane for PlayPane {
             return self.queue.handle_mouse_event(event, ctx);
         }
         if click && self.browse_focus && self.shows_hits_table() {
-            self.browse_focus = false; // a click on the preview table gives it the keys
+            self.browse_focus = false; // a click on the result rows gives them the keys
         }
-        self.hits.handle_mouse_event(event, ctx)?;
-        if self.hits.take_commit() {
-            self.apply(ctx);
-            ctx.render()?;
-        }
-        Ok(())
+        self.hits.handle_mouse_event(event, ctx)
+
     }
 
     fn resize(&mut self, area: Rect, ctx: &Ctx) -> Result<()> {

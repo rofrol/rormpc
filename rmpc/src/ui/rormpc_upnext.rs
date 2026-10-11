@@ -10,9 +10,15 @@
 //!   still plays a song (added after the current one, not removed afterwards) and Play next reports it.
 
 use std::{
+    collections::{HashMap, HashSet},
     fmt::Write as _,
     path::PathBuf,
-    sync::{Mutex, OnceLock},
+    sync::{
+        Arc,
+        Mutex,
+        OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
     time::SystemTime,
 };
 
@@ -22,7 +28,7 @@ use notify_debouncer_full::notify::{self, RecommendedWatcher, RecursiveMode, Wat
 use rmpc_mpd::{
     commands::status::OnOffOneshot,
     errors::MpdError,
-    mpd_client::MpdClient,
+    mpd_client::{MpdClient, MpdCommand as _},
     proto_client::ProtoClient,
     queue_position::QueuePosition,
 };
@@ -73,6 +79,10 @@ struct Source {
     /// how many generations of this filter source reached MPD (1 for the first), counted across rormpc runs
     #[serde(default, skip_serializing_if = "Option::is_none")]
     generation: Option<u64>,
+    /// queue entries a filter source put there that its newest rules left out but a reconcile could not delete
+    /// (the playing song, an Up next request): not members, but the next reconcile may still remove them
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    held: Vec<String>,
 }
 
 impl Source {
@@ -140,7 +150,7 @@ pub fn source_rules() -> Option<(serde_json::Value, String)> {
     Some((src.rules.clone()?, src.rules_hash.clone()?))
 }
 
-/// What Play's Apply replaces the queue with: a Hits result as the source, with its rules.
+/// One generation of Music's filters: the `hits` result's owned files in rank order, with its rules.
 #[derive(Debug, Clone)]
 pub struct HitsSource {
     pub name: String,
@@ -149,14 +159,17 @@ pub struct HitsSource {
     pub rules_hash: String,
 }
 
-/// Play's Apply: the queue becomes `src` as "Play these N songs" makes it, but only if MPD's queue is still at
-/// `version` (the `playlist` version the preview's counts and confirmation were judged on). Otherwise nothing
-/// changes and the status bar says so: no retry, no delay.
-pub fn apply_hits_source(ctx: &Ctx, src: HitsSource, version: Option<u32>) {
-    let HitsSource { name, files, rules, rules_hash } = src;
-    let replace =
-        Replace { kind: "hits".to_owned(), name, files, rules: Some(rules), rules_hash: Some(rules_hash), start: None };
-    ctx.command(move |_, client| replace.run(client, version));
+/// Music's filters apply at once (plans/instant-filtering.md): generation `generation` reconciles the queue with
+/// `src` on the MPD command thread, unless a newer generation was asked for by then (`latest`): a backlog of
+/// reconciles collapses to the newest, and one that has started finishes its command list. `in_order` (weighted
+/// shuffle off) also moves the source's songs after the playing one into rank order.
+pub fn reconcile_hits_source(ctx: &Ctx, src: HitsSource, generation: u64, latest: Arc<AtomicU64>, in_order: bool) {
+    ctx.command(move |_, client| {
+        if latest.load(Ordering::SeqCst) != generation {
+            return Ok(()); // a newer generation follows: it reconciles from the queue as it is then
+        }
+        reconcile(client, src, in_order)
+    });
 }
 
 /// Hits "Play these results": the owned rows replace the queue as the source, after a confirmation.
@@ -574,6 +587,7 @@ impl Replace {
             added: Vec::new(),
             source_id,
             generation,
+            held: Vec::new(),
         };
         publish(Some(src.clone()));
         // the new songs go after the old queue first: MPD's database decides which files still exist (a stale
@@ -678,6 +692,217 @@ impl Replace {
         );
         Ok(())
     }
+}
+
+/// One MPD command of a reconcile, in the order of its command list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Cmd {
+    Delete(u32),
+    /// a file at a position (None: at the end)
+    Add(String, Option<usize>),
+    Move(u32, usize),
+}
+
+/// What a reconcile does to the queue, and the source's songs it keeps without being able to delete them.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Plan {
+    cmds: Vec<Cmd>,
+    held: Vec<String>,
+}
+
+/// A queue entry slot while a plan is simulated: an entry already there, or one the plan adds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Slot {
+    Id(u32),
+    New(usize),
+}
+
+/// Reconcile `queue` (id, file in queue order) with `target` (files in rank order) without replacing it:
+/// - only entries of `base` (the files the previous generation put there; None: the queue held another kind of
+///   source, which the filters replace) that are not in the target leave, never the playing song (`playing`) or an
+///   Up next request (`up_next`, in play order); those stay in `held`. An entry nobody can attribute (a phone's
+///   or mpc's add) stays;
+/// - each target file keeps one entry (the playing one first, then the first in the queue), so mpd-player's
+///   planned entries keep their ids; the base's other copies of it leave; files without an entry are added;
+/// - `in_order`: after the playing song come the Up next requests, then the target in rank order, then the entries
+///   nobody owns, in their order. Without it the new files go at the end (the weighted shuffle orders them).
+fn plan_reconcile(
+    queue: &[(u32, &str)],
+    playing: Option<u32>,
+    up_next: &[u32],
+    base: Option<&HashSet<&str>>,
+    target: &[String],
+    in_order: bool,
+) -> Plan {
+    let wanted: HashSet<&str> = target.iter().map(String::as_str).collect();
+    let protected = |id: u32| Some(id) == playing || up_next.contains(&id);
+    let ours = |file: &str| base.is_none_or(|b| b.contains(file));
+    // each target file's entry: the playing song's, else the first in the queue
+    let mut chosen: HashMap<&str, u32> = HashMap::new();
+    if let Some((id, f)) = queue.iter().find(|(id, _)| Some(*id) == playing)
+        && wanted.contains(f)
+    {
+        chosen.insert(f, *id);
+    }
+    for (id, f) in queue {
+        if wanted.contains(f) {
+            chosen.entry(f).or_insert(*id);
+        }
+    }
+    let mut plan = Plan::default();
+    let mut kept: Vec<u32> = Vec::with_capacity(queue.len());
+    for (id, f) in queue {
+        let in_target = chosen.get(f) == Some(id);
+        if in_target || !ours(f) {
+            kept.push(*id);
+        } else if protected(*id) {
+            kept.push(*id);
+            if !wanted.contains(f) && !plan.held.iter().any(|h| h == f) {
+                plan.held.push((*f).to_owned());
+            }
+        } else {
+            plan.cmds.push(Cmd::Delete(*id));
+        }
+    }
+    let new: Vec<usize> = (0..target.len()).filter(|&i| !chosen.contains_key(target[i].as_str())).collect();
+    if !in_order {
+        plan.cmds.extend(new.into_iter().map(|i| Cmd::Add(target[i].clone(), None)));
+        return plan;
+    }
+    // the order after the playing song (from the top when nothing plays)
+    let anchor = playing.filter(|id| kept.contains(id));
+    let mut sim: Vec<Slot> = kept.iter().map(|id| Slot::Id(*id)).collect();
+    let mut desired: Vec<Slot> = up_next.iter().filter(|id| kept.contains(id) && Some(**id) != anchor).map(|id| Slot::Id(*id)).collect();
+    for (i, f) in target.iter().enumerate() {
+        match chosen.get(f.as_str()) {
+            Some(id) if Some(*id) == anchor || up_next.contains(id) => {}
+            Some(id) => desired.push(Slot::Id(*id)),
+            None => desired.push(Slot::New(i)),
+        }
+    }
+    let after = anchor.and_then(|a| kept.iter().position(|id| *id == a)).map_or(0, |p| p + 1);
+    for id in &kept[after..] {
+        if Some(*id) != anchor && !desired.contains(&Slot::Id(*id)) {
+            desired.push(Slot::Id(*id));
+        }
+    }
+    let mut at = after;
+    for slot in desired {
+        match slot {
+            Slot::New(i) => {
+                sim.insert(at, slot);
+                plan.cmds.push(Cmd::Add(target[i].clone(), Some(at)));
+                at += 1;
+            }
+            Slot::Id(id) => {
+                let Some(from) = sim.iter().position(|s| *s == slot) else { continue };
+                // an entry from before the placed block moves to its end, which shifts the block left
+                let to = if from < at { at - 1 } else { at };
+                if from != to {
+                    sim.remove(from);
+                    sim.insert(to, slot);
+                    plan.cmds.push(Cmd::Move(id, to));
+                }
+                if from >= at {
+                    at += 1;
+                }
+            }
+        }
+    }
+    plan
+}
+
+/// One generation's reconcile (see `plan_reconcile`): source.json first, then one command list. A file MPD's
+/// database no longer has stops the list at its `add` (MPD's ACK names it): it is left out and the rest is
+/// planned again from the queue as MPD then has it, once per such file.
+fn reconcile(client: &mut rmpc_mpd::client::Client<'_>, src: HitsSource, in_order: bool) -> Result<()> {
+    let started = std::time::Instant::now();
+    let HitsSource { name, files, rules, rules_hash } = src;
+    let previous = state().lock().ok().and_then(|g| g.source.clone());
+    let (source_id, generation) = Source::next_identity("hits", previous.as_ref());
+    // the queue held this filter source: only its own entries may go; any other source is replaced
+    let (base, added): (Option<HashSet<String>>, Vec<String>) = match &previous {
+        Some(p) if p.kind == "hits" && p.source_id.is_some() => {
+            (Some(p.files.iter().chain(&p.added).chain(&p.held).cloned().collect()), p.added.clone())
+        }
+        _ => (None, Vec::new()),
+    };
+    let was_other = base.is_none();
+    let mut target = files;
+    for f in &added {
+        if !target.contains(f) {
+            target.push(f.clone());
+        }
+    }
+    let mut gone: Vec<String> = Vec::new();
+    let mut src = Source {
+        kind: "hits".to_owned(),
+        name,
+        len: 0,
+        files: target.iter().filter(|f| !added.contains(f)).cloned().collect(),
+        rules: Some(rules),
+        rules_hash: Some(rules_hash),
+        added,
+        source_id,
+        generation,
+        held: Vec::new(),
+    };
+    publish(Some(src.clone()));
+    let (current, deleted, added_n) = loop {
+        let status = client.get_status()?;
+        let queue = client.playlist_info()?.unwrap_or_default();
+        let entries: Vec<(u32, &str)> = queue.iter().map(|s| (s.id, s.file.as_str())).collect();
+        let up_next = up_next_ids();
+        let base_ref: Option<HashSet<&str>> = base.as_ref().map(|b| b.iter().map(String::as_str).collect());
+        let plan = plan_reconcile(&entries, status.songid, &up_next, base_ref.as_ref(), &target, in_order);
+        src.held.clone_from(&plan.held);
+        if plan.cmds.is_empty() {
+            break (status.songid, 0, 0);
+        }
+        client.send_start_cmd_list()?;
+        for cmd in &plan.cmds {
+            match cmd {
+                Cmd::Delete(id) => client.send_delete_id(*id)?,
+                Cmd::Add(f, at) => client.send_add(f, at.map(QueuePosition::Absolute))?,
+                Cmd::Move(id, to) => client.send_move_id(*id, QueuePosition::Absolute(*to))?,
+            }
+        }
+        client.send_execute_cmd_list()?;
+        match client.read_ok() {
+            Ok(()) => {
+                let deleted = plan.cmds.iter().filter(|c| matches!(c, Cmd::Delete(_))).count();
+                let added_n = plan.cmds.iter().filter(|c| matches!(c, Cmd::Add(..))).count();
+                break (status.songid, deleted, added_n);
+            }
+            Err(MpdError::Mpd(e)) if e.is_no_exist() => {
+                // the commands before it ran; the file is left out and the rest planned again
+                let Some(Cmd::Add(f, _)) = plan.cmds.get(e.command_list_index) else { return Err(MpdError::Mpd(e).into()) };
+                target.retain(|t| t != f);
+                src.files.retain(|t| t != f);
+                src.added.retain(|t| t != f);
+                gone.push(f.clone());
+            }
+            Err(err) => return Err(err.into()),
+        }
+    };
+    let len = client.playlist_info()?.map_or(0, |q| q.len());
+    let up = upnext_file();
+    src.len = len.saturating_sub(up.entries.iter().chain(up.playing.iter()).filter(|e| e.added).count());
+    if let (Some(r), Some(h)) = (&src.rules, &src.rules_hash) {
+        crate::ui::rormpc_smartlists::after_apply(&src.name, r, h);
+    }
+    let members = src.files.len() + src.added.len();
+    publish(Some(src));
+    if current.is_none() && members > 0 {
+        client.play()?; // nothing was playing: start (Up next and the shuffle's plan come first)
+    }
+    let what = if was_other { "Filters replaced the queue" } else { "Filters applied" };
+    status_info!(
+        "{what}: {members} songs (+{added_n} −{deleted}){}, in {:.2} s",
+        left_out_note(gone.len()),
+        started.elapsed().as_secs_f64()
+    );
+    Ok(())
 }
 
 /// What a replacement put in the queue: the files MPD took, the start index among them, and how many it did
@@ -814,6 +1039,7 @@ mod tests {
             added: Vec::new(),
             source_id: None,
             generation: None,
+            held: Vec::new(),
         }
     }
 
@@ -858,6 +1084,112 @@ mod tests {
         assert_eq!(json["generation"], 4);
         assert!(json["source_id"].is_string());
         assert!(serde_json::to_value(source("album", &["a"])).expect("source.json").get("source_id").is_none());
+    }
+
+    /// Run a plan's commands the way MPD does on `queue` (new entries get ids from 100): the files in order.
+    fn after(queue: &[(u32, &str)], plan: &Plan) -> Vec<String> {
+        let mut q: Vec<(u32, String)> = queue.iter().map(|(id, f)| (*id, (*f).to_owned())).collect();
+        let mut next = 100;
+        for cmd in &plan.cmds {
+            match cmd {
+                Cmd::Delete(id) => q.retain(|(i, _)| i != id),
+                Cmd::Add(f, at) => {
+                    q.insert(at.unwrap_or(q.len()), (next, f.clone()));
+                    next += 1;
+                }
+                Cmd::Move(id, to) => {
+                    let from = q.iter().position(|(i, _)| i == id).expect("a moved id is queued");
+                    let e = q.remove(from);
+                    q.insert(*to, e);
+                }
+            }
+        }
+        q.into_iter().map(|(_, f)| f).collect()
+    }
+
+    fn base<'a>(files: &[&'a str]) -> HashSet<&'a str> {
+        files.iter().copied().collect()
+    }
+
+    #[test]
+    fn a_reconcile_changes_only_what_the_filters_changed_and_keeps_shared_ids() {
+        // the previous generation put a b c d; the phone added x; c plays
+        let q = [(1, "a"), (2, "b"), (3, "c"), (4, "x"), (5, "d")];
+        let prev = base(&["a", "b", "c", "d"]);
+        let target = strings(&["b", "e", "d"]);
+        let plan = plan_reconcile(&q, Some(3), &[], Some(&prev), &target, false);
+        // a leaves; c plays on outside the result (held for the next generation); x is nobody's: it stays
+        assert_eq!(plan.cmds, vec![Cmd::Delete(1), Cmd::Add("e".to_owned(), None)]);
+        assert_eq!(plan.held, strings(&["c"]));
+        assert_eq!(after(&q, &plan), strings(&["b", "c", "x", "d", "e"]));
+    }
+
+    #[test]
+    fn normal_mode_puts_the_result_after_the_playing_song_in_rank_order() {
+        let q = [(1, "a"), (2, "b"), (3, "c"), (4, "x"), (5, "d")];
+        let prev = base(&["a", "b", "c", "d"]);
+        let target = strings(&["d", "e", "a", "c"]);
+        let plan = plan_reconcile(&q, Some(3), &[], Some(&prev), &target, true);
+        // b leaves; c plays (it is in the result: no copy); then d e a in rank order; x (nobody's) after them
+        assert_eq!(after(&q, &plan), strings(&["c", "d", "e", "a", "x"]));
+        assert!(plan.cmds.contains(&Cmd::Delete(2)));
+        assert!(plan.held.is_empty());
+        // the same rules again change nothing
+        let q2 = [(3, "c"), (5, "d"), (100, "e"), (1, "a"), (4, "x")];
+        assert_eq!(plan_reconcile(&q2, Some(3), &[], Some(&base(&["d", "e", "a", "c"])), &target, true), Plan::default());
+    }
+
+    #[test]
+    fn up_next_requests_stay_first_and_are_never_removed() {
+        // 7 is an Up next request of a source song the new rules leave out, 8 one added only for Up next
+        let q = [(1, "a"), (7, "b"), (8, "r"), (2, "c")];
+        let prev = base(&["a", "b", "c"]);
+        let target = strings(&["c", "d"]);
+        let plan = plan_reconcile(&q, Some(1), &[8, 7], Some(&prev), &target, true);
+        assert_eq!(after(&q, &plan), strings(&["a", "r", "b", "c", "d"]));
+        assert_eq!(plan.held, strings(&["a", "b"])); // the playing song and the request stay, outside the result
+        // weighted: priorities order them, nothing moves
+        let plan = plan_reconcile(&q, Some(1), &[8, 7], Some(&prev), &target, false);
+        assert_eq!(plan.cmds, vec![Cmd::Add("d".to_owned(), None)]);
+    }
+
+    #[test]
+    fn another_source_is_replaced_and_zero_songs_leave_only_the_playing_one() {
+        // an album played with P: every entry is its own, the first filter touch replaces it
+        let q = [(1, "t1"), (2, "t2"), (3, "t3")];
+        let plan = plan_reconcile(&q, Some(2), &[], None, &strings(&["t3", "h1"]), true);
+        assert_eq!(after(&q, &plan), strings(&["t2", "t3", "h1"]));
+        // 0 owned: the upcoming songs go, it stops after the playing song; an entry nobody owns stays
+        let q = [(1, "a"), (2, "b"), (4, "x"), (3, "c")];
+        let plan = plan_reconcile(&q, Some(2), &[], Some(&base(&["a", "b", "c"])), &[], true);
+        assert_eq!(after(&q, &plan), strings(&["b", "x"]));
+        assert_eq!(plan.held, strings(&["b"]));
+        // nothing plays: the result from the top, in order
+        let q = [(1, "a"), (2, "b")];
+        let plan = plan_reconcile(&q, None, &[], Some(&base(&["a", "b"])), &strings(&["b", "c", "a"]), true);
+        assert_eq!(after(&q, &plan), strings(&["b", "c", "a"]));
+    }
+
+    #[test]
+    fn copies_of_a_result_song_keep_one_entry_the_playing_one_first() {
+        // the playing song (3) and an older copy (1) of the same file: the playing one stays, the copy goes
+        let q = [(1, "a"), (2, "b"), (3, "a")];
+        let plan = plan_reconcile(&q, Some(3), &[], Some(&base(&["a", "b"])), &strings(&["a", "b"]), true);
+        assert_eq!(after(&q, &plan), strings(&["a", "b"]));
+        assert!(plan.cmds.contains(&Cmd::Delete(1)));
+        // a phone's copy of a result song is nobody's: it stays, and the result uses the first entry
+        let q = [(1, "a"), (2, "x"), (3, "a")];
+        let plan = plan_reconcile(&q, Some(2), &[], Some(&base(&["a"])), &strings(&["a"]), false);
+        assert_eq!(plan.cmds, vec![Cmd::Delete(3)]);
+    }
+
+    #[test]
+    fn songs_before_the_playing_one_move_after_it_without_losing_order() {
+        let q = [(1, "e"), (2, "d"), (3, "p"), (4, "c"), (5, "b"), (6, "a")];
+        let all = base(&["a", "b", "c", "d", "e", "p"]);
+        let target = strings(&["a", "b", "c", "d", "e"]);
+        let plan = plan_reconcile(&q, Some(3), &[], Some(&all), &target, true);
+        assert_eq!(after(&q, &plan), strings(&["p", "a", "b", "c", "d", "e"]));
     }
 
     /// An `add` as MPD answers it: files in `missing` are not in its database.
