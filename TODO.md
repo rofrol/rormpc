@@ -881,6 +881,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       derived .lrc for piecewise; MiMo always a generated .lrc beside a sidecar, the source untouched. First test:
       this MONTERO file (the first line on the first vocal onset ±0.3 s), then a mid-song skit, a long instrumental
       outro (must refuse).
+      Decided by the user 2026-10-11 (d-g7ttw73b): now, the suspicious-entry flag and nudge keys (±0.1 / ±0.5 s,
+      reset) whose offset is saved per song with an undo; the automatic alignment comes with the transcription build
+      (the same Whisper and demucs), MONTERO as its first test.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
