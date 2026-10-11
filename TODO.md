@@ -844,6 +844,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       paused (decided by the user 2026-10-11, d-h2in7kd6). rormpc-tools player/control.py `_pause`.
 - [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate
       filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
+- [ ] Media key Next in Music, weighted (asked 2026-10-11: "I am in Music, weighted, I press the media Next, it goes
+      to the next song, but the current one is not seen as the previous one, it is removed from the view. Ask the
+      models."): find why the skipped song disappears from the plan view instead of showing as the last play.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
