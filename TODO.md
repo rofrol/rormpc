@@ -1630,12 +1630,8 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Decided by the user 2026-10-11, against both models: a hand removal from the queue is lasting (d-6xjfvyp3),
       and lasting removals go to a separate Banned list, like Deleted but the file stays on disk (d-x3g5wgkv).
       Banned songs never come back through filters or the shuffle; the Banned list restores them; z undoes a ban.
-- [ ] Banned: what happens in ListenBrainz when a song is banned?
-      Options: Nothing: listens stay, no feedback (both models) | Listens stay and LB "hate" is sent | Listens are deleted, as Delete --listenbrainz does (irreversible)
-      Checked: ro-listenbrainz-mpd supports love / hate / clear feedback; musicdb delete --listenbrainz deletes
-      listens irreversibly (2026-10-11).
-      Options: Remembered for this source (`removed`), cleared when the source is left; `-` stays the lasting exclusion | It becomes an exclusion scoped to the source (Sol) | Nothing: the next filter change brings it back
-      Checked: plans/instant-filtering.md (2026-10-10).
+- [x] Banned: what happens in ListenBrainz when a song is banned?
+      Decided by the user 2026-10-11: nothing; listens stay, no feedback (d-a7xehj4c).
 - [x] Instant filtering: Does the first filter touch replace another kind of source (an album played with P, a playlist, the whole library)?
       Decided by the user 2026-10-11: at once; the old source is the first undo entry (d-s6fcqo5u).
 - [x] Instant filtering: In weighted mode, what does the table show while filtering?
@@ -1652,15 +1648,15 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Checked: ~/.config/rormpc/config.ron navigation "r": Rate(), "R": AddRandom; rmpc/src/ui/mod.rs handle_action
       gives the pane the key first and claims the global binding only after, so a global r would toggle repeat
       almost nowhere (2026-10-11). Free single keys: B E F H I L M O Q S T W y.
-- [ ] Instant filtering: A filter with 0 owned songs?
-      Options: The queue stays as it was, the header says so (MiMo) | The upcoming songs go, it stops after the playing song (Sol)
-      Checked: plans/instant-filtering.md (2026-10-10).
+- [x] Instant filtering: A filter with 0 owned songs?
+      Decided by the user 2026-10-11: the upcoming songs go, it stops after the playing song (Sol; d-sy7ma764).
 - [ ] Instant filtering: When does Previous sources record a rule set, now that every click applies?
       Options: When the source is left, or once a song of it has played | On every applied change | Only when saved as a smart list
       Checked: plans/instant-filtering.md (2026-10-10).
-- [ ] Instant filtering: Should a round count a song as heard only after a scrobble-qualifying play instead of on start (Sol)?
-      Options: Not in this plan, add it to Proposed | Yes, in step 1
-      Checked: plans/instant-filtering.md (2026-10-10).
+      Asked 2026-10-11; the user asked what Previous sources is; explained and asked again.
+- [x] Instant filtering: Should a round count a song as heard only after a scrobble-qualifying play instead of on start (Sol)?
+      Decided by the user 2026-10-11: yes, heard only after a scrobble-qualifying play ("as in scrobble"), in step 1
+      (d-yxxlysnq).
 - [ ] Instant filtering: Keep `hits` warm beyond the cached library index?
       Options: Only if the end-to-end time after the cache is over 0.15 s | Build `hits serve` in step 6 anyway | Never
       Checked: plans/instant-filtering.md (2026-10-10).
