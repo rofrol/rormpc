@@ -17,6 +17,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       claim null does not pace, which contradicts MPD's null `sync` option, to be checked); fixes: pin the output
       format or the device rate, or another decoder, verified by the same measurement and by the audible pitch.
       The user, 2026-10-12: "that speed-up is next in the TODO, do it" (moved to the top with the watchdog).
+      Diagnosed 2026-10-12 (coordinator, a scratch MPD on port 6651 with a null output, sync yes): the same 48 kHz mp3
+      runs at 0.9995-0.9997, so the mpg123 decoder and MPD's elapsed are right; the 1.09x comes from the osx output
+      (CoreAudio / the device rate), intermittently. Proposed fix: `format "48000:16:2"` in ~/.mpdconf's audio_output
+      (MPD resamples to the device's 48 kHz, so the device rate never switches), MPD restarted; the watchdog verifies.
 
 - [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
