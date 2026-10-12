@@ -1055,6 +1055,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       and threshold calibration (needs the model downloads and library copies, outside the worker sandbox); 3. the
       radio auto-run and the overnight library batch; 4. the commercial API upper bound (the user's key); 5. Linux
       faster-whisper. rormpc's display and Enter-to-transcribe are rormpc's items.
+      Evaluation 2026-10-12 (herdr-job 20261012-022855-363f, read-only; results outside the repository in
+      ~/.local/share/rormpc-tools/transcribe-eval-2026-10-12/, rejudge with `musicdb lyrics transcribe-eval
+      eval-list.tsv --from eval-out`): 10 songs with synced lyrics (pl, fr, 8 en) and 5 instrumentals, 41 min CPU with
+      large-v3 + demucs. Language right 10/10; instrumentals 5/5 no_vocals (VAD 0.0-0.7 s of singing; lyrics songs 50-177
+      s, ratio 0.24-0.85); 8/10 lyrics songs shown, mean WER 0.29 (0.09-0.59), median line sync 1.27 s. The 2 withheld
+      fail only words_outside_speech (0.34, 0.47 > OUTSIDE_SPEECH_MAX 0.25: VAD misses part of the singing). Separating
+      ranges: OUTSIDE_SPEECH_MAX >= 0.473 (or SPEECH_PAD >= 12.2 s); the other checks already separate. The rormpc-tools
+      coordinator's reading for the next slice: raise OUTSIDE_SPEECH_MAX (e.g. 0.6), keep the rest, confirm on a larger
+      set or the radio tracks before the overnight batch (10/5 is small).
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
