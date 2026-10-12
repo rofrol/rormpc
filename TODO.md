@@ -1431,6 +1431,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
+- [ ] `scripts/rormpc_install.sh install` keeps the companions at RORMPC_TOOLS_TAG by itself: compare the installed [t-oziokwmz]
+      companions' tag with the pin, reinstall them and restart their LaunchAgents only on a mismatch, record the
+      installed tag only after success, print both versions, fail loudly. Then every rormpc install (also herdr todo
+      run's [install]) keeps mpd-player, musicdb and hits at the pin without a second command or an override. From
+      herdr's round 20261012-020315-c8e8 (sol, MiMo; herdr DECISIONS 8a2e0ef1), which rejected multi-step installs in
+      herdr, after the user's request to report the gap (d-b2ypouzq). Cost: a small script change and its smoke test.
+
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in [t-4rtdcdqz]
