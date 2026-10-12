@@ -1894,8 +1894,3 @@ Items that consume rormpc-tools work and wait on its coordinator's "landed <tag>
 ## Waiting on herdr
 
 Items that wait on a herdr change (its coordinator, herdr-85, says when it is installed).
-
-- [ ] .herdr/checks.toml: a second install step `companions` = scripts/rormpc_install.sh companions with when_paths [t-bnpubrlt]
-      ["scripts/rormpc_install.sh"], after `install`, once herdr accepts named install steps (herdr TODO ddd4932f,
-      queued 2026-10-12 after the default-branch item). Until then each companions install needs the user's word
-      (d-b2ypouzq: one install of v0.2.54 with an override, 2026-10-12).
