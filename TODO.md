@@ -959,6 +959,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (scripts/test_rormpc_install.sh) runs in CI on Ubuntu and macOS. The first install after this has no record,
       so it reinstalls the companions once.
 
+- [ ] Elapsed time runs fast (asked 2026-10-12: "serious matter. At 40 seconds in rormpc, the stopwatch on my phone [t-ryp5kjet]
+      showed 37 s. Ask the models."): find whether MPD's elapsed, rormpc's display or the playback itself runs ~8%
+      fast (40/37 = 1.081; 48000/44100 = 1.088), and fix it.
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
