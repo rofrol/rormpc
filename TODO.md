@@ -22,7 +22,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (CoreAudio / the device rate), intermittently. Proposed fix: `format "48000:16:2"` in ~/.mpdconf's audio_output
       (MPD resamples to the device's 48 kHz, so the device rate never switches), MPD restarted; the watchdog verifies.
 
-- [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
+- [x] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
       e154f8dd, all useful): in mpd-player (it runs with rormpc closed); samples on MPD's player idle events and the
       existing 30 s heartbeat, MPD status paired with the monotonic clock (never the wall clock); a fresh baseline on
@@ -32,6 +32,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the TUI shows, a JSON log line with the evidence (song, audio format, device nominal rate, samples, ratio);
       the device rate only as evidence, never an alarm alone; no automatic fix, at most a "reopen output"
       (disable/enable) action after the evidence is saved.
+      Done 2026-10-12 (ca81fd2, installed with the companions tools@ca81fd21331c, pushed by the run) through herdr todo run r-m4vo3vt3 (pi-anthropic worker; reviewed by the coordinator):
+      tools/src/rormpc_tools/player/rate.py samples MPD status on the daemon's existing wakes (monotonic midpoint,
+      calls over 250 ms dropped), windows of 25-40 s, resets on song change, non-play state, seek (> 3 s off),
+      sample gap over 45 s, clock discontinuity over 5 s, restart; two consecutive windows above 1.03 or below 0.97
+      alarm: one notification, `rate_alarm` in player.json, a line in rate-alarms.jsonl with the samples and the
+      device's nominal rate; cleared after two healthy windows or a reset. The rormpc status-bar display of
+      rate_alarm is a later item.
 
 - [x] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
       one coordinator. A worker: scripts/rormpc_install.sh installs the tools from the same ref as rormpc (`./tools`
