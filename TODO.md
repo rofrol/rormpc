@@ -963,6 +963,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       showed 37 s. Ask the models."): find whether MPD's elapsed, rormpc's display or the playback itself runs ~8%
       fast (40/37 = 1.081; 48000/44100 = 1.088), and fix it.
 
+- [ ] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
+      repo? ask the models?"): consult the models and record the outcome; a move needs the user's decision.
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
