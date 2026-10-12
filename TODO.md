@@ -1078,6 +1078,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       channel" (MPD channels listenbrainz_feedback, listenbrainz_listen, rormpc; runs 38187215102, 38188905972);
       found while checking the rewritten history, failing before it.
 
+- [ ] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
+      models"): the underline marks the heart under the mouse (rmpc/src/ui/rormpc_actions.rs `hovered_like`), and in
+      the user's font the glyph is wider than its cell, so it looks like a glitch. Round 20261012-025148 (sol 124bcaab,
+      MiMo 9800a64b, DeepSeek 2c338633): drop the underline. Decided by the user 2026-10-12 (d-njr573xw, after a
+      mockup): no underline; while the mouse is over a heart the status bar says "click: like" / "click: unlike", the
+      heart takes the accent colour (checked on the selected row too), and the column is two cells wide (heart + a
+      blank, which is also the click target); bold stays for liked only.
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
