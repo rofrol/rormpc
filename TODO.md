@@ -1069,6 +1069,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
         robust offset fit, refusing when the evidence is weak.
       Decided by the user 2026-10-11 (d-g7ttw73b): the flag now, the alignment with the transcription. rormpc
       already has the manual nudge keys (a07eabe), which write the song's `[offset:]` tag.
+      Decided by the user 2026-10-12 (d-6l24gkjq): no fixed tail percentage; examine the audio file. Round
+      20261012-030458 (sol 5dee12e6, MiMo facc92e2, DeepSeek 71eca818, all useful): the tail decides: vocal activity
+      after the last lyric line (allowing the last line itself to finish; delay: not a wait, a window of song time)
+      means the lyrics end early, a silent vocal tail is an instrumental outro; the start explains it (first vocal
+      onset minus the first line's time = an offset to propose as a re-anchor through the nudge keys' [offset:] tag).
+      Cheap pass: ffmpeg to mono 16 kHz, Silero VAD on the tail of the mix; escalate a speech-like or unclear tail to
+      demucs on the tail window only (not the whole song) and VAD on the vocal stem; Whisper only to tell repeated or
+      spoken words apart. Cache per decoded-audio hash (ffmpeg -f md5) and method version; the flag shows the evidence
+      ("vocals at 3:42-4:09 after the last line at 3:20", "likely +34 s intro offset", "instrumental outro",
+      "uncertain"). Validate on the 53 flagged files plus ~20 unflagged with a labelled tail, report precision and
+      recall.
 
 - [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
