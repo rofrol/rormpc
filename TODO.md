@@ -885,7 +885,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       on rormpc-tools"; rormpc's install script pins rormpc-tools' tag. Follows from that decision; text only.
       Done 2026-10-12 (b285c42, through herdr todo run r-ykgns7lf; pushed by the run).
 
-- [ ] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:" [t-j74galug]
+- [x] Repair the release years (decided 2026-10-10, rormpc-tools docs/release-years-plan.md and the "Release years:" [t-j74galug]
       decisions): views show TDOR (the song's original release), TDRC stays this recording's; the hybrid rule of
       the plan; a dry-run report; every row reviewed in a rormpc "Years to review" view (no automatic apply); atomic
       tag writes keeping the old values for undo; files without a MusicBrainz work link get an MBID picker; on
@@ -932,7 +932,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       rormpc-tools has no candidate list, so the pick is pasted. Not tried live (the sandbox). The companions
       install of 0.2.54 follows (the run installs rormpc only).
 
-- [ ] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
+- [x] Years to review: the files without a recording MBID (about 166, class no-recording) listed under a separate [t-vssvn76c]
       filter, off by default, so the picker can give them one (decided by the user 2026-10-11, d-bzidm3vs).
       Waiting on rormpc-tools (2026-10-12, d-33kat4ps): the report's no-recording marking is part of rormpc-tools
       t-bd3334hn; rormpc's separate, off-by-default filter in the Years panel follows its "landed <tag>".
@@ -940,6 +940,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       --mbid pick into the file's recording tag (UFID / MUSICBRAINZ_TRACKID) even when the year holds, rollback restores
       it, mb: keys follow; rows without a recording MBID carry class no-recording; the json only gained fields (file_mbid
       on rows, recording in the apply output); the contract test passes unchanged. Back in "Next, in order".
+      Done 2026-10-12 (1f84016, installed and pushed by the run) through herdr todo run r-er5n7oex (worker; reviewed by the coordinator): rows of class
+      no-recording are hidden by default; the menu's "No recording MBID (N)" shows only them (or back), clearing
+      the confidence and class filters; the summary counts "N without a recording MBID"; a picked recording moves
+      the row back to the others.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
