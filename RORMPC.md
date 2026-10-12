@@ -15,6 +15,14 @@ rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and 
     scripts/rormpc_install.sh companions [--gap SECONDS]   # install / update / restart all of it (needs uv, cargo)
     scripts/rormpc_install.sh status                       # what is installed and running
 
+`install` keeps them at the pinned tags too: after installing rormpc it compares the tags the last successful
+`companions` recorded (`$XDG_STATE_HOME/rormpc/companions`, default `~/.local/state`) with the pins
+(`RORMPC_TOOLS_TAG`, `RO_LB_TAG`), prints both (`companions: v0.2.53 -> v0.2.54` or `companions: v0.2.54, at the
+pin`), and on a difference, or with nothing recorded, runs the `companions` step; at the pin it touches nothing. A
+failed step makes `install` exit non-zero (rormpc itself is installed by then) and leaves the old record, so the next
+`install` runs it again. `companions --local` records the checkouts, so the next `install` puts the pinned tags back.
+`scripts/test_rormpc_install.sh` tests this with a fake HOME and stubbed cargo, uv, launchctl and systemctl.
+
 - rormpc-tools at a pinned tag (`uv tool install`), and `musicdb update` every hour: play counts, skips and likes
   into MPD stickers. Settings (music directory, where the history goes, ListenBrainz user) in
   `~/.config/rormpc-tools/config.toml`, see its README.

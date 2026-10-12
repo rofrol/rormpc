@@ -14,10 +14,12 @@ on:
     tags: ["v*.*.*"]
     paths:
       - scripts/rormpc_install.sh
+      - scripts/test_rormpc_install.sh
       - .github/workflows/installer_smoke.yml
   pull_request:
     paths:
       - scripts/rormpc_install.sh
+      - scripts/test_rormpc_install.sh
       - .github/workflows/installer_smoke.yml
   # weekly, to catch drift in the companions' pinned tags, uv, Rust and the runner image; GitHub disables
   # schedules after 60 days without repository activity
@@ -52,6 +54,19 @@ defaults:
     shell: bash
 
 jobs:
+  # `install` keeps the companions at the pins: a fake HOME and stubbed cargo, uv, launchctl and systemctl
+  install-stubbed:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: test_rormpc_install.sh
+        run: scripts/test_rormpc_install.sh
+
   companions-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -241,6 +256,9 @@ jobs:
           as-ci '~/rormpc_install.sh status' | tee status.txt
           grep -q '^rormpc-tools ' status.txt
           grep -q '^ro-listenbrainz-mpd ' status.txt
+          # companions recorded the tags it installed
+          grep -qE '^companions recorded: rormpc-tools [^ ]+, pin ' status.txt
+          ! grep -q '^companions recorded: rormpc-tools none' status.txt
           grep -q '^timer active' status.txt
           grep -qx 'scrobbler service: active' status.txt
           grep -qx 'mpd-player service: active' status.txt

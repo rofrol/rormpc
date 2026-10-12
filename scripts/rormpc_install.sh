@@ -4,7 +4,9 @@ set -euo pipefail
 
 usage="usage: rormpc_install.sh install|rollback|list|build-id|companions [--local] [--gap SECONDS]|status
 
-  install     build the release binary, back up the installed one, install the new one
+  install     build the release binary, back up the installed one, install the new one; then keep the
+              companions at the pinned tags: when the tags the last successful companions step recorded differ
+              from the pins (or none is recorded), run the companions step; otherwise leave them alone
   rollback    put back the most recent backup (the current binary becomes a backup too)
   list        show the installed build and the backups, newest first
   build-id    print the installed build's commit first, then its version line (herdr todo run's [install]
@@ -19,7 +21,8 @@ usage="usage: rormpc_install.sh install|rollback|list|build-id|companions [--loc
               \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). \$RORMPC_TOOLS_REF and \$RO_LB_REF
               (a tag or commit) replace the pinned tags, for CI to test a companion's commit. Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
-  status      what of the above is installed and running, and the tools rormpc's features run
+  status      what of the above is installed and running (with the companions' recorded tags and the pins), and
+              the tools rormpc's features run
 
 Installed binary: \$RORMPC_INSTALLED (default ~/.cargo/bin/rormpc).
 Backups: ~/.cache/rormpc/installed/<time>_<revision>, the last 5 are kept.
@@ -55,6 +58,18 @@ if [ "$(uname)" = Darwin ]; then
 else
   lb_config="${XDG_CONFIG_HOME:-$HOME/.config}/listenbrainz-mpd/config.toml"
 fi
+# what the last successful `companions` installed ("name ref" per line, see companions_refs); `install` compares it
+# with the pins
+companions_record="${XDG_STATE_HOME:-$HOME/.local/state}/rormpc/companions"
+# companions_refs [LOCAL]: what `companions` installs, one "name ref" line per companion
+companions_refs() {
+  if [ -n "${1:-}" ]; then
+    printf 'rormpc-tools local %s\nro-listenbrainz-mpd local %s\n' "$RORMPC_TOOLS_DIR" "$RO_LB_DIR"
+  else
+    printf 'rormpc-tools %s\nro-listenbrainz-mpd %s\n' "${RORMPC_TOOLS_REF:-$RORMPC_TOOLS_TAG}" "${RO_LB_REF:-$RO_LB_TAG}"
+  fi
+}
+ref_of() { sed -n "s/^$1 //p" <<<"$2"; }  # ref_of NAME REFS
 # my rule: a listen is 90% of the song played without a seek; pauses don't matter
 listen_rule="listen_fraction = 0.9
 listen_max_seconds = 0
@@ -354,12 +369,49 @@ companions() {
       echo "warning: $b runs; with MPRIS on, it and mpd-player both answer the media keys: stop it" >&2
     done
   fi
+  # recorded last, so a failed step above leaves the old record and the next `install` runs it again
+  mkdir -p "$(dirname "$companions_record")"
+  companions_refs "$local_build" > "$companions_record.tmp"
+  mv "$companions_record.tmp" "$companions_record"
+}
+
+# install_companions: after `install`, run the companions step when the recorded tags are not the pins
+install_companions() {
+  local want have line
+  want="$(companions_refs)"
+  have="$(cat "$companions_record" 2>/dev/null || true)"
+  if [ "$have" = "$want" ]; then
+    echo "companions: $(ref_of rormpc-tools "$want"), at the pin"
+    return 0
+  fi
+  line="companions: $(ref_of rormpc-tools "$have" | grep . || echo "none recorded") -> $(ref_of rormpc-tools "$want")"
+  if [ "$(ref_of ro-listenbrainz-mpd "$have")" != "$(ref_of ro-listenbrainz-mpd "$want")" ]; then
+    line="$line, ro-listenbrainz-mpd $(ref_of ro-listenbrainz-mpd "$have" | grep . || echo "none recorded") ->"
+    line="$line $(ref_of ro-listenbrainz-mpd "$want")"
+  fi
+  echo "$line"
+  # in a subshell with set -e of its own: its `exit 1`s end only it, and a failed command stops it (set -e is
+  # ignored inside a command that || or if tests, so the status is read with set +e instead)
+  local rc
+  set +e
+  (set -e; companions)
+  rc=$?
+  set -e
+  if [ "$rc" != 0 ]; then
+    echo "install: the companions step failed (exit $rc, see above); rormpc is installed, the companions are not at" \
+      "the pin. Fix it and run install again." >&2
+    exit "$rc"
+  fi
 }
 
 status() {
   [ -x "$installed" ] && echo "rormpc: $("$installed" version | head -1)" || echo "rormpc: not installed"
   uv tool list 2>/dev/null | grep '^rormpc-tools' || echo "rormpc-tools: not installed"
   cargo install --list 2>/dev/null | grep -E '^(ro-listenbrainz-mpd|listenbrainz-mpd) ' || echo "ro-listenbrainz-mpd: not installed"
+  local have want name; have="$(cat "$companions_record" 2>/dev/null || true)"; want="$(companions_refs)"
+  for name in rormpc-tools ro-listenbrainz-mpd; do
+    echo "companions recorded: $name $(ref_of "$name" "$have" | grep . || echo "none"), pin $(ref_of "$name" "$want")"
+  done
   echo "musicdb update service: $(service_state musicdb)"
   echo "Omarchy Radio daily check: $(service_state omarchy-radio)"
   echo "scrobbler service: $(service_state ro-listenbrainz-mpd)"
@@ -396,6 +448,7 @@ case "${1:-}" in
     backup_current
     install -m 755 "$repo/target/release/rormpc" "$installed"
     echo "installed $("$installed" version | head -1) -> $installed"
+    install_companions
     echo "restart running rormpc instances to use it"
     ;;
   rollback)
