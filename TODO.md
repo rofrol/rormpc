@@ -945,6 +945,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the confidence and class filters; the summary counts "N without a recording MBID"; a picked recording moves
       the row back to the others.
 
+- [ ] `scripts/rormpc_install.sh install` keeps the companions at RORMPC_TOOLS_TAG by itself: compare the installed [t-oziokwmz]
+      companions' tag with the pin, reinstall them and restart their LaunchAgents only on a mismatch, record the
+      installed tag only after success, print both versions, fail loudly. Then every rormpc install (also herdr todo
+      run's [install]) keeps mpd-player, musicdb and hits at the pin without a second command or an override. From
+      herdr's round 20261012-020315-c8e8 (sol, MiMo; herdr DECISIONS 8a2e0ef1), which rejected multi-step installs in
+      herdr, after the user's request to report the gap (d-b2ypouzq). Cost: a small script change and its smoke test.
+      Decided by the user 2026-10-12: approved (d-nyb6ewr5).
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
@@ -1430,13 +1438,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
-
-- [ ] `scripts/rormpc_install.sh install` keeps the companions at RORMPC_TOOLS_TAG by itself: compare the installed [t-oziokwmz]
-      companions' tag with the pin, reinstall them and restart their LaunchAgents only on a mismatch, record the
-      installed tag only after success, print both versions, fail loudly. Then every rormpc install (also herdr todo
-      run's [install]) keeps mpd-player, musicdb and hits at the pin without a second command or an override. From
-      herdr's round 20261012-020315-c8e8 (sol, MiMo; herdr DECISIONS 8a2e0ef1), which rejected multi-step installs in
-      herdr, after the user's request to report the gap (d-b2ypouzq). Cost: a small script change and its smoke test.
 
 ## Needs a decision
 
