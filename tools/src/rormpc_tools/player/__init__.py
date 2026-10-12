@@ -23,6 +23,8 @@ this daemon (temp file + rename), read by rormpc to show it.
 - pause: pause for a while, MPD plays on at the deadline unless someone did anything meanwhile
   (`pause start SECONDS`, ...).
 
+- rate: a watchdog for the playback speed, MPD's elapsed against the monotonic clock (alarm only, no fix); see rate.py.
+
 Transport commands (next, prev, toggle, play, pause, stop, seek) come over a datagram socket instead, one JSON
 object per datagram (`{"command": "next"}`), e.g. from media keys; see control.py. On Linux the daemon is also the
 MPRIS player `org.mpris.MediaPlayer2.mpd_player` when a session bus is there (`--no-mpris`: not); see mpris.py.
@@ -141,7 +143,10 @@ class Daemon:
             for m in await self.mpd.readmessages():
                 if m.get("channel") == CHANNEL:
                     await self.dispatch(m.get("message", ""))
+        before = time.monotonic()
         self.status = await self.mpd.status()
+        after = time.monotonic()
+        self.status_clock = ((before + after) / 2, after - before)  # for the rate watchdog
         for m in self.modules.values():
             await self.guarded(m, m.on_status(self, self.status, changed))
         fired = False
@@ -226,7 +231,7 @@ def parse_args(argv=None):
 
 
 async def _main(a):
-    from . import control, gap, pause, shuffle, upnext
+    from . import control, gap, pause, rate, shuffle, upnext
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)  # unlink on stop
     sock = control.Socket(a.socket or control.socket_path())
     try:
@@ -234,7 +239,7 @@ async def _main(a):
             sock = None
         c = MPDClient()
         await c.connect(os.environ.get("MPD_HOST", "localhost"), int(os.environ.get("MPD_PORT", 6600)))
-        modules = [gap.Gap(a.seconds), upnext.UpNext(), shuffle.Shuffle(), pause.Pause()]
+        modules = [gap.Gap(a.seconds), upnext.UpNext(), shuffle.Shuffle(), pause.Pause(), rate.RateWatch()]
         if sys.platform != "darwin" and not a.no_mpris:  # macOS: `mpd-player nowplaying`, a process of its own
             from . import mpris
             modules.append(mpris.Mpris())

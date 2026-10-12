@@ -49,6 +49,17 @@ hits --set +likes --rank rediscover
 hits sets; hits exceptions; hits lists                                 # read only
 ```
 
+### mpd-player's playback-speed watchdog
+
+MPD's `elapsed` once ran 1.09x the wall clock (48 kHz mp3 through the osx output: 48000/44100), intermittently.
+mpd-player compares `elapsed` with the monotonic clock on the samples it takes anyway (player idle events and the
+30 s heartbeat; a status call over 250 ms is dropped) over windows of 25-40 s of uninterrupted playback; a pause, song
+change, seek, sleep or reconnect starts a fresh baseline. Two consecutive windows above 1.03 or below 0.97 raise one
+macOS notification ("Playback clock runs about 9% fast: <title>"), a `rate_alarm` field (`ratio`, `since`, `song`,
+`audio`) in `$XDG_STATE_HOME/rormpc/player.json` that clears after two healthy windows or a reset, and one JSON line in
+`rate-alarms.jsonl` next to it (song file, MPD's `audio`, the output device's nominal rate from `system_profiler`, the
+samples). It fixes nothing; showing it in rormpc is a later item.
+
 ### mpd-player's command socket
 
 Transport commands reach mpd-player as datagrams on a Unix socket, for media keys (Karabiner-Elements'
