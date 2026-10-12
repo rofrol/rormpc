@@ -4,6 +4,15 @@
 
 Triaged 2026-10-07 from the sections below; each item points at its section for the details.
 
+- [ ] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
+      one coordinator. A worker: scripts/rormpc_install.sh installs the tools from the same ref as rormpc (`./tools`
+      for a local install, `git+…/rormpc@REF#subdirectory=tools` otherwise; RORMPC_TOOLS_TAG goes, the companions
+      record compares that ref); `.herdr/checks.toml` gains `tools` = `uv run --directory tools pytest -q`; a root
+      `.github/workflows/tools.yml` on tools/** (pytest and the contract tests) replaces tools/.github; AGENTS.md
+      "Coordination" says one coordinator for the whole repository and folds in tools/AGENTS.md's rules; tools/TODO.md
+      and tools/.herdr removed (their open items are in this file now); docs that name rofrol/rormpc-tools point to
+      tools/. The old repository is archived on GitHub (its 62 tags kept; copies here as tools-v0.2.x).
+
 - [x] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the [t-2i7pvwhq]
       classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
 - [x] Playing-song indicator in Hits: consult the models and prepare mockups of the variants, then ask in "Needs a [t-2e5e552e]
@@ -1053,15 +1062,6 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
         robust offset fit, refusing when the evidence is weak.
       Decided by the user 2026-10-11 (d-g7ttw73b): the flag now, the alignment with the transcription. rormpc
       already has the manual nudge keys (5ff3403), which write the song's `[offset:]` tag.
-
-- [ ] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
-      one coordinator. A worker: scripts/rormpc_install.sh installs the tools from the same ref as rormpc (`./tools`
-      for a local install, `git+…/rormpc@REF#subdirectory=tools` otherwise; RORMPC_TOOLS_TAG goes, the companions
-      record compares that ref); `.herdr/checks.toml` gains `tools` = `uv run --directory tools pytest -q`; a root
-      `.github/workflows/tools.yml` on tools/** (pytest and the contract tests) replaces tools/.github; AGENTS.md
-      "Coordination" says one coordinator for the whole repository and folds in tools/AGENTS.md's rules; tools/TODO.md
-      and tools/.herdr removed (their open items are in this file now); docs that name rofrol/rormpc-tools point to
-      tools/. The old repository is archived on GitHub (its 62 tags kept; copies here as tools-v0.2.x).
 
 - [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
