@@ -972,7 +972,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       claim null does not pace, which contradicts MPD's null `sync` option, to be checked); fixes: pin the output
       format or the device rate, or another decoder, verified by the same measurement and by the audible pitch.
 
-- [ ] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
+- [x] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
       repo? ask the models?"): consult the models and record the outcome; a move needs the user's decision.
       Rounds 20261012-021857-908d (sol 4090d8c9, MiMo 1fa8a9a7, DeepSeek 4244b40f, all useful): move rormpc-tools into
       rormpc as tools/ with its history, install the tools from the same ref as rormpc (`./tools` or
@@ -988,6 +988,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       cargo and pytest, a dry `git merge upstream/master`); retag tools-v0.2.x on the mapped commits; rewrite TODO.md
       and docs' SHAs from the map (commit messages stay); bundle backups; push with --force-with-lease; the old
       repository archived; installer and AGENTS.md moved to one repository and one coordinator.
+      Done 2026-10-12 (coordinator, with overrides the user allowed, d-ddlh6iyt): both histories interleaved by author
+      date on upstream's f677f67 (630 commits: 437 rormpc + 193 rormpc-tools under tools/; each repository's own
+      order kept, 11 + 1 date inversions inside them), committer date = author date everywhere; checked: per-commit
+      trees of both halves equal the originals, patch ids, authors and messages equal, no empty commits, fsck, final
+      tree = old rormpc + tools/, cargo 1135 and pytest 658 pass, a dry merge of upstream/master gives the same result
+      as before; review round 20261012-023558-f66a (sol, MiMo, DeepSeek). CI on rewrite-test: Build & Test pass;
+      Formatter fails as before (pull requests only); the installer's companions-linux fails as on old master (item
+      below). The user force-pushed master to 3358f5d; tags tools-v0.2.x (62) pushed; rormpc-tools' local main
+      pushed and the repository archived. The old→new map is plans/full-map.txt (source, old sha, new sha); SHAs cited
+      in this file are the old ones. Backups: git bundles in the coordinator's scratchpad (temporary).
 
 - [ ] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
       `musicdb restore ID --yes` (download again, history, stickers, YouTube playlist), and the status bar after any
@@ -996,6 +1006,77 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       restored it with `musicdb restore`; today Ctrl-y only takes a song back from the Trash, the Deleted panel `gd`
       restores any deletion). Cost: a small rormpc change.
       Decided by the user 2026-10-12: approved (d-usvfh2ct).
+
+- [ ] Transcribed lyrics (from tools/TODO.md after the move into rormpc, 2026-10-12). Plan: docs/transcribe-lyrics-plan.md, cd7fe61. [t-jsjs5ngd]
+      All seven choices were decided by the user 2026-10-11:
+      - transcribe each new Omarchy Radio download automatically;
+      - transcribe the ~274 library songs without lyrics once, overnight;
+      - always separate the vocals (demucs);
+      - show a transcript that passed the checks at once, labelled machine-transcribed;
+      - model: Whisper large-v3, not the measured turbo;
+      - a separate uv tool with an inline-dependency script;
+      - try one commercial API on the whole evaluation set as an upper bound. This needs the user's API key: a
+        worker without one reports it and never signs up.
+      Stored as <song>.transcript.json, never as .lrc. Tell todo-rormpc "landed <tag>": rormpc's display of
+      transcripts waits on it.
+      Slices (coordinator 2026-10-12, by the plan's build order): 1. `transcribe.py`, the inline-dependency backend
+      script, the sidecar and offline tests with a fake backend (done 2026-10-12: 061e1bd, 34a3fe1, model id fix
+      1f00935; smoke run on a library copy in temporary dirs: the backend installs, demucs + large-v3 ran, language
+      voted en 5/5, the lines read well; a 14.5 min looped YouTube upload took 12 min and was withheld for
+      words_outside_speech and high_word_density, with a repeated chorus loop and "Thank you." at the end); 2. the evaluation set
+      and threshold calibration (needs the model downloads and library copies, outside the worker sandbox); 3. the
+      radio auto-run and the overnight library batch; 4. the commercial API upper bound (the user's key); 5. Linux
+      faster-whisper. rormpc's display and Enter-to-transcribe are rormpc's items.
+
+- [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
+      - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
+        proposed thresholds: Sol, more than 30 s and more than 20% of the file; MiMo, a line span below 0.72 of the
+        length, more than 45 s left, or 15% off the other candidates' median span. Flag it for checking, never
+        reject it.
+        Decided by the coordinator 2026-10-12 after consult round 20261012-015328-4f97 (Sol, MiMo, DeepSeek; all
+        three dropped the standalone span test: long intros make it false-flag and a uniform shift leaves the span
+        unchanged). Flag reasons, each shown with its numbers:
+        * `past-end`: a non-empty line's timestamp past the file's length + 2 s (all three);
+        * `unordered`: timestamps that decrease in file order, after expanding multi-timestamp lines and applying
+          `[offset:]` (all three);
+        * `ends-early`: tail = length - the last non-empty line's start > clamp(0.20 x length, 25 s, 90 s) (Sol's
+          20%, MiMo's and DeepSeek's absolute cap for long songs, Sol's lower floor for short ones);
+        * supporting only, never a flag alone: with two or more other synced candidates that agree within 5 s,
+          this entry's last line more than max(20 s, 10%) from them (Sol, MiMo).
+        Thresholds are named, provisional constants; the label reads "lyrics end early, check timing". Calibration:
+        the coordinator counts the flags over the library read-only after the build and expects at most about 5%
+        of synced entries; more goes to "Needs a decision" with the numbers.
+        Built 2026-10-12: 31710ca (`musicdb lyrics check [FILE ...] [--dry-run]`, `suspect` in index.json and
+        `status --json`). Counted over the library read-only: 83 of 444 synced flagged (53 ends-early, 30
+        past-end): above 5%, see Needs a decision. The alignment part waits on the transcription.
+      - Later, with the transcription: automatic alignment, using Whisper word timestamps on the vocal stem and a
+        robust offset fit, refusing when the evidence is weak.
+      Decided by the user 2026-10-11 (d-g7ttw73b): the flag now, the alignment with the transcription. rormpc
+      already has the manual nudge keys (5ff3403), which write the song's `[offset:]` tag.
+
+- [ ] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
+      one coordinator. A worker: scripts/rormpc_install.sh installs the tools from the same ref as rormpc (`./tools`
+      for a local install, `git+…/rormpc@REF#subdirectory=tools` otherwise; RORMPC_TOOLS_TAG goes, the companions
+      record compares that ref); `.herdr/checks.toml` gains `tools` = `uv run --directory tools pytest -q`; a root
+      `.github/workflows/tools.yml` on tools/** (pytest and the contract tests) replaces tools/.github; AGENTS.md
+      "Coordination" says one coordinator for the whole repository and folds in tools/AGENTS.md's rules; tools/TODO.md
+      and tools/.herdr removed (their open items are in this file now); docs that name rofrol/rormpc-tools point to
+      tools/. The old repository is archived on GitHub (its 62 tags kept; copies here as tools-v0.2.x).
+
+- [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
+      real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
+      e154f8dd, all useful): in mpd-player (it runs with rormpc closed); samples on MPD's player idle events and the
+      existing 30 s heartbeat, MPD status paired with the monotonic clock (never the wall clock); a fresh baseline on
+      any player event, song change, pause (also the gap's 0:00 pause), seek, MPD restart or reconnect, a sample gap
+      over 45 s or sleep; alarm when two consecutive 25-40 s windows are both above 1.03 or both below 0.97 (Sol; MiMo
+      and DeepSeek 1-2% over longer windows); one macOS notification ("playback clock about 9% fast"), a state field
+      the TUI shows, a JSON log line with the evidence (song, audio format, device nominal rate, samples, ratio);
+      the device rate only as evidence, never an alarm alone; no automatic fix, at most a "reopen output"
+      (disable/enable) action after the evidence is saved.
+
+- [ ] CI: the installer smoke test's companions-linux job fails on master: "a daemon never subscribed to its MPD [t-kwqstgkt]
+      channel" (MPD channels listenbrainz_feedback, listenbrainz_listen, rormpc; runs 38187215102, 38188905972);
+      found while checking the rewritten history, failing before it.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
