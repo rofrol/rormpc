@@ -962,6 +962,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] Elapsed time runs fast (asked 2026-10-12: "serious matter. At 40 seconds in rormpc, the stopwatch on my phone [t-ryp5kjet]
       showed 37 s. Ask the models."): find whether MPD's elapsed, rormpc's display or the playback itself runs ~8%
       fast (40/37 = 1.081; 48000/44100 = 1.088), and fix it.
+      Measured 2026-10-12 (coordinator, MPD status elapsed against the monotonic clock, 30 s each): 02:17, a 48 kHz mp3
+      (Lady A, audio 48000:16:2, device 48000 per system_profiler): ratio 1.0896 (= 48000/44100 within 0.1%); a 44.1 kHz
+      song (id 112) from its start to the next song's start: 239.2 s of wall time for 225.1 s (includes mpd-player's gap);
+      02:26, a 48 kHz mp3 (id 6): ratio 1.0011, normal. So it is intermittent and follows the 44.1/48 ratio: the device
+      may stay at the previous song's rate. MPD 0.24.15, osx output, no audio_output_format. Round
+      20261012-021815-3d56 (sol f59daaf7 useful, MiMo e2962b72 and DeepSeek a6aedfe1 partial): an osx output / CoreAudio
+      rate mix-up first, the mpg123 decoder second; separate on a second MPD with a null output (Sol; MiMo and DeepSeek
+      claim null does not pace, which contradicts MPD's null `sync` option, to be checked); fixes: pin the output
+      format or the device rate, or another decoder, verified by the same measurement and by the audible pitch.
 
 - [ ] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
       repo? ask the models?"): consult the models and record the outcome; a move needs the user's decision.
