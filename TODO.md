@@ -945,13 +945,19 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the confidence and class filters; the summary counts "N without a recording MBID"; a picked recording moves
       the row back to the others.
 
-- [ ] `scripts/rormpc_install.sh install` keeps the companions at RORMPC_TOOLS_TAG by itself: compare the installed [t-oziokwmz]
+- [x] `scripts/rormpc_install.sh install` keeps the companions at RORMPC_TOOLS_TAG by itself: compare the installed [t-oziokwmz]
       companions' tag with the pin, reinstall them and restart their LaunchAgents only on a mismatch, record the
       installed tag only after success, print both versions, fail loudly. Then every rormpc install (also herdr todo
       run's [install]) keeps mpd-player, musicdb and hits at the pin without a second command or an override. From
       herdr's round 20261012-020315-c8e8 (sol, MiMo; herdr DECISIONS 8a2e0ef1), which rejected multi-step installs in
       herdr, after the user's request to report the gap (d-b2ypouzq). Cost: a small script change and its smoke test.
       Decided by the user 2026-10-12: approved (d-nyb6ewr5).
+      Done 2026-10-12 (9928dcc, installed and pushed by the run; the record now says rormpc-tools v0.2.54) through herdr todo run r-oswstluv (worker; reviewed by the coordinator): `install` compares
+      the companions' recorded refs ($XDG_STATE_HOME/rormpc/companions, written atomically only after a successful
+      companions step) with RORMPC_TOOLS_TAG and RO_LB_TAG and runs the companions step only on a mismatch or no
+      record, printing both; a failed step exits non-zero; `status` shows record and pins; a stubbed test
+      (scripts/test_rormpc_install.sh) runs in CI on Ubuntu and macOS. The first install after this has no record,
+      so it reinstalls the companions once.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
