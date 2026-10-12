@@ -1087,6 +1087,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       times, never words). Consider: beam search and temperature fallback; the original mix against the stem on the
       worst songs. Expect worse on the 274 LRCLIB lacks. Dismissed: condition_on_previous_text on hard songs.
       Next slice: demote the check, the better metric, a forced-alignment pilot on ~20 songs, then the batch.
+      Decided by the user 2026-10-12 (d-orwfxuit), replacing "show at once" of 2026-10-11: transcripts are generated
+      but not shown or highlighted until the forced-alignment pilot succeeds.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
