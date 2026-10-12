@@ -1074,6 +1074,19 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       ranges: OUTSIDE_SPEECH_MAX >= 0.473 (or SPEECH_PAD >= 12.2 s); the other checks already separate. The rormpc-tools
       coordinator's reading for the next slice: raise OUTSIDE_SPEECH_MAX (e.g. 0.6), keep the rest, confirm on a larger
       set or the radio tracks before the overnight batch (10/5 is small).
+      Asked by the user 2026-10-12 ("WER 0.29 and 1.3 s line sync: fix it across the whole library? ask the models";
+      and on raising OUTSIDE_SPEECH_MAX to ~0.6: "I don't know, let him ask the models"). Round 20261012-032438-8fd4
+      (Sol, MiMo, DeepSeek, run by the rormpc-tools session before it closed), checked against the code:
+      all three: words_outside_speech must not withhold (speech VAD misses singing: 2/10 false rejections would be
+      ~55 of 274); demote it to a review flag instead of raising the limit (DeepSeek: measure against vocal-stem
+      activity); none proposes 0.6. Replace the sync metric in transcribe-eval (nearest line start rewards
+      over-segmentation): monotonic word alignment to the reference, signed error p50/p90 per song, drift over the
+      song, "is the right line highlighted at sampled times". Pilot forced alignment of the transcript's own words on
+      the vocal stem (wav2vec2/MMS-CTC, whisperX-style) against stable-ts refinement, keeping Whisper's times where the
+      alignment cost is high (pitfalls: sustained vowels, melisma, backing vocals; pl/fr support; alignment fixes
+      times, never words). Consider: beam search and temperature fallback; the original mix against the stem on the
+      worst songs. Expect worse on the 274 LRCLIB lacks. Dismissed: condition_on_previous_text on hard songs.
+      Next slice: demote the check, the better metric, a forced-alignment pilot on ~20 songs, then the batch.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
