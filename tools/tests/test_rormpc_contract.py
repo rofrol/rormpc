@@ -1,6 +1,6 @@
 """What rormpc reads from the tools: `--version` (its debuginfo), `hits --json` (its Hits pane), `musicdb delete
---preview`'s JSON (its delete menu) and `musicdb banned --json` (its Banned list); and what mpd-player reads from
-rormpc: source.json (`source_id` keys the round, `generation` is ignored, older files still work). rormpc's delete_menu.rs and hits.rs parse a copy of these shapes in their own
+--preview`'s JSON (its delete menu), `musicdb undo --next` (its Ctrl-y) and `musicdb banned --json` (its Banned
+list); and what mpd-player reads from rormpc: source.json (`source_id` keys the round, `generation` is ignored, older files still work). rormpc's delete_menu.rs and hits.rs parse a copy of these shapes in their own
 tests; change both together and bump PREVIEW_VERSION when a field changes meaning or goes away."""
 import argparse, json, sys
 
@@ -88,6 +88,25 @@ def test_banned_json_is_versioned(env, monkeypatch, tmp_path, capsys):
     [song] = out["songs"]
     assert set(song) == {"key", "file", "artist", "title", "ts"}
     assert (song["key"], song["file"], song["artist"]) == ("yt:dQw4w9WgXcQ", SONG["file"], "Rick Astley")
+
+
+def test_undo_next_is_versioned_and_changes_nothing(env, monkeypatch, tmp_path, capsys):
+    """rormpc's Ctrl-y (delete_menu.rs `undo_step`) reads {version, kind: trash|restore|null, id, song, download}."""
+    rec = {"id": "20261012-120000-a.mp3", "file": SONG["file"], "mode": "permanent", "trashed_to": None,
+           "history": "delete", "ytid": "dQw4w9WgXcQ", "artist": "Rick Astley", "title": SONG["title"],
+           "queued_at": "2026-10-12T12:00:00", "events": []}
+    env([])
+    musicdb.write_jsonl(musicdb.DONE, [rec])
+    musicdb.undo(argparse.Namespace(id=None, next=True))
+    out = json.loads(capsys.readouterr().out)
+    assert out["version"] == musicdb.UNDO_VERSION == 1
+    assert out == {"version": 1, "kind": "restore", "id": rec["id"], "file": SONG["file"],
+                   "song": "Rick Astley - Never Gonna Give You Up", "mode": "permanent", "history": "delete",
+                   "download": True}
+    assert musicdb.jsonl(musicdb.DONE) == [rec]
+    musicdb.write_jsonl(musicdb.DONE, [])
+    musicdb.undo(argparse.Namespace(id=None, next=True))
+    assert json.loads(capsys.readouterr().out) == {"version": 1, "kind": None}
 
 
 def source_json(**extra):

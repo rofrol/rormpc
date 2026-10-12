@@ -791,8 +791,15 @@ recording), the video in my chosen YouTube playlists and the local plays. `music
 fills in the listen count and the playlist titles in a background thread; the history items wait for both, so
 their confirmation names exactly what goes. Everything except plain Trash asks first with "Cancel" as the default
 button. `musicdb delete [--permanent] [--listenbrainz]` does the work in the background; failed remote steps stay
-in its journal and `musicdb update` retries them hourly. Ctrl-y (`musicdb undo`) restores the last trashed file,
-not deleted history.
+in its journal and `musicdb update` retries them hourly. The status bar line after each deletion says what Ctrl-y
+does with it ("Ctrl-y undoes", or "Deleted permanently: … · Ctrl-y restores (downloads again)").
+Ctrl-y (bound to `musicdb undo`; rormpc runs it itself in the background) takes back the newest deletion of any
+kind, repeatable: `musicdb undo --next` (versioned JSON) names it; a trashed song with its history kept comes back
+from the Trash (`musicdb undo --id`), any other one through `musicdb restore ID --yes`, as the Deleted pane's
+Restore: from the Trash, else the same YouTube video downloaded again, with its plays, ListenBrainz listens and
+YouTube playlist entries. The status bar shows the progress ("downloading it again" when it is not in the Trash)
+and musicdb's last line. A deletion a restore was already started for (gd shows its steps and retries it) and one
+that cannot come back (not in the Trash and not a YouTube download) are skipped.
 
 ## Consume off only
 

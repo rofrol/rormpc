@@ -133,11 +133,41 @@ def test_history_delete_failure_is_journaled_and_retried(lib, monkeypatch):
     assert musicdb.db().execute("SELECT count(*) FROM events").fetchone()[0] == 0  # deleted listens stay deleted
 
 
-def test_permanent_delete_goes_to_done(lib, monkeypatch):
+def test_permanent_delete_goes_to_done(lib, monkeypatch, capsys):
     music, m = lib
     delete(permanent=True)
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "Deleted permanently: Rick Astley - Never Gonna Give You Up · Ctrl-y restores (downloads again)")
     assert not (music / RICK).exists() and musicdb.jsonl(musicdb.PENDING) == []
     [rec] = musicdb.jsonl(musicdb.DONE)
     assert rec["mode"] == "permanent" and rec["trashed_to"] is None and rec["finished_at"]
+    musicdb.undo(argparse.Namespace(id=None, next=True))  # Ctrl-y downloads it again (test_restore.py)
+    assert json.loads(capsys.readouterr().out) | {"id": None} == {
+        "version": 1, "kind": "restore", "id": None, "file": RICK, "song": "Rick Astley - Never Gonna Give You Up",
+        "mode": "permanent", "history": "keep", "download": True}
+
+
+@pytest.mark.parametrize("permanent, listenbrainz, hint", [
+    (False, False, "Trashed: Rick Astley - Never Gonna Give You Up · Ctrl-y undoes"),
+    (False, True, "Trashed: Rick Astley - Never Gonna Give You Up; history deleted · Ctrl-y restores it with its "
+                  "history"),
+    (True, True, "Deleted permanently: Rick Astley - Never Gonna Give You Up; history deleted · Ctrl-y restores "
+                 "(downloads again)"),
+])
+def test_every_deletion_says_what_ctrl_y_does(lib, monkeypatch, capsys, permanent, listenbrainz, hint):
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: io.BytesIO(b"{}"))
+    monkeypatch.setattr(musicdb, "youtube_remove", lambda ytid: [])
+    delete(permanent=permanent, listenbrainz=listenbrainz)
+    assert capsys.readouterr().out.splitlines()[-1] == hint
+
+
+def test_a_permanent_deletion_that_is_no_youtube_download_cannot_be_undone(lib, monkeypatch, capsys):
+    music, m = lib
+    (music / AHA).parent.mkdir(parents=True)
+    (music / AHA).write_bytes(b"fLaC")
+    delete(files=[AHA], permanent=True)
+    assert capsys.readouterr().out.splitlines()[-1].endswith("· Ctrl-y cannot restore it (not a YouTube download)")
+    musicdb.undo(argparse.Namespace(id=None, next=True))
+    assert json.loads(capsys.readouterr().out) == {"version": 1, "kind": None}
     with pytest.raises(SystemExit, match="Nothing to undo"):
         musicdb.undo(argparse.Namespace(id=None))

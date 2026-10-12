@@ -213,6 +213,61 @@ def test_a_trashed_song_with_a_failed_history_step_comes_back_from_the_trash(gon
     assert state["sent"] == [] and state["yt"] == []
 
 
+def next_undo(capsys):
+    capsys.readouterr()
+    musicdb.undo(argparse.Namespace(id=None, next=True))
+    return json.loads(capsys.readouterr().out)
+
+
+def test_ctrl_y_restores_a_permanent_deletion_with_its_history(gone, capsys):
+    """Ctrl-y (`musicdb undo`) takes back the newest deletion of any kind: a permanent one through `restore --yes`."""
+    music, m, state, rid = gone
+    nxt = next_undo(capsys)
+    assert (nxt["kind"], nxt["id"], nxt["download"], nxt["mode"], nxt["history"]) == (
+        "restore", rid, True, "permanent", "delete")
+    assert not (music / RICK).exists()  # --next changes nothing
+    musicdb.undo(argparse.Namespace(id=None))
+    assert (music / RICK).read_bytes() == b"ID3 downloaded again"
+    assert capsys.readouterr().out.splitlines()[-1].startswith("Restored: Rick Astley - Never Gonna Give You Up")
+    assert state["yt"] == [("add", YT, "--playlist", "PL1")] and not deleted.Blocks().video(YT)
+    assert next_undo(capsys) == {"version": musicdb.UNDO_VERSION, "kind": None}  # a started restore is not offered
+    with pytest.raises(SystemExit, match="Nothing to undo"):
+        musicdb.undo(argparse.Namespace(id=None))
+
+
+def test_ctrl_y_takes_the_newest_deletion_first_whatever_its_kind(gone, capsys, tmp_path):
+    music, m, state, rid = gone
+    trashed = tmp_path / "home" / ".Trash" / "aha"
+    trashed.parent.mkdir(parents=True)
+    trashed.write_bytes(b"fLaC")
+    old = musicdb.jsonl(musicdb.DONE)[0]
+    newer = {"id": "t2", "file": "cd/02 Take On Me.flac", "mode": "trash", "trashed_to": str(trashed),
+             "history": "keep", "queued_at": "2999-01-01T00:00:00", "stickers": {}, "events": []}
+    lost = newer | {"id": "p3", "mode": "permanent", "trashed_to": None, "ytid": None,
+                    "queued_at": "2999-01-02T00:00:00"}  # newest, but nothing to bring it back from: skipped
+    musicdb.write_jsonl(musicdb.PENDING, [newer])
+    musicdb.write_jsonl(musicdb.DONE, [old, lost])
+    assert (next_undo(capsys)["kind"], next_undo(capsys)["id"]) == ("trash", "t2")
+    musicdb.undo(argparse.Namespace(id=None))
+    assert (music / "cd/02 Take On Me.flac").read_bytes() == b"fLaC" and not (music / RICK).exists()
+    assert (next_undo(capsys)["kind"], next_undo(capsys)["id"]) == ("restore", rid)
+
+
+def test_ctrl_y_restores_a_trashed_song_with_its_history_from_the_trash(gone, capsys, tmp_path):
+    music, m, state, rid = gone
+    trashed = tmp_path / "home" / ".Trash" / "rick.mp3"
+    trashed.parent.mkdir(parents=True)
+    trashed.write_bytes(b"ID3 from the trash")
+    rec = musicdb.jsonl(musicdb.DONE)[0] | {"id": "t1", "mode": "trash", "trashed_to": str(trashed)}
+    musicdb.write_jsonl(musicdb.DONE, [])
+    musicdb.write_jsonl(musicdb.PENDING, [rec])
+    nxt = next_undo(capsys)
+    assert (nxt["kind"], nxt["download"], nxt["history"]) == ("restore", False, "delete")
+    musicdb.undo(argparse.Namespace(id=None))
+    assert (music / RICK).read_bytes() == b"ID3 from the trash"
+    assert sorted(musicdb.db().execute("SELECT source FROM events").fetchall()) == [("local",)]  # lb waits for LB
+
+
 class FakeYouTube:
     def __init__(self, items):
         self.items, self.inserted = items, []

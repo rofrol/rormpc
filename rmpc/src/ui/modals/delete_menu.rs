@@ -2,6 +2,9 @@
 //! goes to the Trash or is removed for good, and the song's history stays or is deleted (its ListenBrainz
 //! listens, irreversibly, plus the video in my YouTube playlists). `musicdb delete --preview` fills in what a
 //! deletion would touch in a background thread; `musicdb delete` does the work, also in the background.
+//! Ctrl-y (`musicdb undo`) takes back the newest deletion of any kind: `musicdb undo --next` names it, then a
+//! trashed song comes back from the Trash (`musicdb undo --id`) and any other one through `musicdb restore ID
+//! --yes`, as the Deleted pane's Restore (downloaded again when it is not in the Trash).
 
 use std::{
     process::Command,
@@ -96,6 +99,65 @@ fn parse_preview(out: &str) -> Result<Vec<Preview>, String> {
             *crate::shared::dependencies::RORMPC_TOOLS_TAG
         )),
     }
+}
+
+/// `musicdb undo --next`'s JSON (rormpc-tools `musicdb.UNDO_VERSION`): the deletion Ctrl-y takes back.
+const UNDO_VERSION: u32 = 1;
+
+#[derive(Debug, Deserialize)]
+struct NextUndo {
+    version: u32,
+    /// "trash" (from the Trash, history kept), "restore" (`musicdb restore`), none: nothing to undo
+    kind: Option<String>,
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    song: String,
+    /// the restore downloads the song again (it is not in the Trash)
+    #[serde(default)]
+    download: bool,
+}
+
+/// What Ctrl-y runs for `musicdb undo --next`'s answer: the musicdb arguments and the status bar line while they
+/// run; None when there is nothing to undo.
+fn undo_step(out: &str) -> Result<Option<(Vec<String>, String)>, String> {
+    let next: NextUndo = serde_json::from_str(out).map_err(|e| format!("musicdb undo --next: {e}"))?;
+    if next.version != UNDO_VERSION {
+        return Err(format!(
+            "musicdb undo --next speaks version {}, this rormpc reads {UNDO_VERSION}: install the matching tools \
+             with scripts/rormpc_install.sh",
+            next.version
+        ));
+    }
+    let (id, song) = (next.id, next.song);
+    Ok(match next.kind.as_deref() {
+        None => None,
+        Some("trash") => Some((vec!["undo".into(), "--id".into(), id], format!("Restoring {song} from the Trash…"))),
+        Some(_) if next.download => Some((
+            vec!["restore".into(), id, "--yes".into()],
+            format!("Restoring {song}: downloading it again, then its history…"),
+        )),
+        Some(_) => Some((vec!["restore".into(), id, "--yes".into()], format!("Restoring {song} with its history…"))),
+    })
+}
+
+/// Ctrl-y in the background: the newest deletion of any kind comes back; its progress and musicdb's last line go
+/// to the status bar.
+pub fn undo() {
+    std::thread::spawn(|| {
+        let step = run(&["undo".to_owned(), "--next".to_owned()]).and_then(|out| undo_step(&out));
+        let (args, progress) = match step {
+            Ok(Some(step)) => step,
+            Ok(None) => return status_info!("Nothing to undo"),
+            Err(err) => return status_error!("{err}"),
+        };
+        status_info!("{progress}");
+        match run(&args) {
+            Ok(out) => status_info!("{}", out.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("Restored")),
+            Err(err) if args[0] == "restore" => status_error!("musicdb restore: {err} (gd shows each step)"),
+            Err(err) => status_error!("musicdb undo: {err}"),
+        }
+    });
 }
 
 #[derive(Debug, Default)]
@@ -298,7 +360,7 @@ impl DeleteMenu {
             };
             message.push(format!("{}?\n\n{names}", self.label(choice, Some(&songs)).trim_end_matches('…')));
             message.push(format!(
-                "\nListenBrainz: {} listens are deleted for good (this cannot be undone).",
+                "\nListenBrainz: {} listens are deleted (Ctrl-y submits them again, with their original time).",
                 listens(&songs)
             ));
             let kept: Vec<_> = songs.iter().filter(|s| !s.shared.is_empty()).collect();
@@ -316,9 +378,9 @@ impl DeleteMenu {
             message.push(format!("Delete permanently?\n\n{names}"));
         }
         message.push(if choice.permanent() {
-            "\nThe file is removed, not moved to the Trash: this cannot be undone.".to_owned()
+            "\nThe file is removed, not moved to the Trash: Ctrl-y downloads a YouTube download again.".to_owned()
         } else {
-            "\nCtrl-y restores the file, not the deleted history.".to_owned()
+            "\nCtrl-y restores it from the Trash, with its history.".to_owned()
         });
         message.push("\nh/l select · Enter activates the selected button · Esc cancels".to_owned());
         let button = match choice {
@@ -422,7 +484,7 @@ impl Modal for DeleteMenu {
         frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), info);
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                "j/k move · Enter choose · Esc close · Ctrl-y restores the last trashed file",
+                "j/k move · Enter choose · Esc close · Ctrl-y undoes the last deletion",
                 dim,
             ))),
             footer,
@@ -460,7 +522,7 @@ impl Modal for DeleteMenu {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_preview;
+    use super::{parse_preview, undo_step};
 
     // the shape rormpc-tools' tests/test_rormpc_contract.py checks on its side
     const SONG: &str = r#"{"file": "yt/001--Rick_Astley--dQw4w9WgXcQ--20091025.mp3", "artist": "Rick Astley",
@@ -502,5 +564,35 @@ mod tests {
         let err = parse_preview(&format!(r#"{{"version": 2, "songs": [{SONG}]}}"#)).unwrap_err();
         assert!(err.contains("version 2") && err.contains("rormpc_install.sh"), "{err}");
         assert!(parse_preview("usage: musicdb [-h]").is_err());
+    }
+
+    // `musicdb undo --next`, the shapes rormpc-tools' tests/test_rormpc_contract.py checks on its side
+    const NEXT: &str = r#"{"version": 1, "kind": "restore", "id": "20261012-120000-a.mp3", "file": "yt/a.mp3",
+        "song": "Rick Astley - Never Gonna Give You Up", "mode": "permanent", "history": "delete", "download": true}"#;
+
+    #[test]
+    fn ctrl_y_restores_a_permanent_deletion_and_says_it_downloads_again() {
+        let (args, progress) = undo_step(NEXT).unwrap().unwrap();
+        assert_eq!(args, ["restore", "20261012-120000-a.mp3", "--yes"]);
+        assert_eq!(progress, "Restoring Rick Astley - Never Gonna Give You Up: downloading it again, then its history…");
+        let (args, progress) = undo_step(&NEXT.replace(r#""download": true"#, r#""download": false"#)).unwrap().unwrap();
+        assert_eq!(args, ["restore", "20261012-120000-a.mp3", "--yes"]);
+        assert!(progress.ends_with("with its history…"), "{progress}");
+    }
+
+    #[test]
+    fn ctrl_y_takes_a_trashed_song_back_from_the_trash() {
+        let next = NEXT.replace(r#""kind": "restore""#, r#""kind": "trash""#);
+        let (args, progress) = undo_step(&next).unwrap().unwrap();
+        assert_eq!(args, ["undo", "--id", "20261012-120000-a.mp3"]);
+        assert_eq!(progress, "Restoring Rick Astley - Never Gonna Give You Up from the Trash…");
+    }
+
+    #[test]
+    fn ctrl_y_with_nothing_to_undo_another_version_or_garbage() {
+        assert_eq!(undo_step(r#"{"version": 1, "kind": null}"#).unwrap(), None);
+        let err = undo_step(&NEXT.replace(r#""version": 1"#, r#""version": 2"#)).unwrap_err();
+        assert!(err.contains("version 2") && err.contains("rormpc_install.sh"), "{err}");
+        assert!(undo_step("usage: musicdb [-h]").is_err());
     }
 }

@@ -28,7 +28,7 @@ use crate::{
     },
     ui::modals::{
         confirm_modal::{Action, ConfirmModal},
-        delete_menu::DeleteMenu,
+        delete_menu::{self, DeleteMenu},
     },
 };
 
@@ -111,6 +111,17 @@ pub fn delete_menu_instead(ctx: &Ctx, command: &[String], env: &[(String, String
         open_delete_menu(ctx, files);
     }
     true
+}
+
+/// Ctrl-y is bound to `musicdb undo`: instead of running it blind, take back the newest deletion of any kind in the
+/// background, a permanent one downloaded again, with its progress and result in the status bar. False for any
+/// other command, which runs as usual.
+pub fn undo_instead(command: &[String]) -> bool {
+    let is_undo = matches!(command, [cmd, arg] if cmd.ends_with("musicdb") && arg == "undo");
+    if is_undo {
+        delete_menu::undo();
+    }
+    is_undo
 }
 
 /// Queue a library file from Hits. A file already in the queue is not appended again (unless `copy`):

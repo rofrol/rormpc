@@ -216,7 +216,8 @@ history is kept, the ListenBrainz user (default: the token's owner) and when you
   the padding.
 - `mbtag.http()` returns `None` on 404 and, by default, when retries run out; with `strict=True` it raises instead.
   `musicdb import-lb` uses `strict=True` so a failed page is never read as "end of history" (a silent partial import).
-- Deleting is two-phase in effect: `musicdb delete` trashes and journals (`musicdb undo` restores); remote history
+- Deleting is two-phase in effect: `musicdb delete` trashes and journals (`musicdb undo` takes back the newest
+  deletion of any kind: from the Trash, else through `musicdb restore`; `--next` names it as JSON); remote history
   (ListenBrainz listens, YouTube playlist entries) goes only with `--listenbrainz`, and failed remote steps are
   retried by `musicdb update`. Deleted events become tombstones that re-imports skip. Listens of a recording that
   another library file still has are not deleted.

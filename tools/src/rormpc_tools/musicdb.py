@@ -1002,10 +1002,11 @@ PREVIEW_VERSION = 1  # of `delete --preview`'s JSON, read by rormpc's delete men
 def delete(a):
     """Ctrl-x in rmpc (rormpc's delete menu). Songs come from the arguments, else rmpc's $SELECTED_SONGS, else
     $FILE (the playing song). Default: move to the Trash and keep the history (Ctrl-y undoes). --permanent
-    removes the file instead (no undo). --listenbrainz also deletes the song's history: its ListenBrainz listens
-    (irreversible, unless another library file has the same recording), the video in your chosen YouTube playlists
-    and the local plays (kept as tombstones that re-imports skip). Each song is journaled in pending.jsonl before
-    anything is touched; a failed remote step stays there and `musicdb update` retries it.
+    removes the file instead (Ctrl-y downloads a YouTube download again: `undo`, `restore`). --listenbrainz also
+    deletes the song's history: its ListenBrainz listens (unless another library file has the same recording;
+    `restore` submits them again), the video in your chosen YouTube playlists and the local plays (kept as
+    tombstones that re-imports skip). Each song is journaled in pending.jsonl before anything is touched; a failed
+    remote step stays there and `musicdb update` retries it.
     --preview prints what a deletion would touch as JSON and changes nothing; --youtube adds the live YouTube lookup."""
     files = selected_files(a)
     if not files:
@@ -1065,11 +1066,22 @@ def delete(a):
     if a.listenbrainz:
         export(argparse.Namespace())
     # the last line is what rormpc shows in its status bar (stdout on success, stderr on failure)
-    summary = f"{'Deleted' if a.permanent else 'Trashed'}: {', '.join(names)}"
+    summary = f"{'Deleted permanently' if a.permanent else 'Trashed'}: {', '.join(names)}"
     if errors:
         notify(summary[:120], f"FAILED, retried hourly: {'; '.join(errors)[:150]}")
-        sys.exit(f"{summary}; failed, retried hourly: {'; '.join(errors)}")
-    print(summary + ("; history deleted" if a.listenbrainz else "") + ("" if a.permanent else " (Ctrl-y undoes)"))
+        sys.exit(f"{summary}; failed, retried hourly: {'; '.join(errors)} · {undo_hint(recs[-1])}")
+    print(summary + ("; history deleted" if a.listenbrainz else "") + " · " + undo_hint(recs[-1]))
+
+
+def undo_hint(r):
+    """What Ctrl-y does with this deletion, for the status bar line after it (rormpc shows the last line)."""
+    if r["mode"] == "trash" and r["history"] != "delete":
+        return "Ctrl-y undoes"
+    if r["mode"] == "trash":
+        return "Ctrl-y restores it with its history"
+    if r.get("ytid"):
+        return "Ctrl-y restores (downloads again)"
+    return "Ctrl-y cannot restore it (not a YouTube download)"
 
 
 def finish(r):
@@ -1159,24 +1171,69 @@ def notify(text, subtitle="", title="musicdb"):
         pass
 
 
+UNDO_VERSION = 1  # of `undo --next`'s JSON, read by rormpc's Ctrl-y; bump on a change of meaning
+
+
+def undo_candidates():
+    """The deletions Ctrl-y can take back, newest last: [(record, kind)]. kind "trash": in the Trash with its history
+    kept, `undo` moves it back; "restore": permanent, with its history deleted, or gone from the Trash, `musicdb
+    restore` brings it back (from the Trash, else downloaded again). A deletion a restore was started for is left to
+    the Deleted pane (its retry or why it failed is there), and one that cannot come back at all (not in the Trash and
+    not a YouTube download) is skipped, so Ctrl-y always goes further back."""
+    from . import restore
+    started = restore.records()
+    out = []
+    for r in jsonl(PENDING) + jsonl(DONE):
+        if r["id"] in started or r.get("restored_at"):
+            continue
+        in_trash = bool(r.get("trashed_to") and pathlib.Path(r["trashed_to"]).exists())
+        if r.get("mode", "trash") == "trash" and r.get("history", "keep") != "delete" and in_trash:
+            out.append((r, "trash"))
+        elif in_trash or r.get("ytid"):
+            out.append((r, "restore"))
+    return sorted(out, key=lambda x: (x[0]["queued_at"], x[0]["id"]))
+
+
 def undo(a):
-    """Restore the most recently trashed song (repeat to go further back), or the one with --id, with its
-    stickers. Deleted listens and playlist entries stay deleted. Its journal record goes, and with it the block that
-    kept downloaders from fetching the song again (deleted.py)."""
+    """Take back the newest deletion of any kind (repeat to go further back). A trashed song with its history kept
+    comes back from the Trash with its stickers; a permanent deletion or one with the history goes through `musicdb
+    restore ID --yes` (downloaded again when not in the Trash, its history and playlist entries back). --id restores
+    that trashed song only (the Trash step alone: deleted listens and playlist entries stay deleted). --next prints
+    what Ctrl-y would take back as JSON and changes nothing. The journal record goes, and with it the block that kept
+    downloaders from fetching the song again (deleted.py)."""
+    if getattr(a, "next", False):
+        from . import restore
+        cands = undo_candidates()
+        if not cands:
+            print(json.dumps({"version": UNDO_VERSION, "kind": None}))
+            return
+        r, kind = cands[-1]
+        in_trash = bool(r.get("trashed_to") and pathlib.Path(r["trashed_to"]).exists())
+        print(json.dumps({"version": UNDO_VERSION, "kind": kind, "id": r["id"], "file": r["file"],
+                          "song": restore.describe(r), "mode": r.get("mode", "trash"),
+                          "history": r.get("history", "keep"), "download": kind == "restore" and not in_trash},
+                         ensure_ascii=False))
+        return
+    if not getattr(a, "id", None):
+        cands = undo_candidates()
+        if not cands:
+            sys.exit("Nothing to undo")
+        r, kind = cands[-1]
+        if kind == "restore":
+            from . import restore
+            return restore.main([r["id"], "--yes"])
+        a = argparse.Namespace(id=r["id"])
     with journal_lock():
         pending = jsonl(PENDING)
         trashed = [r for r in pending if r.get("mode", "trash") == "trash" and r.get("trashed_to")
-                   and pathlib.Path(r["trashed_to"]).exists()]
-        if getattr(a, "id", None):
-            trashed = [r for r in trashed if r["id"] == a.id]
-            if not trashed:
-                sys.exit(f"Not in the Trash any more: {a.id}")
+                   and pathlib.Path(r["trashed_to"]).exists() and r["id"] == a.id]
         if not trashed:
-            sys.exit("Nothing to undo")
-        r = max(trashed, key=lambda r: r["queued_at"])
+            sys.exit(f"Not in the Trash any more: {a.id}")
+        r = trashed[0]
         dst = MUSIC / r["file"]
         if dst.exists():
             sys.exit(f"Not restored: {r['file']} exists again")
+        dst.parent.mkdir(parents=True, exist_ok=True)  # its directory may have gone with it
         pathlib.Path(r["trashed_to"]).rename(dst)
         write_jsonl(PENDING, [x for x in pending if x is not r])
     subprocess.run(["mpc", "-q", "update", "--wait"])
@@ -1400,6 +1457,7 @@ def main():
     p.add_argument("--youtube", action="store_true", help="with --preview: look the video up in your YouTube playlists")
     p.set_defaults(fn=delete)
     p = sp.add_parser("undo"); p.add_argument("--id", help="a journal id (musicdb deletions --json)")
+    p.add_argument("--next", action="store_true", help="print what it would take back (JSON), change nothing")
     p.set_defaults(fn=undo)
     for verb in ("keep", "unkeep"):
         p = sp.add_parser(verb, help="(un)mark songs as not deletion candidates (Not finished)")

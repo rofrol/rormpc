@@ -787,8 +787,11 @@ impl<'ui> Ui<'ui> {
                         );
                     } else {
                         let env = create_env(ctx, std::iter::empty::<&str>());
-                        // rormpc: Ctrl-x (`musicdb delete`) opens the delete menu for the playing song
-                        if !crate::ui::rormpc_actions::delete_menu_instead(ctx, command, &env) {
+                        // rormpc: Ctrl-x (`musicdb delete`) opens the delete menu for the playing song,
+                        // Ctrl-y (`musicdb undo`) takes back any deletion with its progress in the status bar
+                        if !crate::ui::rormpc_actions::delete_menu_instead(ctx, command, &env)
+                            && !crate::ui::rormpc_actions::undo_instead(command)
+                        {
                             run_external(command.clone(), Vec::new(), env);
                         }
                     }

@@ -709,9 +709,11 @@ fn main_task<B: Backend + std::io::Write>(
                         ) => {
                             let songs = songs.iter().map(|s| s.file.as_str());
                             let env = create_env(&ctx, songs);
-                            // rormpc: Ctrl-x (`musicdb delete`) opens the delete menu instead
+                            // rormpc: Ctrl-x (`musicdb delete`) opens the delete menu instead, Ctrl-y (`musicdb
+                            // undo`) takes back any deletion with its progress in the status bar
                             if !(args.is_empty()
-                                && crate::ui::rormpc_actions::delete_menu_instead(&ctx, &command, &env))
+                                && (crate::ui::rormpc_actions::delete_menu_instead(&ctx, &command, &env)
+                                    || crate::ui::rormpc_actions::undo_instead(&command)))
                             {
                                 run_external(command, args, env);
                             }
