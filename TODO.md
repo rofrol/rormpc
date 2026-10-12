@@ -974,6 +974,20 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 
 - [ ] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
       repo? ask the models?"): consult the models and record the outcome; a move needs the user's decision.
+      Rounds 20261012-021857-908d (sol 4090d8c9, MiMo 1fa8a9a7, DeepSeek 4244b40f, all useful): move rormpc-tools into
+      rormpc as tools/ with its history, install the tools from the same ref as rormpc (`./tools` or
+      `git+…/rormpc@REF#subdirectory=tools`), Python CI in its own workflow on tools/**, archive (never delete) the old
+      repository so old tags keep installing; ro-listenbrainz-mpd stays separate. Round 20261012-022654-56fc (sol
+      50e2995f, MiMo 0de7d6cf, DeepSeek f9ed61b7, all useful): all three advise a linear append, not an interleave.
+      Decided by the user 2026-10-12: move it (d-kgxuqbvh), interleaving both histories by author date with every
+      rewritten commit's committer date = its author date (d-rjg7tv5p, against the three models).
+      Plan (from the round): freeze both coordinators and pushes; in disposable clones, filter rormpc-tools to tools/,
+      replay rormpc's 434 fork commits and the 191 tools commits on top of upstream's f677f67 sorted by author date,
+      stopping if a repository's own order inverts by date, GIT_COMMITTER_DATE = author date, writing an old→new map;
+      upstream's commits untouched; verify (upstream objects, 625 commits, final tree = old rormpc tree + tools/,
+      cargo and pytest, a dry `git merge upstream/master`); retag tools-v0.2.x on the mapped commits; rewrite TODO.md
+      and docs' SHAs from the map (commit messages stay); bundle backups; push with --force-with-lease; the old
+      repository archived; installer and AGENTS.md moved to one repository and one coordinator.
 
 - [ ] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
       `musicdb restore ID --yes` (download again, history, stickers, YouTube playlist), and the status bar after any
