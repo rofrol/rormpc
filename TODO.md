@@ -1027,13 +1027,19 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       pushed and the repository archived. SHAs cited in this file were rewritten to the new history from the old→new map
       (2026-10-12, then the map was removed from the repository). Backups: git bundles in the coordinator's scratchpad (temporary).
 
-- [ ] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
+- [x] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
       `musicdb restore ID --yes` (download again, history, stickers, YouTube playlist), and the status bar after any
       deletion says "Ctrl-y undoes" (asked 2026-10-12: "and where is the undo of this deletion from disk and
       ListenBrainz?" after Mary J. Blige - Be Without You was deleted permanently with its history; the coordinator
       restored it with `musicdb restore`; today Ctrl-y only takes a song back from the Trash, the Deleted panel `gd`
       restores any deletion). Cost: a small rormpc change.
       Decided by the user 2026-10-12: approved (d-usvfh2ct).
+      Done 2026-10-12 (e81d782, installed and pushed by the run) through herdr todo run r-m5abzkzg (2 attempts; reviewed by the coordinator): Ctrl-y undoes
+      the newest deletion of any kind: the Trash through `musicdb undo --id`, a permanent one or one with the
+      history through `musicdb restore --yes` in the background with its progress in the status bar (it downloads
+      again); `musicdb undo --next` tells rormpc what comes next; every deletion's status line says what Ctrl-y
+      does. A failed restore is retried from gd (the next Ctrl-y takes the older deletion). Also removed
+      tools/tests/test_release_script.py, left behind when scripts/release.sh went.
 
 - [ ] Transcribed lyrics (from tools/TODO.md after the move into rormpc, 2026-10-12). Plan: docs/transcribe-lyrics-plan.md, b2b2d5e. [t-jsjs5ngd]
       All seven choices were decided by the user 2026-10-11:
