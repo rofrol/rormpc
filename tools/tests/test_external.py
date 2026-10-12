@@ -24,7 +24,7 @@ def test_missing_ffmpeg_in_a_worker_thread(no_programs, tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         external.cli(lambda: dedupe.hashes(["a.mp3"]))()
     assert e.value.code == ("musicdb: ffmpeg not found on PATH; audio hashes, covers and mp3 conversion need it. "
-                            "Install: https://github.com/rofrol/rormpc-tools#dependencies")
+                            "Install: https://github.com/rofrol/rormpc/tree/master/tools#dependencies")
 
 
 @pytest.mark.parametrize("program", ["yt-dlp", "fpcalc", "mpc", "git"])

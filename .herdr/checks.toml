@@ -8,6 +8,8 @@
 
 [checks]
 tests = ["cargo", "test", "-p", "rmpc"]
+# rormpc-tools (tools/): its offline tests
+tools = ["uv", "run", "--directory", "tools", "pytest", "-q"]
 
 [install]
 # After the cherry-pick, herdr installs master with this argv in the shared

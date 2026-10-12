@@ -10,20 +10,24 @@ next to it. Install with `scripts/rormpc_install.sh install` (keeps the previous
 ## Companion tools
 
 rormpc alone needs only MPD. The Hits pane, the play-count and skip columns and the delete menu run
-[rormpc-tools](https://github.com/rofrol/rormpc-tools) (`hits`, `musicdb`), and some services work with rormpc closed:
+rormpc-tools ([tools/](tools/README.md): `hits`, `musicdb`), and some services work with rormpc closed:
 
     scripts/rormpc_install.sh companions [--gap SECONDS]   # install / update / restart all of it (needs uv, cargo)
     scripts/rormpc_install.sh status                       # what is installed and running
 
-`install` keeps them at the pinned tags too: after installing rormpc it compares the tags the last successful
-`companions` recorded (`$XDG_STATE_HOME/rormpc/companions`, default `~/.local/state`) with the pins
-(`RORMPC_TOOLS_TAG`, `RO_LB_TAG`), prints both (`companions: v0.2.53 -> v0.2.54` or `companions: v0.2.54, at the
-pin`), and on a difference, or with nothing recorded, runs the `companions` step; at the pin it touches nothing. A
-failed step makes `install` exit non-zero (rormpc itself is installed by then) and leaves the old record, so the next
-`install` runs it again. `companions --local` records the checkouts, so the next `install` puts the pinned tags back.
-`scripts/test_rormpc_install.sh` tests this with a fake HOME and stubbed cargo, uv, launchctl and systemctl.
+rormpc-tools comes from the same source as rormpc: this checkout's `tools/` (`uv tool install`, not editable), or,
+with `$RORMPC_REF` set or the script run without a checkout, `tools/` of rormpc at that ref (default master) from
+GitHub. `install` keeps the companions in step too: after installing rormpc it compares what the last successful
+`companions` recorded (`$XDG_STATE_HOME/rormpc/companions`, default `~/.local/state`) with what it would install now
+(`tools@<the last commit that changed tools/>`, with `+dirty.<hash>` while tools/ has uncommitted changes, and the
+scrobbler's pin `RO_LB_TAG`), prints both (`companions: tools@1a2b3c4d5e6f -> tools@6f5e4d3c2b1a` or
+`companions: tools@6f5e4d3c2b1a, up to date`), and on a difference, or with nothing recorded, runs the `companions`
+step; otherwise it touches nothing, so a commit outside tools/ does not reinstall them. A failed step makes `install`
+exit non-zero (rormpc itself is installed by then) and leaves the old record, so the next `install` runs it again.
+`companions --local` records the checkouts, so the next `install` puts the non-editable install and the pinned tag
+back. `scripts/test_rormpc_install.sh` tests this with a fake HOME and stubbed cargo, uv, launchctl and systemctl.
 
-- rormpc-tools at a pinned tag (`uv tool install`), and `musicdb update` every hour: play counts, skips and likes
+- rormpc-tools from `tools/` (`uv tool install`), and `musicdb update` every hour: play counts, skips and likes
   into MPD stickers. Settings (music directory, where the history goes, ListenBrainz user) in
   `~/.config/rormpc-tools/config.toml`, see its README.
 - [ro-listenbrainz-mpd](https://github.com/rofrol/ro-listenbrainz-mpd), my fork of the listenbrainz-mpd scrobbler,
@@ -45,7 +49,7 @@ failed step makes `install` exit non-zero (rormpc itself is installed by then) a
 
 The companions need ffmpeg (`musicdb update` hashes the audio with it): `companions` stops without it. On Linux,
 building the scrobbler needs a C toolchain, `pkg-config`, OpenSSL and SQLite headers. The packages for Homebrew,
-Debian/Ubuntu, Arch and Guix are in rormpc-tools' [dependency table](https://github.com/rofrol/rormpc-tools#dependencies);
+Debian/Ubuntu, Arch and Guix are in rormpc-tools' [dependency table](tools/README.md#dependencies);
 Windows is not supported. The services are launchd agents or systemd user units only: on Linux `companions` stops
 before installing anything without a systemd user session (Guix System's Shepherd is not supported); log in
 normally, or on a machine nobody logs into run `sudo loginctl enable-linger $USER` once.
@@ -57,13 +61,13 @@ are overwritten. The Omarchy Radio check runs daily (macOS at 10:00, a missed ru
 The hourly `musicdb update` runs at background priority (launchd `ProcessType Background` + `LowPriorityIO`;
 systemd `Nice=10`, `IOSchedulingClass=idle`): about a second of CPU per run. The always-on services stay at
 standard priority, since background priority lets macOS stretch timers (mpd-player's silence).
-`companions --local` installs both from checkouts instead (`$RORMPC_TOOLS_DIR`, `$RO_LB_DIR`), rormpc-tools editable.
-Without rormpc-tools those features say the command was not found and print the `uv tool install` command for
-the expected tag (`RORMPC_TOOLS_TAG` in `scripts/rormpc_install.sh`, which rormpc reads at build time); the rest
-works. `rormpc debuginfo` lists `musicdb` and `hits` with their `--version` and the expected tag. JSON that rormpc
+`companions --local` installs `tools/` editable and the scrobbler from its checkout (`$RO_LB_DIR`).
+Without rormpc-tools those features say the command was not found and print a `uv tool install` command for
+the archived repository's last release (`RORMPC_TOOLS_TAG` in `scripts/rormpc_install.sh`, which rormpc reads at
+build time); `rormpc_install.sh companions` installs the matching `tools/` instead. The rest works. `rormpc debuginfo` lists `musicdb` and `hits` with their `--version` and the expected tag. JSON that rormpc
 reads carries a version it checks: `hits --json` files and `musicdb delete --preview` (`{"version": 1, "songs":
-[...]}`; the older bare list is still read). Change such a format in both repositories together, with the tests on
-both sides (rormpc-tools `tests/test_rormpc_contract.py`, rormpc `delete_menu.rs`).
+[...]}`; the older bare list is still read). Change such a format on both sides in one commit, with the tests on
+both sides (`tools/tests/test_rormpc_contract.py`, rormpc `delete_menu.rs`).
 
 ## Media keys
 
@@ -308,7 +312,7 @@ data repo as the event log `<data_dir>/smartlists.jsonl` (semantic rules, not `h
 
 ## Hits pane
 
-Ranked chart hits produced by the `hits` CLI ([rormpc-tools](https://github.com/rofrol/rormpc-tools)), e.g.
+Ranked chart hits produced by the `hits` CLI ([rormpc-tools](tools/README.md)), e.g.
 
     hits --years 1985-1992 --top 11-20 -g "+rock +pop -country" --json ~/.cache/rormpc/hits/current.json
 

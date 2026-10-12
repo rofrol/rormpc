@@ -5,23 +5,26 @@ set -euo pipefail
 usage="usage: rormpc_install.sh install|rollback|list|build-id|companions [--local] [--gap SECONDS]|status
 
   install     build the release binary, back up the installed one, install the new one; then keep the
-              companions at the pinned tags: when the tags the last successful companions step recorded differ
-              from the pins (or none is recorded), run the companions step; otherwise leave them alone
+              companions in step: when what the last successful companions step recorded (the commit of this
+              checkout's tools/, the scrobbler's tag) differs from what it would install now (or nothing is
+              recorded), run the companions step; otherwise leave them alone
   rollback    put back the most recent backup (the current binary becomes a backup too)
   list        show the installed build and the backups, newest first
   build-id    print the installed build's commit first, then its version line (herdr todo run's [install]
               build_id); fails when nothing is installed or the version names no commit. The version does not
               show uncommitted changes, so a dirty build of a commit looks like a clean one
   companions  what rormpc's Hits pane, play counts and delete menu run, and services that work with it closed
-              (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install at a pinned tag), musicdb
+              (see RORMPC.md): rormpc-tools (hits, musicdb, mpd-player; uv tool install of this checkout's tools/,
+              or of tools/ at \$RORMPC_REF from GitHub when it is set or the script runs without a checkout), musicdb
               update hourly, the ro-listenbrainz-mpd scrobbler (cargo install at a pinned tag) and mpd-player, the
               playback daemon (silence between songs: --gap is the default until rormpc chooses one, 0 = none;
               Up next; prints its command socket and a Karabiner rule for media keys; MPD in Now Playing on macOS
-              through mpd-player nowplaying, which retires mpd-now-playable, and MPRIS on Linux), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: both from checkouts in
-              \$RORMPC_TOOLS_DIR and \$RO_LB_DIR (rormpc-tools editable). \$RORMPC_TOOLS_REF and \$RO_LB_REF
-              (a tag or commit) replace the pinned tags, for CI to test a companion's commit. Needs uv and cargo.
+              through mpd-player nowplaying, which retires mpd-now-playable, and MPRIS on Linux), and a daily check of Omarchy Radio (new songs wait for review, a notification). --local: tools/ editable and
+              the scrobbler from its checkout in \$RO_LB_DIR. \$RORMPC_REF (a rormpc tag or commit) and \$RO_LB_REF
+              (a tag or commit) replace the checkout and the pinned tag, for CI to test a commit. Needs uv and cargo.
               Writes launchd agents (macOS) or systemd user units (Linux) and (re)starts them.
-  status      what of the above is installed and running (with the companions' recorded tags and the pins), and
+  status      what of the above is installed and running (with the companions' recorded sources and the wanted
+              ones), and
               the tools rormpc's features run
 
 Installed binary: \$RORMPC_INSTALLED (default ~/.cargo/bin/rormpc).
@@ -49,24 +52,45 @@ backup_current() {
 RO_LB_REPO=https://github.com/rofrol/ro-listenbrainz-mpd
 RO_LB_TAG=v2.6.0-ro.6
 RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
-RORMPC_TOOLS_REPO=https://github.com/rofrol/rormpc-tools
+# rormpc-tools lives in tools/ and installs from the same source as rormpc (tools_source)
+RORMPC_REPO=https://github.com/rofrol/rormpc
+deps_url=$RORMPC_REPO/tree/master/tools#dependencies  # one table: program, what needs it, package per manager
+# not used here: the last release of the archived rofrol/rormpc-tools, which rormpc's missing-tool hints and
+# `debuginfo` read at build time (rmpc/src/shared/dependencies.rs)
 RORMPC_TOOLS_TAG=v0.2.54
-deps_url=$RORMPC_TOOLS_REPO#dependencies  # one table: program, what needs it, package per manager
-RORMPC_TOOLS_DIR="${RORMPC_TOOLS_DIR:-$HOME/personal_projects/rormpc-tools}"
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
 else
   lb_config="${XDG_CONFIG_HOME:-$HOME/.config}/listenbrainz-mpd/config.toml"
 fi
 # what the last successful `companions` installed ("name ref" per line, see companions_refs); `install` compares it
-# with the pins
+# with what it would install now
 companions_record="${XDG_STATE_HOME:-$HOME/.local/state}/rormpc/companions"
+# tools_source: where rormpc-tools comes from. "tools@COMMIT" is this checkout's tools/ (COMMIT: the last commit that
+# changed it, "+dirty.HASH" after it while tools/ has uncommitted changes, so each different state counts as new);
+# "rormpc@REF" is tools/ of rormpc at REF on GitHub: $RORMPC_REF, or master when the script runs without a checkout
+tools_source() {
+  local commit dirty
+  if [ -z "${RORMPC_REF:-}" ] && [ -f "$repo/tools/pyproject.toml" ] &&
+      commit="$(git -C "$repo" log -1 --format=%H -- tools 2>/dev/null)" && [ -n "$commit" ]; then
+    if [ -n "$(git -C "$repo" status --porcelain -- tools)" ]; then
+      dirty="$( { git -C "$repo" diff HEAD -- tools
+        git -C "$repo" ls-files -z -o --exclude-standard -- tools | (cd "$repo" && xargs -0 git hash-object --)
+      } | git hash-object --stdin)"
+      echo "tools@${commit:0:12}+dirty.${dirty:0:12}"
+    else
+      echo "tools@${commit:0:12}"
+    fi
+  else
+    echo "rormpc@${RORMPC_REF:-master}"
+  fi
+}
 # companions_refs [LOCAL]: what `companions` installs, one "name ref" line per companion
 companions_refs() {
   if [ -n "${1:-}" ]; then
-    printf 'rormpc-tools local %s\nro-listenbrainz-mpd local %s\n' "$RORMPC_TOOLS_DIR" "$RO_LB_DIR"
+    printf 'rormpc-tools local %s\nro-listenbrainz-mpd local %s\n' "$repo/tools" "$RO_LB_DIR"
   else
-    printf 'rormpc-tools %s\nro-listenbrainz-mpd %s\n' "${RORMPC_TOOLS_REF:-$RORMPC_TOOLS_TAG}" "${RO_LB_REF:-$RO_LB_TAG}"
+    printf 'rormpc-tools %s\nro-listenbrainz-mpd %s\n' "$(tools_source)" "${RO_LB_REF:-$RO_LB_TAG}"
   fi
 }
 ref_of() { sed -n "s/^$1 //p" <<<"$2"; }  # ref_of NAME REFS
@@ -312,10 +336,16 @@ companions() {
     echo "companions: ffmpeg not found on PATH; musicdb update hashes the audio with it, yt-mp3-mb converts with it. Install: $deps_url" >&2
     exit 1
   }
+  # the source is read once, before the install, so the record names what was installed
+  local tools_ref; tools_ref="$(tools_source)"
   if [ -n "$local_build" ]; then
-    uv tool install --force --editable "$RORMPC_TOOLS_DIR"
+    uv tool install --force --editable "$repo/tools"
+  elif [ "${tools_ref%%@*}" = tools ]; then
+    # not editable: the commands keep running what was installed while the checkout moves on; the version does not
+    # change with every commit, so uv is told to rebuild the package
+    uv tool install --force --reinstall-package rormpc-tools "$repo/tools"
   else
-    uv tool install --force "rormpc-tools @ git+$RORMPC_TOOLS_REPO@${RORMPC_TOOLS_REF:-$RORMPC_TOOLS_TAG}"
+    uv tool install --force "rormpc-tools @ git+$RORMPC_REPO@${tools_ref#rormpc@}#subdirectory=tools"
   fi
   # apart from uv: set -e is off inside an if that || tests, so a failed uv install went unnoticed there
   if [ -n "$local_build" ]; then
@@ -371,17 +401,21 @@ companions() {
   fi
   # recorded last, so a failed step above leaves the old record and the next `install` runs it again
   mkdir -p "$(dirname "$companions_record")"
-  companions_refs "$local_build" > "$companions_record.tmp"
+  if [ -n "$local_build" ]; then
+    companions_refs 1
+  else
+    printf 'rormpc-tools %s\nro-listenbrainz-mpd %s\n' "$tools_ref" "${RO_LB_REF:-$RO_LB_TAG}"
+  fi > "$companions_record.tmp"
   mv "$companions_record.tmp" "$companions_record"
 }
 
-# install_companions: after `install`, run the companions step when the recorded tags are not the pins
+# install_companions: after `install`, run the companions step when the record is not what it would install now
 install_companions() {
   local want have line
   want="$(companions_refs)"
   have="$(cat "$companions_record" 2>/dev/null || true)"
   if [ "$have" = "$want" ]; then
-    echo "companions: $(ref_of rormpc-tools "$want"), at the pin"
+    echo "companions: $(ref_of rormpc-tools "$want"), up to date"
     return 0
   fi
   line="companions: $(ref_of rormpc-tools "$have" | grep . || echo "none recorded") -> $(ref_of rormpc-tools "$want")"
@@ -399,7 +433,7 @@ install_companions() {
   set -e
   if [ "$rc" != 0 ]; then
     echo "install: the companions step failed (exit $rc, see above); rormpc is installed, the companions are not at" \
-      "the pin. Fix it and run install again." >&2
+      "their source. Fix it and run install again." >&2
     exit "$rc"
   fi
 }
@@ -410,7 +444,7 @@ status() {
   cargo install --list 2>/dev/null | grep -E '^(ro-listenbrainz-mpd|listenbrainz-mpd) ' || echo "ro-listenbrainz-mpd: not installed"
   local have want name; have="$(cat "$companions_record" 2>/dev/null || true)"; want="$(companions_refs)"
   for name in rormpc-tools ro-listenbrainz-mpd; do
-    echo "companions recorded: $name $(ref_of "$name" "$have" | grep . || echo "none"), pin $(ref_of "$name" "$want")"
+    echo "companions recorded: $name $(ref_of "$name" "$have" | grep . || echo "none"), want $(ref_of "$name" "$want")"
   done
   echo "musicdb update service: $(service_state musicdb)"
   echo "Omarchy Radio daily check: $(service_state omarchy-radio)"

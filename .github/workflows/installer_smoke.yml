@@ -1,7 +1,8 @@
 # Smoke test of `scripts/rormpc_install.sh companions` on Ubuntu, as done by hand in an Ubuntu VM on 2026-10-03:
 # a fresh user with a lingering systemd user session, an MPD playing a generated tone, a fake ListenBrainz token
-# and API URL; then the units, the config, `status` and a reinstall are checked. The companions come from their
-# pinned tags unless the tools_ref / lb_ref inputs (RORMPC_TOOLS_REF / RO_LB_REF) name a commit to test.
+# and API URL; then the units, the config, `status` and a reinstall are checked. rormpc-tools comes from tools/ of
+# the commit under test (the rormpc_ref input, RORMPC_REF, names another), the scrobbler from its pinned tag unless
+# the lb_ref input (RO_LB_REF) names a commit to test.
 #
 # First passed on GitHub on 2026-10-09 (run 37994088698).
 name: Installer smoke test
@@ -16,19 +17,21 @@ on:
       - scripts/rormpc_install.sh
       - scripts/test_rormpc_install.sh
       - .github/workflows/installer_smoke.yml
+      - tools/pyproject.toml
   pull_request:
     paths:
       - scripts/rormpc_install.sh
       - scripts/test_rormpc_install.sh
       - .github/workflows/installer_smoke.yml
+      - tools/pyproject.toml
   # weekly, to catch drift in the companions' pinned tags, uv, Rust and the runner image; GitHub disables
   # schedules after 60 days without repository activity
   schedule:
     - cron: "47 5 * * 1"
   workflow_dispatch:
     inputs:
-      tools_ref:
-        description: "rormpc-tools tag or commit (empty: the pinned tag)"
+      rormpc_ref:
+        description: "rormpc tag or commit whose tools/ to install (empty: the commit under test)"
         required: false
         default: ""
       lb_ref:
@@ -37,7 +40,7 @@ on:
         default: ""
   workflow_call:
     inputs:
-      tools_ref:
+      rormpc_ref:
         type: string
         required: false
         default: ""
@@ -54,7 +57,7 @@ defaults:
     shell: bash
 
 jobs:
-  # `install` keeps the companions at the pins: a fake HOME and stubbed cargo, uv, launchctl and systemctl
+  # `install` keeps the companions in step with tools/ and the pin: a fake HOME and stubbed cargo, uv, launchctl and systemctl
   install-stubbed:
     strategy:
       fail-fast: false
@@ -71,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      RORMPC_TOOLS_REF: ${{ inputs.tools_ref }}
+      RORMPC_REF: ${{ inputs.rormpc_ref || github.sha }}
       RO_LB_REF: ${{ inputs.lb_ref }}
       LB_CONFIG: /home/ci/.config/listenbrainz-mpd/config.toml
     steps:
@@ -102,7 +105,7 @@ jobs:
           exec sudo -u ci env -C /home/ci HOME=/home/ci USER=ci LOGNAME=ci \
             XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
             PATH="/home/ci/.local/bin:/home/ci/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
-            RORMPC_TOOLS_REF="${RORMPC_TOOLS_REF:-}" RO_LB_REF="${RO_LB_REF:-}" \
+            RORMPC_REF="${RORMPC_REF:-}" RO_LB_REF="${RO_LB_REF:-}" \
             bash -euo pipefail -c "$1"
           SH
           sudo chmod 755 /usr/local/bin/as-ci
@@ -257,7 +260,7 @@ jobs:
           grep -q '^rormpc-tools ' status.txt
           grep -q '^ro-listenbrainz-mpd ' status.txt
           # companions recorded the tags it installed
-          grep -qE '^companions recorded: rormpc-tools [^ ]+, pin ' status.txt
+          grep -qE '^companions recorded: rormpc-tools [^ ]+, want ' status.txt
           ! grep -q '^companions recorded: rormpc-tools none' status.txt
           grep -q '^timer active' status.txt
           grep -qx 'scrobbler service: active' status.txt

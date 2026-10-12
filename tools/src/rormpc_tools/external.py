@@ -7,7 +7,7 @@ stops working. Package names per package manager live only in README.md's table,
 """
 import functools, os, sys
 
-INSTALL = "https://github.com/rofrol/rormpc-tools#dependencies"
+INSTALL = "https://github.com/rofrol/rormpc/tree/master/tools#dependencies"
 
 # program: what needs it (required) or what stops working without it (optional)
 PURPOSE = {

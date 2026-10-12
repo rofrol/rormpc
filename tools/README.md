@@ -1,7 +1,8 @@
 # rormpc-tools
 
 The MPD music tools behind [rormpc](https://github.com/rofrol/rormpc)'s Hits pane, play counts and delete menu.
-They work from the shell too; each one's usage is in its `--help`.
+They work from the shell too; each one's usage is in its `--help`. They live in rormpc's `tools/` directory and are
+installed and released with it; the old repository rofrol/rormpc-tools is archived (its tags still install).
 
 | Command | What it does |
 |---|---|
@@ -99,11 +100,12 @@ from a pause plays the next song, Play/Pause/Stop never toggle.
 
 ## Install
 
-    uv tool install 'rormpc-tools @ git+https://github.com/rofrol/rormpc-tools@v0.1.6'
+    uv tool install 'rormpc-tools @ git+https://github.com/rofrol/rormpc@master#subdirectory=tools'
 
-rormpc's `scripts/rormpc_install.sh companions` installs the pinned version and runs `musicdb update` hourly
-(and the scrobbler and `mpd-player`) as launchd agents or systemd user units. For a checkout:
-`uv tool install --editable .`.
+rormpc's `scripts/rormpc_install.sh companions` installs them from the same checkout (or the same ref) as rormpc and
+runs `musicdb update` hourly (and the scrobbler and `mpd-player`) as launchd agents or systemd user units; its
+`install` reinstalls them when `tools/` changed. For development: `uv tool install --editable tools` from the rormpc
+checkout (or `rormpc_install.sh companions --local`).
 
 Needs MPD with `sticker_file` set (stickers hold the counts) and the programs under [Dependencies](#dependencies).
 When neither the video's MusicBrainz link nor AcoustID knows a song, `yt-mp3-mb`

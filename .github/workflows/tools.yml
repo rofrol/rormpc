@@ -1,0 +1,47 @@
+# rormpc-tools (tools/): the offline tests (fake MPD, temporary data dir, no network), with the contract tests of what
+# rormpc reads from the tools (tests/test_rormpc_contract.py), and pyflakes. rormpc's side of the contract (the
+# parsers in delete_menu.rs, hits.rs and rormpc_upnext.rs) runs in ci.yml's cargo test; a change there runs this too.
+name: Tools
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - tools/**
+      - rmpc/src/ui/modals/delete_menu.rs
+      - rmpc/src/ui/panes/hits.rs
+      - rmpc/src/ui/rormpc_upnext.rs
+      - .github/workflows/tools.yml
+  pull_request:
+    paths:
+      - tools/**
+      - rmpc/src/ui/modals/delete_menu.rs
+      - rmpc/src/ui/panes/hits.rs
+      - rmpc/src/ui/rormpc_upnext.rs
+      - .github/workflows/tools.yml
+  workflow_dispatch:
+  # weekly, to catch drift in uv, Python and the runner image; GitHub disables schedules after 60 days without
+  # repository activity
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: tools
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - name: Contract tests (what rormpc reads from the tools)
+        run: uv run pytest -q tests/test_rormpc_contract.py
+      - name: "Tests (offline: fake MPD, temporary data dir)"
+        run: uv run pytest -q
+      - name: Pyflakes
+        run: uvx pyflakes src

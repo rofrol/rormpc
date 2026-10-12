@@ -76,20 +76,53 @@ A file for [guiding AI coding agents](https://agents.md/).
   change as a diff, checked with a debug build of its branch on a copy of the config with `themes/` next to it; the
   coordinator applies and commits it right after installing.
 
+## tools/
+
+rormpc-tools (`hits`, `musicdb`, `mpd-player`, Python, uv) lives in `tools/`; its history was interleaved into master
+on 2026-10-12. The old repository rofrol/rormpc-tools is archived (its tags stay installable; copies here as
+`tools-v0.2.x`).
+
+- Read `tools/README.md` first: what each tool does and the invariants to keep.
+- Nothing personal in tools/ (it is public): no account names, private paths, tokens or listening data, not in
+  defaults, tests, examples or commit messages. Personal values belong in the user's
+  `~/.config/rormpc-tools/config.toml`.
+- No separate releases any more: no version tags of its own and no pin. `scripts/rormpc_install.sh` installs the
+  tools from the same source as rormpc (this checkout's `tools/`, or `tools/` at `$RORMPC_REF` from GitHub), records
+  the last commit that changed `tools/` and reinstalls them on `install` when that changed. `RORMPC_TOOLS_TAG` in the installer is only the archived repository's last release, which rormpc's missing-tool
+  hints read at build time.
+- A format rormpc reads from the tools (`hits --json`, `musicdb delete --preview`, ...) changes on both sides in one
+  commit, with the contract tests on both sides (`tools/tests/test_rormpc_contract.py`, `delete_menu.rs`, `hits.rs`).
+- Serial daemon callbacks do not freeze MPD: validate again after individual priority writes and before
+  acknowledgement. If playback changed, reconcile live state; never roll an expired snapshot back over it.
+- Tests: `uv run --directory tools pytest -q` (offline: fake MPD, temporary data dir, no network). Add a test for
+  every bug that could silently miscount or mismatch a song. Gate on the tests without a pipe in between
+  (`uv run ... pytest -q && ...`, or `set -o pipefail`): `pytest | tail` returns tail's 0 (rormpc-tools 0.2.23 was
+  tagged with a failing test on 2026-10-06).
+- Check with `uvx pyflakes src` (in `tools/`) and run the changed command against MPD; `musicdb sync` writes stickers
+  to the real MPD, so test with `MUSICDB`, `MUSICDB_DATA` and `MPD_PORT` pointing at a scratch DB, directory and MPD.
+  While developing, `scripts/rormpc_install.sh companions --local` (or `uv tool install --editable tools`) makes the
+  commands on PATH run the checkout.
+- In the agent Bash tool's shell, `sed` is BSD, not GNU; GNU-style `sed -i 's/…/…/'` is not portable. Edit with
+  Python and verify the actual change in `git diff`.
+- Stop a scratch `mpd-player` by this checkout's path (`pkill -f <worktree>/tools/.venv/bin/mpd-player`) or its pid,
+  never `pkill -f mpd-player` or `bin/mpd-player`: that also matches the user's launchd daemon (killed that way
+  on 2026-10-07; launchd restarted it).
+- Headless workers run sandboxed: `uv run`/`uvx` cannot write uv's cache, the unix-socket tests in
+  `tools/tests/test_control.py` and `tools/tests/test_nowplaying.py` fail with PermissionError, and there is no
+  network. The coordinator's verify (outside the sandbox) is the real test run; a worker lists what it could not run.
+
 ## Coordination
 
-- One TODO coordinator per git repository (herdr's rule; decided by the user on 2026-10-12, d-33kat4ps, replacing
-  the 2026-10-07 shared coordinator): herdr agent `todo-rormpc` owns rormpc only: its TODO, workers, releases and
-  installs. rormpc-tools has its own space, coordinator and `TODO.md`. The music-mpd coordinator keeps music-data
-  and sends rormpc requests to it as text; other sessions do not release or install.
-- Cross-repository work goes as a plain message to the rormpc-tools coordinator, which decides, queues it in its own
-  TODO and replies "landed <tag>". The consuming rormpc item waits in rormpc's `TODO.md` as "Waiting on
-  rormpc-tools" until then. rormpc-tools owns its releases (bump, tag, push); `scripts/rormpc_install.sh` pins its
-  tag, and that tag is the contract between the repositories.
+- One TODO coordinator for the whole repository, `tools/` included (herdr's rule of one coordinator per git
+  repository, d-33kat4ps; since the move of rormpc-tools into `tools/`, d-kgxuqbvh, 2026-10-12): herdr agent
+  `todo-rormpc` owns its `TODO.md`, workers and installs. The music-mpd coordinator keeps music-data and sends rormpc
+  requests to it as text; other sessions do not install.
 - The coordinator runs each item through `herdr todo run` with `--check tests` (`.herdr/checks.toml`:
-  `cargo test -p rmpc`); after the cherry-pick herdr installs master with `scripts/rormpc_install.sh install` and
-  reads the installed commit with its `build-id`. Clippy is not a check (`-p rmpc` fails on older code).
+  `cargo test -p rmpc`), and `--check tools` (`uv run --directory tools pytest -q`) for an item that touches
+  `tools/`; after the cherry-pick herdr installs master with `scripts/rormpc_install.sh install` (rormpc, and the
+  tools when `tools/` changed) and reads the installed commit with its `build-id`. Clippy is not a check (`-p rmpc`
+  fails on older code).
 - `herdr todo run` takes only a lowercase conventional commit subject: the type is one of `feat`, `fix`, `docs`,
   `refactor`, `test`, `chore`, `perf`, `build`, `ci`, `style`, `revert`, the description does not start with a
-  capital. The area goes in the scope: `feat(rormpc): next and previous …`, `docs(todo): …`; `rormpc: …` is
-  refused.
+  capital. The area goes in the scope: `feat(rormpc): next and previous …`, `fix(tools): …`, `docs(todo): …`;
+  `rormpc: …` is refused.
