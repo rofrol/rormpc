@@ -4,7 +4,7 @@
 
 Triaged 2026-10-07 from the sections below; each item points at its section for the details.
 
-- [ ] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
+- [x] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
       one coordinator. A worker: scripts/rormpc_install.sh installs the tools from the same ref as rormpc (`./tools`
       for a local install, `git+…/rormpc@REF#subdirectory=tools` otherwise; RORMPC_TOOLS_TAG goes, the companions
       record compares that ref); `.herdr/checks.toml` gains `tools` = `uv run --directory tools pytest -q`; a root
@@ -12,6 +12,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "Coordination" says one coordinator for the whole repository and folds in tools/AGENTS.md's rules; tools/TODO.md
       and tools/.herdr removed (their open items are in this file now); docs that name rofrol/rormpc-tools point to
       tools/. The old repository is archived on GitHub (its 62 tags kept; copies here as tools-v0.2.x).
+      Done 2026-10-12 (36dcf03, installed and pushed by the run; companions now tools@36dcf03f4c33) through herdr todo run r-2qfitnzb (worker; reviewed by the coordinator): the installer
+      installs tools/ from the checkout (or tools/ at RORMPC_REF remotely); the companions record is the last
+      commit that changed tools/ (+dirty hash); RORMPC_TOOLS_REPO/DIR/REF gone; checks.toml gains `tools`; root
+      tools.yml (contract tests, pytest, pyflakes); installer_smoke tests github.sha; one coordinator in AGENTS.md
+      with a tools/ section; tools/AGENTS.md, TODO.md, .github, .herdr and scripts/release.sh (its vX tags would
+      trigger rormpc's release.yml) removed; docs point to tools/. RORMPC_TOOLS_TAG stays only because
+      rmpc/src/shared/dependencies.rs reads it at build time (follow-up item).
 
 - [x] Film score / soundtrack genre: find why "Cast Away Theme" (Alan Silvestri) has none and make the [t-2i7pvwhq]
       classification available in Hits genre filters ("Soon: missing film score / soundtrack genre").
@@ -1085,6 +1092,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       mockup): no underline; while the mouse is over a heart the status bar says "click: like" / "click: unlike", the
       heart takes the accent colour (checked on the selected row too), and the column is two cells wide (heart + a
       blank, which is also the click target); bold stays for liked only.
+
+- [ ] Drop RORMPC_TOOLS_TAG from scripts/rormpc_install.sh: rmpc/src/shared/dependencies.rs reads it at build time for [t-z5e3iizs]
+      the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
+      `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
+      `scripts/rormpc_install.sh companions`) and remove the tag and its test. Found by the t-6bzyvzb6 worker.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
