@@ -975,6 +975,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
       repo? ask the models?"): consult the models and record the outcome; a move needs the user's decision.
 
+- [ ] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
+      `musicdb restore ID --yes` (download again, history, stickers, YouTube playlist), and the status bar after any
+      deletion says "Ctrl-y undoes" (asked 2026-10-12: "and where is the undo of this deletion from disk and
+      ListenBrainz?" after Mary J. Blige - Be Without You was deleted permanently with its history; the coordinator
+      restored it with `musicdb restore`; today Ctrl-y only takes a song back from the Trash, the Deleted panel `gd`
+      restores any deletion). Cost: a small rormpc change.
+      Decided by the user 2026-10-12: approved (d-usvfh2ct).
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
@@ -1460,13 +1468,6 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
-
-- [ ] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
-      `musicdb restore ID --yes` (download again, history, stickers, YouTube playlist), and the status bar after any
-      deletion says "Ctrl-y undoes" (asked 2026-10-12: "and where is the undo of this deletion from disk and
-      ListenBrainz?" after Mary J. Blige - Be Without You was deleted permanently with its history; the coordinator
-      restored it with `musicdb restore`; today Ctrl-y only takes a song back from the Trash, the Deleted panel `gd`
-      restores any deletion). Cost: a small rormpc change.
 
 ## Needs a decision
 
