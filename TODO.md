@@ -1461,6 +1461,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
+- [ ] Ctrl-y (undo the last deletion) also undoes a permanent deletion and one with the history, through [t-sea2trmx]
+      `musicdb restore ID --yes` (download again, history, stickers, YouTube playlist), and the status bar after any
+      deletion says "Ctrl-y undoes" (asked 2026-10-12: "and where is the undo of this deletion from disk and
+      ListenBrainz?" after Mary J. Blige - Be Without You was deleted permanently with its history; the coordinator
+      restored it with `musicdb restore`; today Ctrl-y only takes a song back from the Trash, the Deleted panel `gd`
+      restores any deletion). Cost: a small rormpc change.
+
 ## Needs a decision
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in [t-4rtdcdqz]
