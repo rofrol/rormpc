@@ -4,6 +4,31 @@
 
 Triaged 2026-10-07 from the sections below; each item points at its section for the details.
 
+- [ ] Elapsed time runs fast (asked 2026-10-12: "serious matter. At 40 seconds in rormpc, the stopwatch on my phone [t-ryp5kjet]
+      showed 37 s. Ask the models."): find whether MPD's elapsed, rormpc's display or the playback itself runs ~8%
+      fast (40/37 = 1.081; 48000/44100 = 1.088), and fix it.
+      Measured 2026-10-12 (coordinator, MPD status elapsed against the monotonic clock, 30 s each): 02:17, a 48 kHz mp3
+      (Lady A, audio 48000:16:2, device 48000 per system_profiler): ratio 1.0896 (= 48000/44100 within 0.1%); a 44.1 kHz
+      song (id 112) from its start to the next song's start: 239.2 s of wall time for 225.1 s (includes mpd-player's gap);
+      02:26, a 48 kHz mp3 (id 6): ratio 1.0011, normal. So it is intermittent and follows the 44.1/48 ratio: the device
+      may stay at the previous song's rate. MPD 0.24.15, osx output, no audio_output_format. Round
+      20261012-021815-3d56 (sol f59daaf7 useful, MiMo e2962b72 and DeepSeek a6aedfe1 partial): an osx output / CoreAudio
+      rate mix-up first, the mpg123 decoder second; separate on a second MPD with a null output (Sol; MiMo and DeepSeek
+      claim null does not pace, which contradicts MPD's null `sync` option, to be checked); fixes: pin the output
+      format or the device rate, or another decoder, verified by the same measurement and by the audible pitch.
+      The user, 2026-10-12: "that speed-up is next in the TODO, do it" (moved to the top with the watchdog).
+
+- [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
+      real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
+      e154f8dd, all useful): in mpd-player (it runs with rormpc closed); samples on MPD's player idle events and the
+      existing 30 s heartbeat, MPD status paired with the monotonic clock (never the wall clock); a fresh baseline on
+      any player event, song change, pause (also the gap's 0:00 pause), seek, MPD restart or reconnect, a sample gap
+      over 45 s or sleep; alarm when two consecutive 25-40 s windows are both above 1.03 or both below 0.97 (Sol; MiMo
+      and DeepSeek 1-2% over longer windows); one macOS notification ("playback clock about 9% fast"), a state field
+      the TUI shows, a JSON log line with the evidence (song, audio format, device nominal rate, samples, ratio);
+      the device rate only as evidence, never an alarm alone; no automatic fix, at most a "reopen output"
+      (disable/enable) action after the evidence is saved.
+
 - [x] After the move of rormpc-tools into tools/ (decided d-kgxuqbvh, pushed 2026-10-12 as 3358f5d): one repository, [t-6bzyvzb6]
       one coordinator. A worker: scripts/rormpc_install.sh installs the tools from the same ref as rormpc (`./tools`
       for a local install, `git+…/rormpc@REF#subdirectory=tools` otherwise; RORMPC_TOOLS_TAG goes, the companions
@@ -975,19 +1000,6 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (scripts/test_rormpc_install.sh) runs in CI on Ubuntu and macOS. The first install after this has no record,
       so it reinstalls the companions once.
 
-- [ ] Elapsed time runs fast (asked 2026-10-12: "serious matter. At 40 seconds in rormpc, the stopwatch on my phone [t-ryp5kjet]
-      showed 37 s. Ask the models."): find whether MPD's elapsed, rormpc's display or the playback itself runs ~8%
-      fast (40/37 = 1.081; 48000/44100 = 1.088), and fix it.
-      Measured 2026-10-12 (coordinator, MPD status elapsed against the monotonic clock, 30 s each): 02:17, a 48 kHz mp3
-      (Lady A, audio 48000:16:2, device 48000 per system_profiler): ratio 1.0896 (= 48000/44100 within 0.1%); a 44.1 kHz
-      song (id 112) from its start to the next song's start: 239.2 s of wall time for 225.1 s (includes mpd-player's gap);
-      02:26, a 48 kHz mp3 (id 6): ratio 1.0011, normal. So it is intermittent and follows the 44.1/48 ratio: the device
-      may stay at the previous song's rate. MPD 0.24.15, osx output, no audio_output_format. Round
-      20261012-021815-3d56 (sol f59daaf7 useful, MiMo e2962b72 and DeepSeek a6aedfe1 partial): an osx output / CoreAudio
-      rate mix-up first, the mpg123 decoder second; separate on a second MPD with a null output (Sol; MiMo and DeepSeek
-      claim null does not pace, which contradicts MPD's null `sync` option, to be checked); fixes: pin the output
-      format or the device rate, or another decoder, verified by the same measurement and by the audible pitch.
-
 - [x] Should rormpc-tools live in the rormpc repository (asked 2026-10-12: "maybe rormpc-tools should be in the rormpc [t-wukv7ish]
       repo? ask the models?"): consult the models and record the outcome; a move needs the user's decision.
       Rounds 20261012-021857-908d (sol 4090d8c9, MiMo 1fa8a9a7, DeepSeek 4244b40f, all useful): move rormpc-tools into
@@ -1082,17 +1094,6 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       recall.
       Decided by the user 2026-10-12 (d-qf5urpbq): the reference labels come from Whisper large-v3 on the tails; the
       user listens only to the disputed ones.
-
-- [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
-      real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
-      e154f8dd, all useful): in mpd-player (it runs with rormpc closed); samples on MPD's player idle events and the
-      existing 30 s heartbeat, MPD status paired with the monotonic clock (never the wall clock); a fresh baseline on
-      any player event, song change, pause (also the gap's 0:00 pause), seek, MPD restart or reconnect, a sample gap
-      over 45 s or sleep; alarm when two consecutive 25-40 s windows are both above 1.03 or both below 0.97 (Sol; MiMo
-      and DeepSeek 1-2% over longer windows); one macOS notification ("playback clock about 9% fast"), a state field
-      the TUI shows, a JSON log line with the evidence (song, audio format, device nominal rate, samples, ratio);
-      the device rate only as evidence, never an alarm alone; no automatic fix, at most a "reopen output"
-      (disable/enable) action after the evidence is saved.
 
 - [ ] CI: the installer smoke test's companions-linux job fails on master: "a daemon never subscribed to its MPD [t-kwqstgkt]
       channel" (MPD channels listenbrainz_feedback, listenbrainz_listen, rormpc; runs 38187215102, 38188905972);
