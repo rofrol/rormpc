@@ -1080,6 +1080,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       ("vocals at 3:42-4:09 after the last line at 3:20", "likely +34 s intro offset", "instrumental outro",
       "uncertain"). Validate on the 53 flagged files plus ~20 unflagged with a labelled tail, report precision and
       recall.
+      Decided by the user 2026-10-12 (d-qf5urpbq): the reference labels come from Whisper large-v3 on the tails; the
+      user listens only to the disputed ones.
 
 - [ ] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
