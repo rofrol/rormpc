@@ -1157,12 +1157,32 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Diagnose playlist lookup/removal of unavailable videos, preserve deletion and restore evidence, classify
       terminal versus transient remote failures, and give a concise, accurate partial-success status. Test offline;
       do not delete anything from the user's playlists while investigating.
+      Consult 2026-10-13, round 20261013-101517-e1fa (MiMo 0f81906c, DeepSeek 646f84aa; both useful;
+      Sol excluded as the caller's family): both recommend complete unfiltered pagination, matching video IDs
+      locally, not interpreting lookup 404 as absence; verify with an unavailable-video fixture and, only if
+      separately approved, read-only live evidence. Classify structured reason AND operation (lookup/delete),
+      preserve auth/playlist failures, and verify item absence before resolving delete-side not-found.
+      Confirmed in code: all-or-nothing subprocess output loses successful removals on a later failure;
+      restore.py uses journal `ytid` plus `youtube_removed` playlist IDs. Preserve per-item intent and confirmed
+      outcomes durably, reconcile ambiguous outcomes at startup or explicit rerun, and test crashes and partial
+      failure. Do not add video IDs redundantly just to repair restore (MiMo suggestion rejected: already stored).
+      Timing: event-driven outcome reconciliation; existing hourly update is external YouTube reconciliation,
+      not recovery of lost internal outcomes; no new timer, sleep, longer wait or blind resend.
 
 - [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review
       the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
       audit other missing years and uppercase titles/artists, distinguish missing source metadata from display/cache
       bugs, and report provenance. Follow the existing years review and rollback workflow; do not guess dates from
       YouTube uploads or blanket-title-case intentional artist/title styling.
+      Read-only MPD check 2026-10-13: Title/Album PILLOWTALK, Artist ZAYN, recording MBID present,
+      no Date or OriginalDate; hits.library_songs passes title/artist through unchanged. Actual file tags and
+      official capitalization remain unverified; the filename's upload date is not release-year evidence.
+      Consult round 20261013-101517-e1fa (MiMo and DeepSeek): first compare file tags with MPD, then audit missing
+      dates and capitalization provenance; reuse years.py's reviewed, freshness-guarded, backed-up atomic apply
+      and rollback. Caps alone are not an error. Include unavailable release metadata, migration of upload dates,
+      stale MPD, and version identity in test fixtures. MiMo flags the eight-digit-date heuristic as a possible
+      ambiguity: verify provenance/format before treating an eight-digit value as upload metadata; not a confirmed
+      cause here. Timing: no timing, on-demand audit and reviewed repair. No personal library inventory in git.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
