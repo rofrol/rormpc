@@ -1152,6 +1152,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
       `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
       `scripts/rormpc_install.sh companions`) and remove the tag and its test. Found by the t-6bzyvzb6 worker.
+- [ ] YouTube deletion fails with HTTP 404 `videoNotFound` (user screenshot, 2026-10-13): add this to TODO and
+      consult the models. `musicdb delete` reports "Deleted permanently" together with "failed, retried hourly".
+      Diagnose playlist lookup/removal of unavailable videos, preserve deletion and restore evidence, classify
+      terminal versus transient remote failures, and give a concise, accurate partial-success status. Test offline;
+      do not delete anything from the user's playlists while investigating.
+
+- [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review
+      the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
+      audit other missing years and uppercase titles/artists, distinguish missing source metadata from display/cache
+      bugs, and report provenance. Follow the existing years review and rollback workflow; do not guess dates from
+      YouTube uploads or blanket-title-case intentional artist/title styling.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
