@@ -37,7 +37,9 @@ def missing(program, tool=None):
 @functools.cache
 def optional(program):
     """Say once per run on stderr that an optional program is missing and what stops working."""
-    print(missing(program, tool()), file=sys.stderr)
+    msg = missing(program, tool())
+    if msg:
+        print(msg, file=sys.stderr)
 
 
 def cli(main):

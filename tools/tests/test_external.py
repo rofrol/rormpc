@@ -54,6 +54,13 @@ def test_missing_optional_program_says_once_what_stops_working(no_programs, tmp_
     external.optional.cache_clear()
 
 
+def test_optional_unknown_program_prints_nothing(capsys):
+    external.optional.cache_clear()
+    external.optional("not-a-known-program")
+    assert capsys.readouterr().err == ""
+    external.optional.cache_clear()
+
+
 def test_missing_file_is_not_a_missing_program(tmp_path):
     def main():
         (tmp_path / "git").read_text()  # a data file that happens to share a program's name
