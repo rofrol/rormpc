@@ -76,7 +76,7 @@ def compute(events, kind, resolve=lambda e: None):
         plays[b][key] += 1
         sources[b][e["source"]] += 1
         names[key][f"{artist} - {title}"] += 1
-    buckets = all_buckets(min(plays), max(plays), kind)
+    buckets = all_buckets(min(plays), max(plays), kind) if plays else []
     total = collections.Counter()
     for b in plays.values():
         total.update(b)
