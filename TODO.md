@@ -4,7 +4,7 @@
 
 Triaged 2026-10-07 from the sections below; each item points at its section for the details.
 
-- [ ] Elapsed time runs fast (asked 2026-10-12: "serious matter. At 40 seconds in rormpc, the stopwatch on my phone [t-ryp5kjet]
+- [x] Elapsed time runs fast (asked 2026-10-12: "serious matter. At 40 seconds in rormpc, the stopwatch on my phone [t-ryp5kjet]
       showed 37 s. Ask the models."): find whether MPD's elapsed, rormpc's display or the playback itself runs ~8%
       fast (40/37 = 1.081; 48000/44100 = 1.088), and fix it.
       Measured 2026-10-12 (coordinator, MPD status elapsed against the monotonic clock, 30 s each): 02:17, a 48 kHz mp3
@@ -21,6 +21,19 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       runs at 0.9995-0.9997, so the mpg123 decoder and MPD's elapsed are right; the 1.09x comes from the osx output
       (CoreAudio / the device rate), intermittently. Proposed fix: `format "48000:16:2"` in ~/.mpdconf's audio_output
       (MPD resamples to the device's 48 kHz, so the device rate never switches), MPD restarted; the watchdog verifies.
+      Done 2026-10-17 (asked again that day: "fix the faster playback of songs in rormpc now, ask the models"; this
+      session, no worker: the change is host configuration in the dotfiles, ac09439 there). Cause, read in MPD's
+      src/output/plugins/OSXOutputPlugin.cxx: on every Open the osx output sets the device stream's
+      kAudioStreamPropertyPhysicalFormat to the format closest to the song (its sample rate too), then at once sets
+      the audio unit's input format and calls AudioUnitInitialize; CoreAudio applies the rate change asynchronously,
+      so the unit can be initialised against the old rate. Live check: on a 44.1 kHz song the speakers were at
+      44100 Hz. Fix: `format "48000:*:*"` in ~/.mpdconf's osx audio_output and `resampler { plugin "soxr" quality
+      "very high" }`, MPD restarted with `brew services restart mpd`. Verified: a 44.1 kHz song now leaves the
+      speakers at 48000 Hz (the check that failed before), and the rest of that song (124.09 s) played in 123.5 s
+      of monotonic time, from the status read to MPD's `idle player` at the song change (ratio 1.0048, against 1.088
+      broken). Round 20261017-150106-b061: DeepSeek 7d19b7da useful (right that MPD changes the device rate), MiMo
+      a445c4ec, Sol 1716163b and Argon a4fb21c8 partial (MiMo and Argon claimed MPD never sets the rate, wrong per
+      the source). Follow-ups in "Proposed". The watchdog stays the long-run check.
 
 - [x] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
@@ -1669,6 +1682,16 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
+
+- [ ] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
+      20261017-150106-b061, DeepSeek): OSXOutputPlugin sets the device's physical format and initialises the audio
+      unit without waiting for kAudioDevicePropertyNominalSampleRate to change, so 44.1/48 kHz switches can
+      play at 48000/44100. Needs the user's go (an outward action; a reproduction with the fixed format removed,
+      the device rate logged at Open). Cost: a short report, no build.
+- [ ] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
+      Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
+      Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
+      line and an MPD restart, no build.
 
 ## Needs a decision
 
