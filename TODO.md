@@ -34,6 +34,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       broken). Round 20261017-150106-b061: DeepSeek 7d19b7da useful (right that MPD changes the device rate), MiMo
       a445c4ec, Sol 1716163b and Argon a4fb21c8 partial (MiMo and Argon claimed MPD never sets the rate, wrong per
       the source). Follow-ups in "Proposed". The watchdog stays the long-run check.
+      Measured again 2026-10-18 on scratch MPDs (the scripts, configs and logs are in
+      ~/.local/share/rormpc-mpd-osx-race-2026-10-18): the 8.8% race did not reproduce in 28 output opens with
+      44.1/48 kHz songs alternating, neither with the format unpinned (the speakers' rate switched on every song
+      change) nor with `format "48000:*:*"`; the ratio of MPD's elapsed against the monotonic clock stayed within
+      0.99-1.01. The earlier 1.033 of the seek-based script was its own artifact: it compares MPD's reported
+      duration with wall time, and the same song gives 1.033 with and without the fixed format, so it is the file's
+      duration estimate, not a rate. So the report to MPD still lacks a reproducer (see "Proposed").
+      Found instead, also 2026-10-18: with `format "48000:*:*"` (soxr and libsamplerate alike) MPD 0.24.15 aborts
+      (`Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`) when a seek into the last
+      ~12 s is followed by a song change that changes the resampling ratio (44.1 -> 48 -> 44.1); reproduced in both
+      configs, not when the same songs end naturally, and not with the format unpinned. New item in "Proposed".
 
 - [x] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
@@ -1686,8 +1697,19 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [ ] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
       20261017-150106-b061, DeepSeek): OSXOutputPlugin sets the device's physical format and initialises the audio
       unit without waiting for kAudioDevicePropertyNominalSampleRate to change, so 44.1/48 kHz switches can
-      play at 48000/44100. Needs the user's go (an outward action; a reproduction with the fixed format removed,
-      the device rate logged at Open). Cost: a short report, no build.
+      play at 48000/44100. Needs the user's go (an outward action). The 2026-10-18 measurements did not reproduce
+      the race (see t-ryp5kjet), so the report would rest on the source reading and the one live observation of
+      2026-10-12 (ratio 1.0896), and MPD's maintainer closed the related issue
+      https://github.com/MusicPlayerDaemon/MPD/issues/1005 for lack of a full log: either find a reproducer first
+      or send the source argument with the log of a `format`-pinned and an unpinned run. Cost: a short report, no
+      build.
+- [ ] MPD aborts with a fixed osx output format on a near-end seek and a rate change (2026-10-18, t-ryp5kjet):
+      `format "48000:*:*"` with soxr or libsamplerate, MPD 0.24.15, a seek into the last ~12 s, then a song change
+      44.1 -> 48 -> 44.1 aborts with `Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`;
+      the same songs ending naturally are fine. Two open questions: does it need the ratio change or only a
+      near-end seek with a format set, and does the user's live config (format + soxr + `device`) abort when rormpc
+      or the media keys seek near the end of a 44.1 kHz song after a 48 kHz one? Evidence and scripts in
+      ~/.local/share/rormpc-mpd-osx-race-2026-10-18. Cost: one more isolation run, then an MPD report.
 - [ ] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
       Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
       Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
