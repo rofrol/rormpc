@@ -182,7 +182,11 @@ impl QueuePane {
                 .song_table_format
                 .iter()
                 // This 0 is fine - song_table_format should never have the Ratio constraint
-                .map(|v| v.width.into_constraint(0))
+                .map(|v| if format!("{:?}", v.prop).contains("Sticker(\"like\")") {
+                    Constraint::Length(2)
+                } else {
+                    v.width.into_constraint(0)
+                })
                 .collect_vec(),
             ctx.config.theme.song_table_format.iter().map(|v| v.prop.clone()).collect_vec(),
         )
@@ -863,7 +867,7 @@ impl Pane for QueuePane {
         if formats.iter().any(|f| matches!(f.prop.kind, PropertyKindOrText::Property(SongProperty::Versions()))) {
             crate::ui::rormpc_versions::ensure_loaded(&ctx.app_event_sender);
         }
-        // rormpc: the column showing rmpc's like sticker gets a clickable heart (hover underlines it; an unrated song shows a dim ♥)
+        // rormpc: the two-cell like column includes the blank after the heart in its click target.
         let like_idx = formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
         let has_next_col = formats.iter().any(|f| format!("{:?}", f.prop).contains("ShuffleNext"));
         self.like_col = like_idx.and_then(|i| widths.get(i)).map(|r| (r.x, r.width.max(1)));
@@ -969,14 +973,17 @@ impl Pane for QueuePane {
                     if let (Some(badge), 0) = (&except_badge, i) {
                         line.spans.insert(usize::from(is_marked), Span::raw(badge.clone()));
                     }
-                    if Some(i) == like_idx && hover_like == Some(idx) {
-                        line = crate::ui::rormpc_actions::hovered_like(line);
+                    if Some(i) == like_idx {
+                        line = crate::ui::rormpc_actions::like_cell(line);
                     }
 
                     line
                 });
 
                 let mut row = QueueRow::default();
+                if hover_like == Some(idx) {
+                    row.hover_like = like_idx.map(|i| (i, config.theme.preview_label_style.fg));
+                }
                 if matches_filter {
                     row.cell_style = Some(config.theme.highlighted_item_style);
                 }
@@ -2350,6 +2357,7 @@ struct QueueRow {
     cell_style: Option<Style>,
     cursor_style: Option<Style>,
     underlined: bool,
+    hover_like: Option<(usize, Option<ratatui::style::Color>)>,
 }
 
 impl QueueRow {
@@ -2370,7 +2378,8 @@ impl QueueRow {
 
         let row = Row::new(
             cells
-                .map(|mut line| {
+                .enumerate()
+                .map(|(i, mut line)| {
                     if let Some(style) = self.cell_style {
                         line.style = line.style.patch(style);
                         for span in &mut line.spans {
@@ -2382,6 +2391,13 @@ impl QueueRow {
                         for span in &mut line.spans {
                             span.style = span.style.patch(cursor);
                         }
+                    }
+                    // QueueRow copies the selection style onto spans. Apply the hover afterwards,
+                    // so its accent and modifiers take precedence on a selected or playing row.
+                    if let Some((column, accent)) = self.hover_like
+                        && column == i
+                    {
+                        line = crate::ui::rormpc_actions::hovered_like(line, accent);
                     }
                     line
                 })
@@ -2404,6 +2420,30 @@ mod rormpc_find_tests {
             .map(|(k, v)| (k.to_owned(), MetadataTag::Single(v.to_owned())))
             .collect();
         Song { id, file: file.to_owned(), metadata, ..Default::default() }
+    }
+
+    #[test]
+    fn selected_queue_row_keeps_the_hover_accent_and_only_a_liked_heart_is_bold() {
+        use ratatui::{buffer::Buffer, layout::{Constraint, Rect}, style::{Color, Modifier, Style},
+            text::Line, widgets::{StatefulWidget, Table, TableState}};
+
+        for (glyph, bold) in [("♥", true), ("", false)] {
+            let selection = Style::default().fg(Color::Red).add_modifier(Modifier::REVERSED | Modifier::BOLD);
+            let row = super::QueueRow {
+                cell_style: Some(selection),
+                cursor_style: Some(selection),
+                hover_like: Some((0, Some(Color::Green))),
+                ..Default::default()
+            }.into_row(std::iter::once(Line::from(glyph)));
+            let area = Rect::new(0, 0, 2, 1);
+            let mut buffer = Buffer::empty(area);
+            StatefulWidget::render(Table::new([row], [Constraint::Length(2)]), area, &mut buffer, &mut TableState::default());
+            let heart = &buffer[(0, 0)];
+            assert_eq!(heart.symbol(), "♥");
+            assert_eq!(heart.fg, Color::Green);
+            assert_eq!(heart.modifier.contains(Modifier::BOLD), bold);
+            assert!(!heart.modifier.intersects(Modifier::UNDERLINED | Modifier::DIM | Modifier::REVERSED));
+        }
     }
 
     #[test]

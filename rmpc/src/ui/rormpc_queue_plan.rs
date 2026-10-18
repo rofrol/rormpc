@@ -963,7 +963,13 @@ impl PlanView {
         let has_next = formats.iter().any(|f| format!("{:?}", f.prop).contains("ShuffleNext"));
         let marker_col =
             formats.iter().position(|f| !format!("{:?}", f.prop).contains("ShuffleNext"));
-        let widths: Vec<_> = formats.iter().map(|f| f.width.into_constraint(0)).collect();
+        let widths: Vec<_> = formats.iter().map(|f| {
+            if format!("{:?}", f.prop).contains("Sticker(\"like\")") {
+                Constraint::Length(2)
+            } else {
+                f.width.into_constraint(0)
+            }
+        }).collect();
         let cells = Layout::horizontal(widths.clone()).spacing(1).split(table);
         let like_idx =
             formats.iter().position(|f| format!("{:?}", f.prop).contains("Sticker(\"like\")"));
@@ -1029,8 +1035,12 @@ impl PlanView {
                     if self.is_stale && matches!(row.turn, Turn::Forecast(_)) && is_next {
                         line.style = line.style.add_modifier(Modifier::DIM);
                     }
-                    if Some(i) == like_idx && hover_like == Some(song.id) {
-                        line = crate::ui::rormpc_actions::hovered_like(line);
+                    if Some(i) == like_idx {
+                        line = if hover_like == Some(song.id) {
+                            crate::ui::rormpc_actions::hovered_like(line, ctx.config.theme.preview_label_style.fg)
+                        } else {
+                            crate::ui::rormpc_actions::like_cell(line)
+                        };
                     }
                     line
                 })

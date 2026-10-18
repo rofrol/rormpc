@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Result;
 use ratatui::{
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
 };
 use rmpc_mpd::{
@@ -64,14 +64,35 @@ pub fn set_like(ctx: &Ctx, file: String, value: &'static str) {
     });
 }
 
-/// The like cell under the mouse, so it reads as clickable (consulted 2026-10-10, Sol and MiMo): the glyph it shows,
-/// underlined, bold for ♥ and ✗; an unrated song shows the liked glyph dimmed (same shape, so it reads "click to like";
-/// ♡ is narrower in some fonts). Underline, not reversed: a reversed hover vanishes on a reversed selected row.
-pub fn hovered_like(line: Line<'_>) -> Line<'_> {
-    if line.width() == 0 {
-        return Line::from(Span::styled("♥", Style::default().add_modifier(Modifier::DIM | Modifier::UNDERLINED)));
+/// Bold identifies a liked heart, not an unrated hover preview or a dislike.
+pub fn like_cell(mut line: Line<'_>) -> Line<'_> {
+    let liked = line.to_string().trim() == "♥";
+    let mut style = Style::default().remove_modifier(Modifier::BOLD);
+    if liked {
+        style = style.add_modifier(Modifier::BOLD);
     }
-    line.patch_style(Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
+    line = line.patch_style(style);
+    for span in &mut line.spans {
+        span.style = span.style.patch(style);
+    }
+    line
+}
+
+/// The hover uses the theme's label accent, including on a reversed selected row. An unrated cell previews ♥,
+/// but only an already liked heart is bold. No underline (it looks broken in some fonts).
+pub fn hovered_like(line: Line<'_>, accent: Option<Color>) -> Line<'_> {
+    let empty = line.width() == 0;
+    let mut line = like_cell(line);
+    if empty {
+        line.spans.push(Span::raw("♥"));
+    }
+    let style = Style { fg: accent, ..Style::default() }
+        .remove_modifier(Modifier::DIM | Modifier::UNDERLINED | Modifier::REVERSED);
+    line = line.patch_style(style);
+    for span in &mut line.spans {
+        span.style = span.style.patch(style);
+    }
+    line
 }
 
 /// "Keep": the song is not a deletion candidate; `musicdb keep` logs it and `musicdb sync` drops it from the
@@ -250,20 +271,57 @@ pub fn remap_marks(old: &[Song], marked: &BTreeSet<usize>, new: &[Song]) -> BTre
 mod tests {
     use rmpc_mpd::commands::Song;
 
-    use ratatui::{style::Modifier, text::Line};
+    use ratatui::{style::{Color, Modifier, Style}, text::Line};
 
-    use super::{duplicate_ids, hovered_like, remap_marks};
+    use super::{duplicate_ids, hovered_like, like_cell, remap_marks};
 
     #[test]
-    fn a_hovered_like_cell_is_underlined_and_an_empty_one_shows_a_dim_heart() {
-        let liked = hovered_like(Line::from("♥"));
-        assert_eq!(liked.to_string(), "♥");
-        assert!(liked.style.add_modifier.contains(Modifier::BOLD | Modifier::UNDERLINED));
-        let unrated = hovered_like(Line::default());
-        assert_eq!(unrated.to_string(), "♥");
-        let style = unrated.spans[0].style;
-        assert!(style.add_modifier.contains(Modifier::DIM | Modifier::UNDERLINED));
-        assert!(!style.add_modifier.contains(Modifier::BOLD), "bold and dim share SGR 22: dim alone");
+    fn hover_uses_the_accent_without_underlining_and_only_liked_hearts_are_bold() {
+        for (glyph, bold) in [("♥", true), ("", false), ("✗", false)] {
+            let line = hovered_like(Line::from(glyph), Some(Color::Magenta));
+            assert_eq!(line.to_string(), if glyph.is_empty() { "♥" } else { glyph });
+            for style in std::iter::once(line.style).chain(line.spans.iter().map(|s| s.style)) {
+                assert_eq!(style.fg, Some(Color::Magenta));
+                assert!(!style.add_modifier.intersects(Modifier::UNDERLINED | Modifier::DIM | Modifier::REVERSED));
+                assert_eq!(style.add_modifier.contains(Modifier::BOLD), bold);
+            }
+        }
+        assert!(like_cell(Line::from("♥")).style.add_modifier.contains(Modifier::BOLD));
+        assert!(!like_cell(Line::from("✗")).style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn hover_overrides_a_selected_rows_reverse_and_the_glyphs_own_colour() {
+        let line = Line::from(ratatui::text::Span::styled("♥", Style::default().fg(Color::Red)));
+        let line = hovered_like(line, Some(Color::Green));
+        let inherited = Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD);
+        let effective = inherited.patch(line.style).patch(line.spans[0].style);
+        assert_eq!(effective.fg, Some(Color::Green));
+        assert!(effective.add_modifier.contains(Modifier::BOLD));
+        assert!(!effective.add_modifier.contains(Modifier::REVERSED));
+    }
+
+    #[test]
+    fn selected_table_rows_keep_the_hover_accent_and_preview_is_not_bold() {
+        use ratatui::{buffer::Buffer, layout::{Constraint, Rect}, widgets::{Cell, Row, StatefulWidget, Table, TableState, Widget}};
+
+        for (glyph, bold) in [("♥", true), ("", false)] {
+            let area = Rect::new(0, 0, 2, 1);
+            let line = hovered_like(Line::from(glyph), Some(Color::Green));
+            let table = Table::new([Row::new([Cell::from(line.clone())])], [Constraint::Length(2)])
+                .row_highlight_style(Style::default().fg(Color::Red).add_modifier(Modifier::REVERSED | Modifier::BOLD));
+            let mut buffer = Buffer::empty(area);
+            let mut state = TableState::default().with_selected(Some(0));
+            StatefulWidget::render(table, area, &mut buffer, &mut state);
+            // Hits paints the hovered cell after Table's final selection-highlight pass.
+            assert_eq!(buffer[(0, 0)].fg, Color::Red, "the table highlight really ran");
+            Widget::render(line, area, &mut buffer);
+            let heart = &buffer[(0, 0)];
+            assert_eq!(heart.symbol(), "♥");
+            assert_eq!(heart.fg, Color::Green);
+            assert_eq!(heart.modifier.contains(Modifier::BOLD), bold);
+            assert!(!heart.modifier.intersects(Modifier::UNDERLINED | Modifier::DIM | Modifier::REVERSED));
+        }
     }
 
     fn song(id: u32, file: &str) -> Song {

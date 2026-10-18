@@ -24,7 +24,7 @@ use std::{
 use anyhow::{Context, Result};
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Flex, Layout},
     prelude::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -814,9 +814,27 @@ impl HitsPane {
         self.state.select((!self.rows.is_empty()).then_some(idx), 0);
     }
 
-    /// x of the ♥ column: after Rank (5), % (4) and the owned mark (1), each followed by one space.
-    fn like_x(&self) -> u16 {
-        self.table_area.x + 5 + 1 + 4 + 1 + 1 + 1
+    fn columns() -> [Constraint; 10] {
+        [
+            Constraint::Length(5),
+            Constraint::Length(4),
+            Constraint::Length(1),
+            Constraint::Length(2),
+            Constraint::Length(4),
+            Constraint::Percentage(35),
+            Constraint::Percentage(65),
+            Constraint::Length(4),
+            Constraint::Length(5),
+            Constraint::Length(5),
+        ]
+    }
+
+    /// Both painted cells of the like column, excluding the table header.
+    fn like_area(&self) -> Rect {
+        let mut area = Layout::horizontal(Self::columns()).flex(Flex::Start).spacing(1).split(self.table_area)[3];
+        area.y = area.y.saturating_add(1);
+        area.height = area.height.saturating_sub(1);
+        area
     }
 
     /// Like <-> no rating for an owned song (a disliked one becomes liked); dislike stays in the menu.
@@ -2333,6 +2351,7 @@ impl HitsPane {
         let heard: std::collections::HashSet<&str> =
             shuffle.round.as_ref().map(|r| r.heard.iter().map(String::as_str).collect()).unwrap_or_default();
         let hover = self.hover_like;
+        let mut hovered_cell = None;
         // the song the Queue paints (playing or paused, not stopped): every row with its file lights up
         let playing_file = ctx.current_song().map(|s| s.file.as_str());
         let rows = self.rows.iter().enumerate().map(|(i, r)| {
@@ -2348,7 +2367,15 @@ impl HitsPane {
                         Some("0") => "✗",
                         _ => "",
                     });
-                    Cell::from(if hover == Some(i) { rormpc_actions::hovered_like(glyph) } else { glyph })
+                    let line = if hover == Some(i) {
+                        rormpc_actions::hovered_like(glyph, ctx.config.theme.preview_label_style.fg)
+                    } else {
+                        rormpc_actions::like_cell(glyph)
+                    };
+                    if hover == Some(i) {
+                        hovered_cell = Some((i, line.clone()));
+                    }
+                    Cell::from(line)
                 }
             };
             let state = match r.file.as_deref() {
@@ -2396,24 +2423,21 @@ impl HitsPane {
         });
         let header = Row::new(["Rank", "%", "", "♥", "Next", "Artist", "Title", "Year", "Plays", "State"])
             .style(ctx.config.theme.preview_label_style);
-        let table = Table::new(rows, [
-            Constraint::Length(5),
-            Constraint::Length(4),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(4),
-            Constraint::Percentage(35),
-            Constraint::Percentage(65),
-            Constraint::Length(4),
-            Constraint::Length(5),
-            Constraint::Length(5),
-        ])
+        let table = Table::new(rows, Self::columns())
         .header(header)
         .column_spacing(1)
         // stale rows are dimmed as well as named by the banner, so it shows without color too
         .style(if banner.is_some() { ctx.config.as_text_style().add_modifier(Modifier::DIM) } else { ctx.config.as_text_style() })
         .row_highlight_style(ctx.config.theme.current_item_style);
         frame.render_stateful_widget(table, table_area, self.state.as_render_state_ref());
+        // Table applies its selection highlight after cell styles. Paint the hover last so the
+        // accent and the unbold unrated preview survive even a coloured, bold, reversed selection.
+        if let Some((idx, line)) = hovered_cell {
+            let area = self.like_area();
+            if let Some(row) = idx.checked_sub(self.state.offset()).filter(|row| *row < usize::from(area.height)) {
+                frame.render_widget(line, Rect { y: area.y + row as u16, height: 1, ..area });
+            }
+        }
 
         let owned = self.rows.iter().filter(|r| r.file.is_some()).count();
         let job_error = self.job.lock().expect("hits job lock").error.clone();
@@ -2491,6 +2515,12 @@ impl Pane for HitsPane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
+        if matches!(event.kind, MouseEventKind::Moved)
+            && !self.like_area().contains(event.into())
+            && self.hover_like.take().is_some()
+        {
+            ctx.render()?;
+        }
         if self.hover_filter.is_some()
             && (!self.filter_area.contains(event.into()) || !matches!(event.kind, MouseEventKind::Moved))
         {
@@ -2563,7 +2593,7 @@ impl Pane for HitsPane {
             ctx.render()?;
             return Ok(());
         }
-        let on_like = event.x == self.like_x() && event.y > self.table_area.y;
+        let on_like = self.like_area().contains(event.into());
         if matches!(event.kind, MouseEventKind::Moved) {
             let hover = if on_like { self.state.get_at_rendered_row(row) } else { None };
             if hover != self.hover_like {
@@ -3691,6 +3721,34 @@ mod tests {
         pane.state.select(Some(1), 0);
         pane.focus_filters = true;
         pane
+    }
+
+    #[test]
+    fn like_target_includes_the_blank_but_not_the_header_or_column_spacing() {
+        let mut pane = pane();
+        pane.table_area = Rect::new(7, 3, 120, 10);
+        let area = pane.like_area();
+        assert_eq!(area.width, 2);
+        assert_eq!(area.x, 7 + 5 + 1 + 4 + 1 + 1 + 1);
+        for x in [area.x, area.x + 1] {
+            assert!(area.contains((x, 4).into()), "heart and blank are the same target");
+            assert!(!area.contains((x, 3).into()), "the header is not a target");
+        }
+        assert!(!area.contains((area.x - 1, 4).into()));
+        assert!(!area.contains((area.x + 2, 4).into()));
+    }
+
+    #[rstest]
+    fn both_like_cells_hover_the_same_row_and_leaving_the_table_clears_it(ctx: Ctx) {
+        let mut pane = pane();
+        pane.table_area = Rect::new(7, 3, 120, 10);
+        let area = pane.like_area();
+        for x in [area.x, area.x + 1] {
+            pane.handle_mouse_event(MouseEvent { x, y: area.y, kind: MouseEventKind::Moved }, &ctx).unwrap();
+            assert_eq!(pane.hover_like, Some(0));
+        }
+        pane.handle_mouse_event(MouseEvent { x: 0, y: 0, kind: MouseEventKind::Moved }, &ctx).unwrap();
+        assert_eq!(pane.hover_like, None);
     }
 
     #[test]
