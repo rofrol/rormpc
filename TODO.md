@@ -1705,7 +1705,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
-- [ ] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
+- [x] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
       20261017-150106-b061, DeepSeek; after the 2026-10-18 round 20261018-015021-5614): OSXOutputPlugin sets the
       device's physical format and initialises the audio unit without waiting for
       kAudioDevicePropertyNominalSampleRate to change, so 44.1/48 kHz switches can play at 48000/44100. Needs the
@@ -1715,7 +1715,12 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       and another process holding a 48 kHz stream) or send the source argument as a comment on
       https://github.com/MusicPlayerDaemon/MPD/issues/1005 with the two scratch-MPD logs. Cost: a short report, no
       build.
-- [ ] Report the osx output abort with a per-output `format` to MPD upstream (2026-10-18, t-ryp5kjet, after round
+      Done 2026-10-18 (the user's go, "1 i 2"): a comment on
+      https://github.com/MusicPlayerDaemon/MPD/issues/1005#issuecomment-6243838710 with the source reading (Open sets
+      kAudioStreamPropertyPhysicalFormat at OSXOutputPlugin.cxx:426, then AudioUnitSetInputStreamFormat:721 and
+      AudioUnitInitialize:729 without waiting), the 1.0896 and the fixed-rate measurements, and an offer to prepare
+      a patch that waits for the device to report the requested rate. The issue stays closed; watch for a reply.
+- [x] Report the osx output abort with a per-output `format` to MPD upstream (2026-10-18, t-ryp5kjet, after round
       20261018-015021-5614): MPD 0.24.15, per-output `format "48000:*:*"` on the osx output (soxr or libsamplerate),
       a seek into the last ~12 s, then a song change 44.1 -> 48 -> 44.1:
       `Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`. Isolation done: the `null`
@@ -1726,6 +1731,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       report needs: the two mp3 files or a licence-clean reproducer that also triggers it, `log_level "verbose"`,
       the config, the seek commands, and an lldb `thread apply all bt` of the abort. Needs the user's go (an
       outward action) and then a fork with the regression test if upstream wants a patch. Cost: a report, no build.
+      Done 2026-10-18 (the user's go, "1 i 2"): https://github.com/MusicPlayerDaemon/MPD/issues/2601, with a
+      licence-clean reproducer instead of the songs: two generated 30.337 s sine mp3s (ffmpeg commands in the
+      report), the seek sequence, the verbose log excerpt and the macOS crash report's backtrace of the output thread
+      (`__assert_rtn` below `AudioOutputControl::PlayChunk`); 30.000 s files do not trigger it, so the leftover chunk
+      matters. A fork with a patch and a regression test follows only if upstream asks (rule 6).
 - [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
       Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
       Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
