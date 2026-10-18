@@ -95,8 +95,7 @@ fn parse_preview(out: &str) -> Result<Vec<Preview>, String> {
         PreviewOutput::Versioned { version: PREVIEW_VERSION, songs } | PreviewOutput::Legacy(songs) => Ok(songs),
         PreviewOutput::Versioned { version, .. } => Err(format!(
             "musicdb delete --preview speaks version {version}, this rormpc reads {PREVIEW_VERSION}: install the \
-             matching rormpc-tools ({}) with scripts/rormpc_install.sh companions",
-            *crate::shared::dependencies::RORMPC_TOOLS_TAG
+             matching rormpc-tools with scripts/rormpc_install.sh companions"
         )),
     }
 }

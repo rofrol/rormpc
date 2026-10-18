@@ -42,7 +42,7 @@ use crate::{
             read_config_for_debuginfo,
         },
         dependencies::{
-            DEPENDENCIES, FFMPEG, FFPROBE, HITS, MUSICDB, PYTHON3, PYTHON3MUTAGEN, RORMPC_TOOLS_TAG,
+            DEPENDENCIES, FFMPEG, FFPROBE, HITS, MUSICDB, PYTHON3, PYTHON3MUTAGEN,
             UEBERZUGPP, YTDLP,
         },
         events::{AppEvent, ClientRequest, WorkRequest},
@@ -300,7 +300,7 @@ fn main() -> Result<()> {
             println!("\nVisualizer:");
             println!("{}", CAVA.display());
 
-            println!("\nrormpc-tools (expected {}):", *RORMPC_TOOLS_TAG);
+            println!("\nrormpc-tools:");
             println!("{}", MUSICDB.display());
             println!("{}", HITS.display());
         }

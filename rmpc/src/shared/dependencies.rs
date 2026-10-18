@@ -24,23 +24,14 @@ pub static HITS: LazyLock<Dep> = LazyLock::new(|| Dep::new("hits", "hits", &["--
 pub static DEPENDENCIES: [&std::sync::LazyLock<Dep>; 9] =
     [&FFMPEG, &FFPROBE, &YTDLP, &UEBERZUGPP, &PYTHON3, &PYTHON3MUTAGEN, &CAVA, &MUSICDB, &HITS];
 
-/// rormpc: the rormpc-tools release this rormpc expects, read from `scripts/rormpc_install.sh` (its
-/// `RORMPC_TOOLS_TAG`), so a release bumps it in one place.
-pub static RORMPC_TOOLS_TAG: LazyLock<&'static str> = LazyLock::new(|| {
-    include_str!("../../../scripts/rormpc_install.sh")
-        .lines()
-        .find_map(|l| l.strip_prefix("RORMPC_TOOLS_TAG="))
-        .unwrap_or("main")
-});
-
 /// rormpc: why a rormpc-tools command (`musicdb`, `hits`) could not run. A missing command gets the install
 /// command, since rormpc users don't have it unless they installed rormpc-tools.
 pub fn cannot_run(tool: &str, err: &std::io::Error) -> String {
     if err.kind() == std::io::ErrorKind::NotFound {
         format!(
             "{tool} not found: it comes with rormpc-tools, install it with `uv tool install \
-             'git+https://github.com/rofrol/rormpc-tools@{}'` (or scripts/rormpc_install.sh companions)",
-            *RORMPC_TOOLS_TAG
+             \"rormpc-tools @ git+https://github.com/rofrol/rormpc#subdirectory=tools\"` \
+             (or `scripts/rormpc_install.sh companions` for tools at the same commit as rormpc)"
         )
     } else {
         format!("cannot run {tool}: {err}")
@@ -120,18 +111,22 @@ impl Dep {
 
 #[cfg(test)]
 mod tests {
-    use super::{RORMPC_TOOLS_TAG, cannot_run};
+    use super::cannot_run;
 
     #[test]
-    fn rormpc_tools_tag_comes_from_the_install_script() {
-        let tag = *RORMPC_TOOLS_TAG;
-        assert!(tag.starts_with('v') && tag[1..].split('.').count() == 3, "{tag}");
+    fn a_missing_tool_points_to_this_repositorys_tools() {
+        let missing = cannot_run("hits", &std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert!(missing.contains("rormpc#subdirectory=tools"), "{missing}");
+        assert!(!missing.contains("github.com/rofrol/rormpc-tools"), "{missing}");
     }
 
     #[test]
     fn a_missing_tool_gets_the_install_command() {
         let missing = cannot_run("musicdb", &std::io::Error::from(std::io::ErrorKind::NotFound));
-        assert!(missing.contains(&format!("uv tool install 'git+https://github.com/rofrol/rormpc-tools@{}'", *RORMPC_TOOLS_TAG)), "{missing}");
+        assert!(missing.starts_with("musicdb not found:"), "{missing}");
+        assert!(missing.contains("uv tool install \"rormpc-tools @ git+https://github.com/rofrol/rormpc#subdirectory=tools\""), "{missing}");
+        assert!(missing.contains("scripts/rormpc_install.sh companions"), "{missing}");
+        assert!(missing.contains("same commit as rormpc"), "{missing}");
         let denied = cannot_run("hits", &std::io::Error::from(std::io::ErrorKind::PermissionDenied));
         assert!(denied.starts_with("cannot run hits:"), "{denied}");
     }

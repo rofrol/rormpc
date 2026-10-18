@@ -55,9 +55,6 @@ RO_LB_DIR="${RO_LB_DIR:-$HOME/personal_projects/ro-listenbrainz-mpd}"
 # rormpc-tools lives in tools/ and installs from the same source as rormpc (tools_source)
 RORMPC_REPO=https://github.com/rofrol/rormpc
 deps_url=$RORMPC_REPO/tree/master/tools#dependencies  # one table: program, what needs it, package per manager
-# not used here: the last release of the archived rofrol/rormpc-tools, which rormpc's missing-tool hints and
-# `debuginfo` read at build time (rmpc/src/shared/dependencies.rs)
-RORMPC_TOOLS_TAG=v0.2.54
 if [ "$(uname)" = Darwin ]; then
   lb_config="$HOME/Library/Application Support/listenbrainz-mpd/config.toml"
 else

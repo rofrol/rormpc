@@ -88,8 +88,8 @@ on 2026-10-12. The old repository rofrol/rormpc-tools is archived (its tags stay
   `~/.config/rormpc-tools/config.toml`.
 - No separate releases any more: no version tags of its own and no pin. `scripts/rormpc_install.sh` installs the
   tools from the same source as rormpc (this checkout's `tools/`, or `tools/` at `$RORMPC_REF` from GitHub), records
-  the last commit that changed `tools/` and reinstalls them on `install` when that changed. `RORMPC_TOOLS_TAG` in the installer is only the archived repository's last release, which rormpc's missing-tool
-  hints read at build time.
+  the last commit that changed `tools/` and reinstalls them on `install` when that changed. Missing-tool hints
+  point at this repository's `tools/`.
 - A format rormpc reads from the tools (`hits --json`, `musicdb delete --preview`, ...) changes on both sides in one
   commit, with the contract tests on both sides (`tools/tests/test_rormpc_contract.py`, `delete_menu.rs`, `hits.rs`).
 - Serial daemon callbacks do not freeze MPD: validate again after individual priority writes and before

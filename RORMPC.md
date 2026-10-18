@@ -63,8 +63,8 @@ systemd `Nice=10`, `IOSchedulingClass=idle`): about a second of CPU per run. The
 standard priority, since background priority lets macOS stretch timers (mpd-player's silence).
 `companions --local` installs `tools/` editable and the scrobbler from its checkout (`$RO_LB_DIR`).
 Without rormpc-tools those features say the command was not found and print a `uv tool install` command for
-the archived repository's last release (`RORMPC_TOOLS_TAG` in `scripts/rormpc_install.sh`, which rormpc reads at
-build time); `rormpc_install.sh companions` installs the matching `tools/` instead. The rest works. `rormpc debuginfo` lists `musicdb` and `hits` with their `--version` and the expected tag. JSON that rormpc
+this repository's `tools/`, or `scripts/rormpc_install.sh companions` to install the tools at the same commit as
+rormpc. The rest works. `rormpc debuginfo` lists `musicdb` and `hits` with their `--version`. JSON that rormpc
 reads carries a version it checks: `hits --json` files and `musicdb delete --preview` (`{"version": 1, "songs":
 [...]}`; the older bare list is still read). Change such a format on both sides in one commit, with the tests on
 both sides (`tools/tests/test_rormpc_contract.py`, rormpc `delete_menu.rs`).
