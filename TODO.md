@@ -2191,6 +2191,17 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       closed at a refusal reopens only below 80%)"; the Claude Code subscription reported its monthly limit on
       2026-10-17 21:51 ("your weekly limit resets Oct 22 at 2am"). No run of this repository is in flight; the
       predecessor's 278 runs are all terminal.
+      Moved on 2026-10-18: herdr 0.9.3 (roherdr 2785ab6eb) gained `--model`, so a pi worker runs on another
+      provider; the same item dispatched with `--agent pi --model deepseek/deepseek-chat` became run r-iigptjsv
+      and the gate refused that too: "no new worker while 2 DeepSeek workers are admitted and not exited, at most 2
+      ([usage] gate_max_workers), across all repositories" (r-3rdihbgn, agentic-workflow-bend-claude; r-6bvnzguw,
+      Robokill). Decided by the user 2026-10-18 ("jak to limit 2 równoległych workerów w całym herdrze? miało być
+      na koordynatora"): the cap belongs per coordinator, not across all repositories; no `--ignore-usage`
+      override; the herdr coordinator was asked to consult the models and change the gate (message sent 03:0x to
+      the agent in pane wR:p2WN of /Users/romanfrolow/personal_projects/herdr, whose repository lease is stale and
+      handed over to a note). r-iigptjsv stays waiting at preflight: it starts when a slot frees or after herdr's
+      fix, whichever comes first; if herdr says the waiting run cannot start, redispatch the same task and paths
+      (its task file is /tmp/task-t-jsjs5ngd-a.md).
 
 ## Waiting on rormpc-tools
 
