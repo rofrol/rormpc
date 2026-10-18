@@ -15,10 +15,82 @@ def test_wer_counts_substitutions_deletions_and_insertions():
     assert ev.wer([], ["a"]) is None
 
 
-def test_sync_median_and_share_within_one_second():
-    s = ev.sync([10.0, 20.0, 31.5], [10.2, 19.0, 30.0, 60.0])
-    assert s["median"] == pytest.approx(1.0) and s["within"] == pytest.approx(2 / 3) and s["lines"] == 3
-    assert ev.sync([10.0], []) is None
+def transcript(ref, offset=0.0, scale=1.0):
+    return [{"start": at * scale + offset, "text": text} for at, text in ref]
+
+
+def test_sync_signed_median_and_share_within_matched_pairs():
+    ref = [(10.0, "one"), (20.0, "two"), (31.5, "three")]
+    lines = [{"start": at, "text": text} for at, text in
+             [(10.2, "one"), (19.0, "two"), (30.0, "three"), (60.0, "extra")]]
+    s = ev.sync(ref, lines)
+    assert s["p50"] == pytest.approx(-1.0)
+    assert s["p90"] == pytest.approx(1.5)
+    assert s["within"] == pytest.approx(2 / 3) and s["lines"] == 3 and s["matched"] == 1
+    assert ev.sync(ref, []) is None
+    assert ev.sync(None, lines) is None
+
+
+@pytest.mark.parametrize("offset", [0.0, 2.0])
+def test_sync_over_segmentation_is_not_rewarded(offset):
+    # Samples fall at the reference starts; equal-size fragments tie to the earliest owner.
+    ref = [(10.0, "one two three four five six"), (12.0, "seven eight nine ten eleven twelve"),
+           (14.0, "red green blue black white gold")]
+    whole = ev.sync(ref, transcript(ref, offset=offset))
+    split = [{"start": at + offset + k * 0.5, "text": " ".join(text.split()[2*k:2*k+2])}
+             for at, text in ref for k in range(3)]
+    fragmented = ev.sync(ref, split)
+    assert fragmented["p50"] == pytest.approx(whole["p50"], abs=0.01)
+    assert fragmented["hit"] == whole["hit"]
+    assert fragmented["matched"] == 1
+
+
+def test_sync_fragment_changes_highlight_between_reference_starts():
+    ref = [(10.0, "one two three four five six"), (16.0, "seven eight nine ten eleven twelve")]
+    split = [{"start": at + k, "text": " ".join(text.split()[2*k:2*k+2])}
+             for at, text in ref for k in range(3)]
+    # Later fragments are different displayed lines, not extra chances to match the reference start.
+    assert ev.sync(ref, transcript(ref))["hit"] == 1
+    assert ev.sync(ref, split)["hit"] == 0.5
+
+
+def test_sync_constant_offset_and_clock_drift():
+    ref = [(10.0, "one two"), (12.0, "three four"), (14.0, "five six")]
+    late = ev.sync(ref, transcript(ref, offset=2.0))
+    assert late["p50"] == pytest.approx(2.0) and late["drift"] == pytest.approx(0)
+    assert late["hit"] == 0
+    scaled = ev.sync(ref, transcript(ref, scale=1.1))
+    assert scaled["drift"] == pytest.approx(6.0) and scaled["hit"] == 0
+
+
+def test_sync_absent_words_lower_coverage_without_timing_error():
+    ref = [(10.0, "one two"), (12.0, "absent words"), (14.0, "three four")]
+    s = ev.sync(ref, transcript([ref[0], ref[2]]))
+    assert s["matched"] == pytest.approx(2 / 3) and s["lines"] == 2
+    assert s["p50"] == 0 and s["p90"] == 0 and s["within"] == 1
+    assert s["hit"] == pytest.approx(2 / 3)
+    none = ev.sync(ref, [{"start": 1000, "text": "unrelated"}])
+    assert none == {"matched": 0, "lines": 0, "p50": None, "p90": None, "drift": None,
+                    "within": None, "hit": 0}
+
+
+def test_sync_half_words_and_strictly_increasing_line_owners():
+    ref = [(10.0, "one two three four"), (12.0, "five six"), (14.0, "seven eight nine")]
+    s = ev.sync(ref, [{"start": 10.0, "text": "ONE, two five six"}, {"start": 14.0, "text": "seven"}])
+    # First line has half its words; second cannot reuse its owner; third has less than half.
+    assert s["matched"] == pytest.approx(1 / 3) and s["lines"] == 1
+    assert s["p50"] == 0 and s["drift"] == 0
+
+
+def test_summary_uses_absolute_song_medians_and_includes_unmatched_hits():
+    def record(p50, drift, hit):
+        return {"label": "lyrics", "ok": True, "wer": 0,
+                "sync": {"p50": p50, "drift": drift, "hit": hit}}
+    s = ev.summary([record(-2, -6, 0.25), record(4, 2, 0.75), record(None, None, 0)])
+    assert s["median_sync"] == 3 and s["median_drift"] == 4 and s["median_hit"] == 0.25
+    assert ev.summary([])["median_sync"] is None
+    assert ev.summary([])["median_drift"] is None
+    assert ev.summary([])["median_hit"] is None
 
 
 def test_reference_in_time_order_normalized_with_offset(tmp_path, monkeypatch):
@@ -132,7 +204,8 @@ def test_report_wer_sync_states_and_no_lyrics_writes(ev_env, tmp_path, capsys):
     by = {s["file"]: s for s in rep["songs"]}
     sung, loop, inst = by["A/sung.mp3"], by["A/loop.mp3"], by["B/instrumental.mp3"]
     assert sung["state"] == "shown" and sung["ok"] and sung["wer"] == 0
-    assert sung["sync"]["median"] == pytest.approx(0, abs=0.006) and sung["sync"]["within"] == 1
+    assert sung["sync"]["p50"] == pytest.approx(0, abs=0.006) and sung["sync"]["within"] == 1
+    assert sung["sync"]["matched"] == 1
     assert sung["measures"]["outside_share"] == 0 and sung["measures"]["speech_seconds"] == 115.0
     assert loop["state"] == "shown" and loop["reasons"] == [] and loop["ok"]
     assert loop["review"] == ["words_outside_speech"] and "words_outside_speech" not in loop["catches"]
@@ -196,6 +269,21 @@ def test_text_table(ev_env, tmp_path, capsys):
     assert "A/loop.mp3: lyrics, shown; review: words_outside_speech" in text
     assert "lyrics: 2/2 shown" in text and "instrumentals: 1/1 no_vocals or withheld (1 no_vocals)" in text
     assert "outside_speech_max" in text and "review flag only:" in text and "(today outside)" in text
+    assert all(column in text.splitlines()[0].split() for column in ("p50", "p90", "drift(s/min)", "hit"))
+    assert "median p50 +0.00 s, median drift 0.0 s/min, median hit" in text
+
+
+def test_text_summary_p50_keeps_sign_and_failed_row_file_alignment(ev_env, capsys):
+    rec = ev.evaluate("A/sung.mp3", "lyrics", {"out": ev_env.outs["A/sung.mp3"]})
+    rec["sync"] = ev.sync([(10.0, "one"), (12.0, "two")],
+                          transcript([(10.0, "one"), (12.0, "two")], offset=-2))
+    failed = {"file": "missing.mp3", "label": "lyrics", "error": "missing", "ok": False}
+    ev.print_text([rec, failed], [], "unused")
+    text = capsys.readouterr().out
+    header, shown, failure = text.splitlines()[:3]
+    assert shown.index(rec["file"]) == failure.index(failed["file"]) == header.index("file")
+    assert "median p50 -2.00 s, median drift 0.0 s/min, median hit 50%" in text
+    assert ev.summary([rec])["median_sync"] == 2
 
 
 def test_review_flag_does_not_catch_an_instrumental(ev_env):

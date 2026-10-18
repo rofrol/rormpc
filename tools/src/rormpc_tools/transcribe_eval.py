@@ -15,9 +15,10 @@ same DIR reuses a song's result while the backend's inputs (model, VAD and no_vo
 Per song: the measures each check compares (share of words outside speech and the SPEECH_PAD that would pass it,
 the top line's repeat count and factor over the next one, words per second of speech, VAD speech seconds and their
 share of the song), the state, reasons and review flags transcribe.judge gives with today's constants; for `lyrics`
-songs the WER against the reference (both lowercased, punctuation removed: transcribe.norm) and the sync (for each reference line
-the distance to the nearest transcript line start: the median and the share within SYNC_WITHIN); for `instrumental`
-songs whether they ended no_vocals.
+songs the WER against the reference (both lowercased, punctuation removed: transcribe.norm) and sync from monotonic
+word alignment: matched line share, signed median start error (p50), absolute p90, drift in seconds per minute,
+and correct highlighted line share sampled every 2 s. The share within SYNC_WITHIN uses matched pairs only;
+for `instrumental` songs whether they ended no_vocals.
 
 Separating ranges: for each threshold, the values that keep its check from firing on every `lyrics` song and make it
 catch every `instrumental` song no other check (at today's values) catches; or which songs make that impossible.
@@ -30,7 +31,7 @@ import hashlib, json, math, os, pathlib, statistics, sys, tempfile
 from . import lyrics, lyrics_check, settings, transcribe
 
 LABELS = ("lyrics", "instrumental")
-SYNC_WITHIN = 1.0  # seconds: the plan's measure, "lines within 1 s"
+SYNC_WITHIN = 1.0  # seconds: the plan's "lines within 1 s", among matched line pairs only
 # (threshold, transcribe's constant, how its check fires on the song's input x, the catch it makes); "gt": x > T,
 # "ge": x >= T, "lt": x < T
 CHECKS = [("no_vocals_min_seconds", "NO_VOCALS_MIN_SECONDS", "lt", "no_vocals_seconds"),
@@ -138,12 +139,77 @@ def wer(ref, hyp):
     return prev[-1] / len(ref)
 
 
-def sync(ref_starts, line_starts):
-    """For each reference line the distance to the nearest transcript line start: median, share within SYNC_WITHIN."""
-    if not ref_starts or not line_starts:
+def sync(ref, lines):
+    """Align normalized words with unit gap/substitution costs, then compare strictly increasing line pairs.
+
+    At least half a reference line's words must match. The transcript owner with most matches wins (earliest
+    on ties); an owner already used is not reused. p90 uses the nearest-rank absolute error percentile.
+    No matched pairs leaves error measures undefined, not zero; within is over matched pairs only.
+    """
+    if not ref or not lines:
         return None
-    d = [min(abs(r - s) for s in line_starts) for r in ref_starts]
-    return {"median": statistics.median(d), "within": sum(x <= SYNC_WITHIN for x in d) / len(d), "lines": len(d)}
+    ref = [(at, text.split()) for at, text in ref if text.split()]
+    if not ref:
+        return None
+    rw = [(w, i) for i, (_, words) in enumerate(ref) for w in words]
+    hw = [(w, j) for j, line in enumerate(lines) for w in transcribe.norm(line["text"]).split()]
+    # Keep traceback directions in bytes; only the current/previous cost rows need Python integers.
+    trace = [bytearray(len(hw) + 1)]
+    prev = list(range(len(hw) + 1))
+    for i, (r, _) in enumerate(rw, 1):
+        cur, steps = [i], bytearray(len(hw) + 1)
+        steps[0] = 1
+        for j, (h, _) in enumerate(hw, 1):
+            costs = (prev[j - 1] + (r != h), prev[j] + 1, cur[j - 1] + 1)
+            step = min(range(3), key=costs.__getitem__)  # prefer the diagonal on equal costs
+            steps[j] = step
+            cur.append(costs[step])
+        trace.append(steps)
+        prev = cur
+    counts = [{} for _ in ref]
+    i, j = len(rw), len(hw)
+    while i and j:
+        step = trace[i][j]
+        if step == 0:
+            if rw[i - 1][0] == hw[j - 1][0]:
+                owners, owner = counts[rw[i - 1][1]], hw[j - 1][1]
+                owners[owner] = owners.get(owner, 0) + 1
+            i, j = i - 1, j - 1
+        elif step == 1:
+            i -= 1
+        else:
+            j -= 1
+    pairs, last = {}, -1
+    for i, (_, words) in enumerate(ref):
+        owners = counts[i]
+        if sum(owners.values()) * 2 < len(words):
+            continue
+        owner = min(owners, key=lambda j: (-owners[j], j))
+        if owner > last:
+            pairs[i], last = owner, owner
+    times = [ref[i][0] for i in pairs]
+    errors = [lines[j]["start"] - ref[i][0] for i, j in pairs.items()]
+    absolute = sorted(abs(e) for e in errors)
+    drift = None
+    if errors:
+        mean_t, mean_e = statistics.mean(times), statistics.mean(errors)
+        variance = sum((t - mean_t) ** 2 for t in times)
+        drift = 60 * sum((t - mean_t) * (e - mean_e) for t, e in zip(times, errors)) / variance \
+            if variance else 0.0
+    # Simulate the player's latest-start-not-after-time rule, including unmatched/extra transcript lines.
+    ri, hi, hits = 0, -1, 0
+    samples = math.floor((ref[-1][0] - ref[0][0]) / 2) + 1
+    for k in range(samples):
+        at = ref[0][0] + 2 * k
+        while ri + 1 < len(ref) and ref[ri + 1][0] <= at:
+            ri += 1
+        while hi + 1 < len(lines) and lines[hi + 1]["start"] <= at:
+            hi += 1
+        hits += ri in pairs and pairs[ri] == hi
+    return {"matched": len(pairs) / len(ref), "p50": statistics.median(errors) if errors else None,
+            "p90": absolute[math.ceil(0.9 * len(absolute)) - 1] if absolute else None, "drift": drift,
+            "hit": hits / samples, "within": sum(e <= SYNC_WITHIN for e in absolute) / len(errors)
+            if errors else None, "lines": len(errors)}
 
 
 def distance(word, regions):
@@ -204,7 +270,7 @@ def evaluate(rel, label, raw):
         song["reference_lines"] = len(ref) if ref else 0
         song["wer"] = wer(" ".join(w for _, w in ref).split(), t.norm(" ".join(w["word"] for w in words)).split()) \
             if ref else None
-        song["sync"] = sync([at for at, _ in ref], [line["start"] for line in lines]) if ref else None
+        song["sync"] = sync(ref, lines)
         song["ok"] = rec["state"] == "shown"
     else:
         song["no_vocals"] = rec["state"] == "no_vocals"
@@ -285,30 +351,36 @@ def summary(songs):
     lyr = [s for s in songs if s["label"] == "lyrics" and "error" not in s]
     ins = [s for s in songs if s["label"] == "instrumental" and "error" not in s]
     wers = [s["wer"] for s in lyr if s["wer"] is not None]
-    syncs = [s["sync"]["median"] for s in lyr if s["sync"]]
+    # median_sync remains a magnitude across songs, not the median signed p50 printed below.
+    syncs = [abs(s["sync"]["p50"]) for s in lyr if s["sync"] and s["sync"]["p50"] is not None]
+    drifts = [abs(s["sync"]["drift"]) for s in lyr if s["sync"] and s["sync"]["drift"] is not None]
+    hits = [s["sync"]["hit"] for s in lyr if s["sync"]]
     return {"lyrics": len(lyr), "lyrics_shown": sum(s["ok"] for s in lyr),
             "instrumentals": len(ins), "instrumentals_caught": sum(s["ok"] for s in ins),
             "instrumentals_no_vocals": sum(s["no_vocals"] for s in ins),
             "mean_wer": statistics.mean(wers) if wers else None,
             "median_sync": statistics.median(syncs) if syncs else None,
+            "median_drift": statistics.median(drifts) if drifts else None,
+            "median_hit": statistics.median(hits) if hits else None,
             "failed": sum("error" in s for s in songs)}
 
 
 def print_text(songs, rngs, raw_dir):
     print(f"{'label':<12} {'state':<9} {'ok':<3} {'outside':>7} {'pad':>5} {'repeat':>9} {'density':>7} "
-          f"{'speech':>7} {'ratio':>5} {'WER':>5} {'sync':>5} {'<=1s':>5}  file")
+          f"{'speech':>7} {'ratio':>5} {'WER':>5} {'p50':>6} {'p90':>5} {'drift(s/min)':>12} {'hit':>5}  file")
     for s in songs:
         if "error" in s:
             print(f"{s['label']:<12} {'failed':<9} {'no':<3} {'':>7} {'':>5} {'':>9} {'':>7} {'':>7} {'':>5} "
-                  f"{'':>5} {'':>5} {'':>5}  {s['file']}")
+                  f"{'':>5} {'':>6} {'':>5} {'':>12} {'':>5}  {s['file']}")
             continue
         m, sy = s["measures"], s.get("sync")
         rep = f"{m['repeat_top']}/{m['repeat_next']} {fmt(m['repeat_factor'], '.1f')}x" if m["repeat_top"] else "-"
         print(f"{s['label']:<12} {s['state']:<9} {'yes' if s['ok'] else 'no':<3} "
               f"{fmt(m['outside_share'], '.2f'):>7} {fmt(m['pad_needed'], '.2f'):>5} {rep:>9} "
               f"{fmt(m['density'], '.2f'):>7} {fmt(m['speech_seconds'], '.1f'):>7} {fmt(m['speech_ratio'], '.2f'):>5} "
-              f"{fmt(s.get('wer'), '.2f'):>5} {fmt(sy and sy['median'], '.2f'):>5} "
-              f"{fmt(sy and sy['within'] * 100, '.0f') + ('%' if sy else ''):>5}  {s['file']}")
+              f"{fmt(s.get('wer'), '.2f'):>5} {fmt(sy and sy['p50'], '+.2f'):>6} "
+              f"{fmt(sy and sy['p90'], '.2f'):>5} {fmt(sy and sy['drift'], '+.1f'):>12} "
+              f"{fmt(sy and sy['hit'] * 100, '.0f') + ('%' if sy else ''):>5}  {s['file']}")
     for s in songs:
         if "error" in s:
             print(f"{s['file']}: failed: {s['error']}")
@@ -317,8 +389,12 @@ def print_text(songs, rngs, raw_dir):
         if s.get("review"):
             print(f"{s['file']}: {s['label']}, {s['state']}; review: {', '.join(s['review'])}")
     t = summary(songs)
-    print(f"lyrics: {t['lyrics_shown']}/{t['lyrics']} shown, mean WER {fmt(t['mean_wer'], '.2f')}, median sync "
-          f"{fmt(t['median_sync'], '.2f')} s; instrumentals: {t['instrumentals_caught']}/{t['instrumentals']} "
+    signed = [s['sync']['p50'] for s in songs if s.get('sync') and s['sync']['p50'] is not None]
+    median_p50 = statistics.median(signed) if signed else None
+    print(f"lyrics: {t['lyrics_shown']}/{t['lyrics']} shown, mean WER {fmt(t['mean_wer'], '.2f')}, median p50 "
+          f"{fmt(median_p50, '+.2f')} s, median drift {fmt(t['median_drift'], '.1f')} s/min, "
+          f"median hit {fmt(t['median_hit'] * 100 if t['median_hit'] is not None else None, '.0f')}%; "
+          f"instrumentals: {t['instrumentals_caught']}/{t['instrumentals']} "
           f"no_vocals or withheld ({t['instrumentals_no_vocals']} no_vocals)"
           + (f"; {t['failed']} failed" if t["failed"] else ""))
     print("separating ranges (each threshold alone, the others at today's values):")
