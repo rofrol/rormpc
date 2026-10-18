@@ -105,6 +105,7 @@ def test_sidecar_shown_with_label_lines_and_raw_words(tx):
     run(rel)
     rec = transcribe.load(rel)
     assert rec["state"] == "shown" and rec["reasons"] == []
+    assert rec["version"] == 2 and rec["review"] == []
     assert rec["label"] == "machine-transcribed by Whisper (large-v3), may be wrong"
     assert rec["language"] == {"code": "en", "how": "vote", "votes": {"en": 3}}
     assert [l["text"] for l in rec["lines"]] == VERSE
@@ -182,10 +183,37 @@ def judge(segments, regions=((5.0, 120.0),)):
     return transcribe.judge(result(segments=segments, regions=regions), {"pcm_sha256": "x"}, None)
 
 
-def test_withheld_words_outside_speech():
+def test_review_words_outside_speech():
     rec = judge(words_of(*VERSE), regions=[(5.0, 20.0), (60.0, 120.0)])
-    assert rec["state"] == "withheld" and rec["reasons"] == ["words_outside_speech"]
-    assert rec["lines"] and rec["words"]  # kept, only not shown
+    assert rec["state"] == "shown" and rec["reasons"] == []
+    assert rec["review"] == ["words_outside_speech"]
+    assert rec["lines"] and rec["words"]
+    assert "; review: words_outside_speech" in transcribe.describe(rec)
+    assert "withheld" not in transcribe.describe(rec)
+
+
+def test_withheld_transcript_can_also_need_review():
+    rec = judge(words_of("Subtitles by the Amara.org community", start=130.0))
+    assert rec["state"] == "withheld" and "credit_line_outside_speech" in rec["reasons"]
+    assert "words_outside_speech" not in rec["reasons"]
+    assert rec["review"] == ["words_outside_speech"]
+    assert "; review: words_outside_speech" in transcribe.describe(rec)
+
+
+def test_version_one_keeps_state_until_transcribed_again(tx):
+    rel = tx.song("A/song.mp3")
+    run(rel)
+    old = transcribe.load(rel)
+    old.update(version=1, state="withheld", reasons=["words_outside_speech"])
+    old.pop("review")
+    transcribe.save(rel, old)
+    before = transcribe.sidecar(rel).read_bytes()
+    run(rel)
+    assert transcribe.sidecar(rel).read_bytes() == before and len(tx.calls) == 1
+    assert "transcript withheld: words_outside_speech" == transcribe.describe(transcribe.load(rel))
+    run("--force", rel)
+    rec = transcribe.load(rel)
+    assert rec["version"] == 2 and rec["state"] == "shown" and rec["review"] == []
 
 
 def test_withheld_repeated_line_but_not_a_chorus():

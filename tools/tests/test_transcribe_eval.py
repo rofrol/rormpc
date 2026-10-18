@@ -37,7 +37,7 @@ def test_pad_needed_is_where_words_outside_speech_stops(monkeypatch):
     assert pad == pytest.approx(1.0)
     for p, fires in ((pad, False), (pad - 0.01, True)):
         monkeypatch.setattr(transcribe, "SPEECH_PAD", p)
-        assert ("words_outside_speech" in transcribe.withheld_reasons([], words, regions)) is fires
+        assert ("words_outside_speech" in transcribe.review_flags([], words, regions)) is fires
 
 
 def song(name, label, catches=(), **inputs):
@@ -52,12 +52,12 @@ def test_separating_ranges():
              # caught by no_vocals anyway: no constraint
              song("i3", "instrumental", ["no_vocals_seconds"], outside_speech_max=0.05)]
     r = ev.separating(songs, "outside_speech_max", "gt", "words_outside_speech")
-    assert r["range"] == [0.2, True, 0.5, False] and r["relied_on"] == 2
-    assert ev.inside(r["range"], 0.2) and ev.inside(r["range"], 0.49) and not ev.inside(r["range"], 0.5)
-    assert ev.interval(r["range"]) == "[0.2, 0.5)"
+    assert r["range"] == [0.2, True, math.inf, False] and r["relied_on"] == 0 and r["review_only"]
+    assert ev.inside(r["range"], 0.2) and ev.inside(r["range"], 0.5)
+    assert ev.interval(r["range"]) == "[0.2, inf)"
     blocked = ev.separating(songs + [song("l3", "lyrics", outside_speech_max=0.55)], "outside_speech_max", "gt",
                             "words_outside_speech")
-    assert blocked["range"] is None and blocked["lyrics"] == ["l3"] and blocked["instrumentals"] == ["i2"]
+    assert blocked["range"] == [0.55, True, math.inf, False] and blocked["instrumentals"] == []
     # fires below its input: density_min, lyrics bound it from above
     d = ev.separating([song("l1", "lyrics", density_min=1.0), song("l2", "lyrics", density_min=2.0),
                        song("i1", "instrumental", density_min=0.1)], "density_min", "lt", "low_word_density")
@@ -134,15 +134,16 @@ def test_report_wer_sync_states_and_no_lyrics_writes(ev_env, tmp_path, capsys):
     assert sung["state"] == "shown" and sung["ok"] and sung["wer"] == 0
     assert sung["sync"]["median"] == pytest.approx(0, abs=0.006) and sung["sync"]["within"] == 1
     assert sung["measures"]["outside_share"] == 0 and sung["measures"]["speech_seconds"] == 115.0
-    assert loop["state"] == "withheld" and loop["reasons"] == ["words_outside_speech"] and not loop["ok"]
+    assert loop["state"] == "shown" and loop["reasons"] == [] and loop["ok"]
+    assert loop["review"] == ["words_outside_speech"] and "words_outside_speech" not in loop["catches"]
     assert loop["measures"]["outside_share"] > transcribe.OUTSIDE_SPEECH_MAX and loop["wer"] == 0
     assert inst["state"] == "no_vocals" and inst["no_vocals"] and inst["ok"]
-    assert rep["summary"]["lyrics_shown"] == 1 and rep["summary"]["instrumentals_caught"] == 1
+    assert rep["summary"]["lyrics_shown"] == 2 and rep["summary"]["instrumentals_caught"] == 1
     r = {x["threshold"]: x for x in rep["ranges"]}
     pad = r["speech_pad"]
     assert pad["range"][0] == pytest.approx(loop["measures"]["pad_needed"]) and not pad["today_inside"]
     assert r["outside_speech_max"]["range"][0] == pytest.approx(loop["measures"]["outside_share"])
-    # the withheld song's 15 s of speech bound it; the instrumental is caught by the ratio as well, so not from below
+    # the review-flagged song's 15 s of speech bound it; the instrumental is caught by the ratio as well, so not from below
     assert r["no_vocals_min_seconds"]["range"] == ["-inf", False, 15.0, True]
     assert r["no_vocals_min_seconds"]["today_inside"] and r["no_vocals_min_seconds"]["relied_on"] == 0
     assert sorted(p.name for p in out.iterdir()) == sorted(ev.raw_path(out, f).name for f in by)
@@ -165,8 +166,8 @@ def test_rerun_reuses_raw_results_and_from_needs_no_backend(ev_env, tmp_path, ca
     assert again["songs"] == first["songs"]
     # judging again with another threshold, from the same raw results
     monkeypatch.setattr(transcribe, "OUTSIDE_SPEECH_MAX", 0.9)
-    assert {s["file"]: s["state"] for s in run_json(capsys, str(ev_env.list), "--from", str(out))["songs"]}[
-        "A/loop.mp3"] == "shown"
+    changed = {s["file"]: s for s in run_json(capsys, str(ev_env.list), "--from", str(out))["songs"]}["A/loop.mp3"]
+    assert changed["state"] == "shown" and changed["review"] == []
 
 
 def test_changed_backend_inputs_run_again(ev_env, tmp_path, capsys, monkeypatch):
@@ -192,9 +193,31 @@ def test_from_missing_song_fails_after_reporting_the_rest(ev_env, tmp_path, caps
 def test_text_table(ev_env, tmp_path, capsys):
     lyrics.main(["transcribe-eval", str(ev_env.list), "--out", str(tmp_path / "raw")])
     text = capsys.readouterr().out
-    assert "A/loop.mp3: lyrics, withheld: words_outside_speech" in text
-    assert "lyrics: 1/2 shown" in text and "instrumentals: 1/1 no_vocals or withheld (1 no_vocals)" in text
-    assert "outside_speech_max" in text and "(today outside)" in text
+    assert "A/loop.mp3: lyrics, shown; review: words_outside_speech" in text
+    assert "lyrics: 2/2 shown" in text and "instrumentals: 1/1 no_vocals or withheld (1 no_vocals)" in text
+    assert "outside_speech_max" in text and "review flag only:" in text and "(today outside)" in text
+
+
+def test_review_flag_does_not_catch_an_instrumental(ev_env):
+    rec = ev.evaluate("A/loop.mp3", "instrumental", {"out": ev_env.outs["A/loop.mp3"]})
+    assert rec["state"] == "shown" and rec["reasons"] == []
+    assert rec["review"] == ["words_outside_speech"] and not rec["ok"]
+    assert rec["catches"] == []
+    assert ev.summary([rec])["instrumentals_caught"] == 0
+
+
+def test_withheld_record_also_reports_review(ev_env, tmp_path, capsys):
+    ev_env.outs["A/loop.mp3"] = result(segments=words_of("Subtitles by the Amara.org community", start=130.0))
+    rep = run_json(capsys, str(ev_env.list), "--out", str(tmp_path / "raw"))
+    rec = next(s for s in rep["songs"] if s["file"] == "A/loop.mp3")
+    assert rec["state"] == "withheld" and not rec["ok"]
+    assert "credit_line_outside_speech" in rec["reasons"] and "words_outside_speech" not in rec["reasons"]
+    assert rec["review"] == ["words_outside_speech"]
+    assert "words_outside_speech" not in rec["catches"]
+    assert rep["summary"]["lyrics_shown"] == 1
+    ev.print_text(rep["songs"], [], "unused")
+    text = capsys.readouterr().out
+    assert "A/loop.mp3: lyrics, withheld; review: words_outside_speech" in text
 
 
 def test_bad_list_line(tmp_path):

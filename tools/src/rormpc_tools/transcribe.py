@@ -13,13 +13,15 @@ data/transcribe_backend.py, a script with inline dependencies run through `uv ru
 backend never enter rormpc-tools' environment. This module picks the songs, checks the result and writes the sidecar.
 
 Storage: <lyrics_dir>/<song path stem>.transcript.json, written atomically; never .lrc/.txt, never index.json:
-  version         1
+  version         2 (version 1 records keep their state until transcribed again; existing sidecars are not
+                  rewritten in place)
   state           shown (passed the checks) | withheld (kept, not shown by default; `reasons`) | no_vocals (too
                   little singing on the vocal stem: nothing to show; not "instrumental", which stays LRCLIB's or
                   the user's statement) | failed (`note`)
   label           "machine-transcribed by Whisper (<model>), may be wrong"
-  reasons         why a transcript is withheld: words_outside_speech, repeated_line, credit_line_outside_speech,
-                  low_word_density, high_word_density
+  reasons         why a transcript is withheld: repeated_line, credit_line_outside_speech, low_word_density,
+                  high_word_density
+  review          human-review flags (words_outside_speech), or []; a shown transcript can still need review
   audio           {"pcm_sha256", "samples", "rate"}: the identity of the 16 kHz mono PCM; a song with a sidecar for
                   the same identity is skipped unless --force (a tag edit or a move keeps it, a new encoding not)
   language        {"code", "how": override (`musicdb lyrics lang`) | vote (Whisper over VAD-started windows), ...}
@@ -52,7 +54,7 @@ VAD_MIN_SILENCE_MS = 300
 NO_VOCALS_MIN_SECONDS = 10.0
 NO_VOCALS_MIN_RATIO = 0.05
 LANG_WINDOWS = 5  # 30 s windows voting on the language
-# withheld checks (plan step 6)
+# withholding and review checks (plan step 6)
 SPEECH_PAD = 0.5  # seconds a word may stray outside a VAD region (Whisper's word times drift that much)
 OUTSIDE_SPEECH_MAX = 0.25  # share of words outside speech; the hallucinated "Thank you." lies entirely outside
 REPEAT_MIN = 4  # a line this often, and REPEAT_FACTOR times the next most repeated line: a loop, not a chorus,
@@ -248,8 +250,8 @@ def make_lines(groups, words):
 
 
 def measures(lines, words, regions):
-    """What the withheld checks compare with their thresholds (words must not be empty): each word outside speech,
-    their share, the most and next most repeated line's counts, and words per second of speech."""
+    """What the withholding and review checks compare with their thresholds (words must not be empty): each word
+    outside speech, their share, the most and next most repeated line's counts, and words per second of speech."""
     outside = [not in_speech(w, regions) for w in words]
     counts = {}
     for line in lines:
@@ -268,8 +270,6 @@ def withheld_reasons(lines, words, regions):
         return reasons
     m = measures(lines, words, regions)
     outside = m["outside"]
-    if m["outside_share"] > OUTSIDE_SPEECH_MAX:
-        reasons.append("words_outside_speech")
     if m["repeat_top"] >= REPEAT_MIN and m["repeat_top"] >= REPEAT_FACTOR * max(m["repeat_next"], 1):
         reasons.append("repeated_line")
     for line in lines:
@@ -282,6 +282,13 @@ def withheld_reasons(lines, words, regions):
     elif m["density"] > DENSITY_MAX:
         reasons.append("high_word_density")
     return reasons
+
+
+def review_flags(lines, words, regions):
+    """Findings to review, never reasons to withhold: VAD can miss singing."""
+    if words and measures(lines, words, regions)["outside_share"] > OUTSIDE_SPEECH_MAX:
+        return ["words_outside_speech"]
+    return []
 
 
 def thresholds():
@@ -297,8 +304,8 @@ def judge(out, identity, override):
     regions = out.get("vad", {}).get("regions", [])
     speech = sum(e - s for s, e in regions)
     duration = out.get("duration") or 0
-    rec = {"version": 1, "audio": identity, "backend": out.get("backend"), "model": out.get("model") or MODEL,
-           "versions": out.get("versions", {}),
+    rec = {"version": 2, "review": [], "audio": identity, "backend": out.get("backend"),
+           "model": out.get("model") or MODEL, "versions": out.get("versions", {}),
            "vad": {"regions": regions, "speech_seconds": round(speech, 3), "duration": duration},
            "thresholds": thresholds(), "transcribed_at": dt.datetime.now().isoformat(timespec="seconds")}
     rec["label"] = label(rec["model"])
@@ -314,6 +321,7 @@ def judge(out, identity, override):
     reasons = withheld_reasons(lines, words, regions)
     return rec | {"state": "withheld" if reasons or not lines else "shown",
                   "reasons": reasons or ([] if lines else ["no_words"]), "language": lang,
+                  "review": review_flags(lines, words, regions),
                   "lines": lines, "words": words}
 
 
@@ -335,7 +343,7 @@ def transcribe_one(rel, index, force=False):
     try:
         out = run_backend(path, identity, override)
     except RuntimeError as e:
-        rec = {"version": 1, "state": "failed", "note": str(e), "audio": identity, "model": MODEL,
+        rec = {"version": 2, "review": [], "state": "failed", "note": str(e), "audio": identity, "model": MODEL,
                "transcribed_at": dt.datetime.now().isoformat(timespec="seconds")}
     else:
         rec = judge(out, identity, override)
@@ -348,10 +356,11 @@ def describe(rec):
     if rec is None:
         return "no transcript"
     s = rec["state"]
+    review = f"; review: {', '.join(rec['review'])}" if rec.get("review") else ""
     if s == "shown":
-        return f"{rec['label']} ({len(rec['lines'])} lines, {rec['language']['code']})"
+        return f"{rec['label']} ({len(rec['lines'])} lines, {rec['language']['code']})" + review
     if s == "withheld":
-        return f"transcript withheld: {', '.join(rec['reasons'])}"
+        return f"transcript withheld: {', '.join(rec['reasons'])}" + review
     if s == "no_vocals":
         return f"no vocals found ({rec['vad']['speech_seconds']:.0f} s of singing)"
     return f"transcription failed: {rec.get('note')}"

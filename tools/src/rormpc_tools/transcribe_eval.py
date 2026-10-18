@@ -14,13 +14,14 @@ same DIR reuses a song's result while the backend's inputs (model, VAD and no_vo
 
 Per song: the measures each check compares (share of words outside speech and the SPEECH_PAD that would pass it,
 the top line's repeat count and factor over the next one, words per second of speech, VAD speech seconds and their
-share of the song), the state and reasons transcribe.judge gives with today's constants; for `lyrics` songs the WER
-against the reference (both lowercased, punctuation removed: transcribe.norm) and the sync (for each reference line
+share of the song), the state, reasons and review flags transcribe.judge gives with today's constants; for `lyrics`
+songs the WER against the reference (both lowercased, punctuation removed: transcribe.norm) and the sync (for each reference line
 the distance to the nearest transcript line start: the median and the share within SYNC_WITHIN); for `instrumental`
 songs whether they ended no_vocals.
 
 Separating ranges: for each threshold, the values that keep its check from firing on every `lyrics` song and make it
 catch every `instrumental` song no other check (at today's values) catches; or which songs make that impossible.
+The speech_pad and outside_speech_max candidates only flag review, never withhold or catch instrumentals.
 The VAD values and LANG_WINDOWS change the backend's output itself: they are calibrated by rerunning with other
 constants, not from saved results.
 """
@@ -196,8 +197,8 @@ def evaluate(rel, label, raw):
         catches |= set(t.withheld_reasons(lines, words, regions))
     if not lines:
         catches.add("no_words")
-    song = {"file": rel, "label": label, "state": rec["state"], "reasons": rec["reasons"], "measures": m,
-            "inputs": x, "catches": sorted(catches)}
+    song = {"file": rel, "label": label, "state": rec["state"], "reasons": rec["reasons"], "review": rec["review"],
+            "measures": m, "inputs": x, "catches": sorted(catches)}
     if label == "lyrics":
         ref = reference(rel)
         song["reference_lines"] = len(ref) if ref else 0
@@ -216,9 +217,12 @@ def evaluate(rel, label, raw):
 def separating(songs, threshold, kind, catch):
     """The values of one threshold that keep its check off every lyrics song and make it catch every instrumental
     that no other check catches: {"range": [lo, lo_inclusive, hi, hi_inclusive] or None, "lyrics": [files that block
-    it], "instrumentals": [files that block it], "relied_on": how many instrumentals need this check}."""
+    it], "instrumentals": [files that block it], "relied_on": how many instrumentals need this check}.
+    Review-only candidates bound lyrics flags only; they cannot catch instrumentals."""
     lyr = [s for s in songs if s["label"] == "lyrics" and s["inputs"][threshold] is not None]
-    need = [s for s in songs if s["label"] == "instrumental" and not set(s["catches"]) - {catch}]
+    # A review flag cannot catch an instrumental, whatever its threshold.
+    need = [s for s in songs if s["label"] == "instrumental" and not set(s["catches"]) - {catch}
+            and catch != "words_outside_speech"]
     uncatchable = [s["file"] for s in need if s["inputs"][threshold] is None]
     need = [s for s in need if s["inputs"][threshold] is not None]
     x = lambda s: s["inputs"][threshold]
@@ -233,7 +237,7 @@ def separating(songs, threshold, kind, catch):
     return {"threshold": threshold, "range": None if empty or uncatchable else [lo, lo_in, hi, hi_in],
             "lyrics": [s["file"] for s in bad_l] if empty else [],
             "instrumentals": ([s["file"] for s in bad_i] if empty else []) + uncatchable,
-            "relied_on": len(need) + len(uncatchable)}
+            "relied_on": len(need) + len(uncatchable), "review_only": catch == "words_outside_speech"}
 
 
 def inside(rng, value):
@@ -310,6 +314,8 @@ def print_text(songs, rngs, raw_dir):
             print(f"{s['file']}: failed: {s['error']}")
         elif not s["ok"]:
             print(f"{s['file']}: {s['label']}, {s['state']}" + (f": {', '.join(s['reasons'])}" if s["reasons"] else ""))
+        if s.get("review"):
+            print(f"{s['file']}: {s['label']}, {s['state']}; review: {', '.join(s['review'])}")
     t = summary(songs)
     print(f"lyrics: {t['lyrics_shown']}/{t['lyrics']} shown, mean WER {fmt(t['mean_wer'], '.2f')}, median sync "
           f"{fmt(t['median_sync'], '.2f')} s; instrumentals: {t['instrumentals_caught']}/{t['instrumentals']} "
@@ -318,6 +324,8 @@ def print_text(songs, rngs, raw_dir):
     print("separating ranges (each threshold alone, the others at today's values):")
     for r in rngs:
         head = f"  {r['threshold']:<22} today {fmt(r['today'], 'g'):<6} "
+        if r["review_only"]:
+            head += "review flag only: "
         if r["range"]:
             print(head + interval(r["range"]) + (" (today inside)" if r["today_inside"] else " (today outside)")
                   + ("" if r["relied_on"] else ", no instrumental relies on it"))
