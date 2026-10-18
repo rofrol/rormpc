@@ -1341,6 +1341,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       several are legitimate, e.g. M83, LMFAO, AWOLNATION, VA). Next: the year repair is the existing `musicdb
       years` review workflow (reviewed, backed-up, atomic apply and rollback) over the 178 files without a date; it
       needs the user's approval of the proposed years, and dates are never guessed from upload dates.
+      Review run 2026-10-18 (`musicdb years --dry-run`, read-only, herdr-job 20261018-112312-7fc3): 516 rows in
+      /Users/romanfrolow/personal_projects/music-data/years-report.json (+ years-report.md) — 59 high confidence
+      (MusicBrainz, `same-length` rule), 66 to review, 391 with no evidence, 352 need an MBID first. Waiting for the
+      user's decision on accepting the 59 (apply writes TDRC/TDOR, backs up the old values to years-backup.jsonl and
+      has `--rollback`).
       Consult round 20261013-101517-e1fa (MiMo and DeepSeek): first compare file tags with MPD, then audit missing
       dates and capitalization provenance; reuse years.py's reviewed, freshness-guarded, backed-up atomic apply
       and rollback. Caps alone are not an error. Include unavailable release metadata, migration of upload dates,
