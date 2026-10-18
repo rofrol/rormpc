@@ -1243,6 +1243,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       mockup): no underline; while the mouse is over a heart the status bar says "click: like" / "click: unlike", the
       heart takes the accent colour (checked on the selected row too), and the column is two cells wide (heart + a
       blank, which is also the click target); bold stays for liked only.
+      Landed 2026-10-18 (run r-lezhh63w, worker pi/gpt-6.1-sol, commit 5bcd297; check `tests` by the driver's
+      verify): the underline is gone; a hovered heart takes the theme's label accent (`preview_label_style.fg`) and
+      stays accent-coloured on a reversed selected row (the row repaints after the table so its
+      `row_highlight_style` no longer overrides it), an unrated cell previews ♥ in that accent, and bold marks a
+      liked heart only (`like_cell()` at rest, `hovered_like(line, accent)` on hover). The like column is two cells
+      wide in the queue, the queue plan and hits, and both cells are the click target: hits derives it from the
+      table's own column constraints (`columns()`, `like_area()`) instead of a hardcoded x, and the tests pin the
+      geometry, the header exclusion, both cells hovering the same row and the hover clearing when the pointer
+      leaves. Commit message: the subject carries "(AI-assisted)" so the driver's exact-message check and the
+      repository's disclosure rule both hold.
+      Next run of this item (approved by the user 2026-10-18, "tak"): the hover-scoped status API and then the
+      "click: like"/"click: unlike" hint while the pointer is on the heart.
 
 - [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing
       t-jsjs5ngd's and t-jminob65's worker commits): two workers in a row were blocked by the conflict between
