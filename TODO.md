@@ -1307,6 +1307,23 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       failure. Do not add video IDs redundantly just to repair restore (MiMo suggestion rejected: already stored).
       Timing: event-driven outcome reconciliation; existing hourly update is external YouTube reconciliation,
       not recovery of lost internal outcomes; no new timer, sleep, longer wait or blind resend.
+      Landed 2026-10-18 (run r-xlhulvhi, worker pi/gpt-6.1-sol, commit f5916de; checks `tests tools` by the driver's
+      verify): the YouTube step of `musicdb delete` no longer loses work or claims what it did not do.
+      `yt_playlist.py`: `playlist_hits()` keeps the API's structured reason and, on a 404 `videoNotFound`, falls back to
+      unfiltered pagination of that playlist and matches the video ID locally (`video_of()` reads `contentDetails` or
+      `snippet.resourceId`), so an unavailable video that is still in a playlist is found; `find()` and `remove()`
+      return one result per playlist (`present`/`absent`/`removed`/`failed: <reason>`, with the operation) instead of
+      an all-or-nothing list; `remove()` journals an intent before each DELETE and a confirmation after it, reconciles
+      a lost response by re-listing, and skips items already removed, so a retry never deletes twice.
+      `musicdb.py`: `youtube_remove_record()` checkpoints `youtube_items`, `youtube_removed` and `youtube_results` in
+      the journal (pending.jsonl, under the journal lock) before and after every write and marks `ops["youtube"]` as
+      awaiting confirmation mid-flight, so the hourly update continues what is left; `delete()`'s single status line
+      now separates the local result from the remote one (" · YouTube removal pending (retried hourly): 404
+      videoNotFound" or " · YouTube: removed from N playlists", and the same for ListenBrainz), exits non-zero only
+      when the local deletion failed, and notifies "Remote cleanup pending, retried hourly" instead of "FAILED".
+      Tests: 25 focused (fake API), the full suite 683 passed (9 socket tests blocked in the sandbox).
+      Open: the message and the fallback are verified offline only; confirming them on a real unavailable video needs
+      the user's playlists (a live run is his call).
 
 - [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review [t-dasiajfe]
       the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
