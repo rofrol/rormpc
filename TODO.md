@@ -45,6 +45,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (`Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`) when a seek into the last
       ~12 s is followed by a song change that changes the resampling ratio (44.1 -> 48 -> 44.1); reproduced in both
       configs, not when the same songs end naturally, and not with the format unpinned. New item in "Proposed".
+      Fixed 2026-10-18 by moving the conversion into the decoder: `audio_output_format "48000:24:2"` in
+      ~/.mpdconf instead of the per-output `format` (dotfiles dde312e), MPD restarted, queue and position restored.
+      Isolated the trigger on scratch MPDs first: the `null` output with the same per-output `format` and the same
+      seeks survived 8 rate changes (`output: converting ...` in its log too), so it is not the generic filter chain;
+      the global `audio_output_format` puts the conversion in the decoder (`decoder: converting to 48000:24:2`) and
+      survived 8 near-end seeks with 14 rate changes. Two generated 30 s sine files did not reproduce the abort even
+      with the per-output `format`, so it also needs files whose length leaves a partial chunk (the real songs are
+      204.157 s and 290.458 s). Verified the installed config on a scratch MPD holding a copy of it: no abort over
+      8 near-end seeks with rate changes, MPD's elapsed against the monotonic clock 0.9962-1.009 over 6 song
+      changes, speakers at 48000 Hz throughout. Round 20261018-015021-5614 asked (Sol failed on its usage limit;
+      MiMo partial, Argon useful, and Argon's `audio_output_format` was the idea that made the config work).
 
 - [x] A watchdog for playback speed (asked 2026-10-12: "some check has to be turned on: the song's time against the [t-s2qyloqw]
       real time that passed. Ask the models."). Round 20261012-024045-054e (sol d9ce8be0, MiMo e77e5e48, DeepSeek
@@ -1695,25 +1706,38 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 ## Proposed
 
 - [ ] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
-      20261017-150106-b061, DeepSeek): OSXOutputPlugin sets the device's physical format and initialises the audio
-      unit without waiting for kAudioDevicePropertyNominalSampleRate to change, so 44.1/48 kHz switches can
-      play at 48000/44100. Needs the user's go (an outward action). The 2026-10-18 measurements did not reproduce
-      the race (see t-ryp5kjet), so the report would rest on the source reading and the one live observation of
-      2026-10-12 (ratio 1.0896), and MPD's maintainer closed the related issue
-      https://github.com/MusicPlayerDaemon/MPD/issues/1005 for lack of a full log: either find a reproducer first
-      or send the source argument with the log of a `format`-pinned and an unpinned run. Cost: a short report, no
+      20261017-150106-b061, DeepSeek; after the 2026-10-18 round 20261018-015021-5614): OSXOutputPlugin sets the
+      device's physical format and initialises the audio unit without waiting for
+      kAudioDevicePropertyNominalSampleRate to change, so 44.1/48 kHz switches can play at 48000/44100. Needs the
+      user's go (an outward action). The 2026-10-18 measurements did not reproduce the race (see t-ryp5kjet), so
+      either find a reproducer (MiMo: a stress loop over 200+ output opens capturing the device's PhysicalFormat at
+      every Open, which no-ops now that the config keeps the device at 48 kHz; Argon: unpinned with mpd-player's gap
+      and another process holding a 48 kHz stream) or send the source argument as a comment on
+      https://github.com/MusicPlayerDaemon/MPD/issues/1005 with the two scratch-MPD logs. Cost: a short report, no
       build.
-- [ ] MPD aborts with a fixed osx output format on a near-end seek and a rate change (2026-10-18, t-ryp5kjet):
-      `format "48000:*:*"` with soxr or libsamplerate, MPD 0.24.15, a seek into the last ~12 s, then a song change
-      44.1 -> 48 -> 44.1 aborts with `Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`;
-      the same songs ending naturally are fine. Two open questions: does it need the ratio change or only a
-      near-end seek with a format set, and does the user's live config (format + soxr + `device`) abort when rormpc
-      or the media keys seek near the end of a 44.1 kHz song after a 48 kHz one? Evidence and scripts in
-      ~/.local/share/rormpc-mpd-osx-race-2026-10-18. Cost: one more isolation run, then an MPD report.
-- [ ] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
+- [ ] Report the osx output abort with a per-output `format` to MPD upstream (2026-10-18, t-ryp5kjet, after round
+      20261018-015021-5614): MPD 0.24.15, per-output `format "48000:*:*"` on the osx output (soxr or libsamplerate),
+      a seek into the last ~12 s, then a song change 44.1 -> 48 -> 44.1:
+      `Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`. Isolation done: the `null`
+      output with the same format and seeks is fine, so it needs the osx output; the decoder-side
+      `audio_output_format` is fine; two generated 30 s sine files do not trigger it, the real songs (204.157 s and
+      290.458 s with mpg123) do. The user's config no longer uses that option (dde312e), so nothing breaks for him;
+      the report protects everyone else, and MiMo, Argon and the repo rule 6 all point the same way. What a good
+      report needs: the two mp3 files or a licence-clean reproducer that also triggers it, `log_level "verbose"`,
+      the config, the seek commands, and an lldb `thread apply all bt` of the abort. Needs the user's go (an
+      outward action) and then a fork with the regression test if upstream wants a patch. Cost: a report, no build.
+- [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
       Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
       Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
       line and an MPD restart, no build.
+      Done 2026-10-17 in dotfiles 8e9e5ee: `device "MacBook Pro Speakers"` (MPD matches the CoreAudio device name);
+      kept in the 2026-10-18 rewrite (dde312e).
+- [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
+      Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
+      Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
+      line and an MPD restart, no build.
+      Done 2026-10-17 in dotfiles 8e9e5ee: `device "MacBook Pro Speakers"` (MPD matches the CoreAudio device name);
+      kept in the 2026-10-18 rewrite (dde312e).
 
 ## Needs a decision
 
