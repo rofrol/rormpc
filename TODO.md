@@ -1193,6 +1193,12 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
 - [ ] CI: the installer smoke test's companions-linux job fails on master: "a daemon never subscribed to its MPD [t-kwqstgkt]
       channel" (MPD channels listenbrainz_feedback, listenbrainz_listen, rormpc; runs 38187215102, 38188905972);
       found while checking the rewritten history, failing before it.
+      Root cause read 2026-10-18 from the job log: the step "Units are enabled and active, and their programs run"
+      compares the channel list for exact equality with `want="listenbrainz_feedback rormpc"`, while
+      ro-listenbrainz-mpd also subscribes to listenbrainz_listen, so the log shows
+      "MPD channels: listenbrainz_feedback listenbrainz_listen rormpc" and fails on the extra channel. The fix is a
+      containment test of the two channels that prove the daemons are connected. Its worker task is written
+      (/tmp/task-t-kwqstgkt.md) but dispatch is blocked while run r-z4prcxfk is stuck (see t-jsjs5ngd).
 
 - [ ] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
       models"): the underline marks the heart under the mouse (rmpc/src/ui/rormpc_actions.rs `hovered_like`), and in
