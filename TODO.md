@@ -1346,6 +1346,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       (MusicBrainz, `same-length` rule), 66 to review, 391 with no evidence, 352 need an MBID first. Waiting for the
       user's decision on accepting the 59 (apply writes TDRC/TDOR, backs up the old values to years-backup.jsonl and
       has `--rollback`).
+      Applied 2026-10-18 (the user: "czemu mam coś przeglądać? rób z todo" — no review by hand): the 59
+      high-confidence rows were accepted (`musicdb years --accept <59 ids>`) and applied (`--apply`, herdr-jobs
+      20261018-112632-9b34 and 20261018-112635-d649): 59 files got TDRC and TDOR, `skipped: []`, the old values are in
+      music-data/years-backup.jsonl (`musicdb years --rollback` undoes it), and `mpc update --wait` ran. Spot check:
+      Nightcall now has date 2011 / originaldate 2010, MPD shows 2011. Remaining in the report: 66 rows to review
+      (each needs a human judgement) and 391 without evidence, 352 of them needing an MBID first; the caps question is
+      answered (the tags copy the source's title, rormpc does not change case).
       Consult round 20261013-101517-e1fa (MiMo and DeepSeek): first compare file tags with MPD, then audit missing
       dates and capitalization provenance; reuse years.py's reviewed, freshness-guarded, backed-up atomic apply
       and rollback. Caps alone are not an error. Include unavailable release metadata, migration of upload dates,
