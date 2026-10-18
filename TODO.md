@@ -1192,6 +1192,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       abandon forced alignment if p90 improves < 15%; stable-ts is a separate follow-up (it re-segments lines and
       would confound `hit`); CPU only — `torchaudio.functional.forced_align` has no MPS kernel — expecting ~15-25 min
       for 70-80 min of audio with batch_size 1 and 2-4 GB RSS.
+      Romanization and gates landed 2026-10-18 (run r-56u7iuad, worker pi/gpt-6.1-sol, commit 645e2f3; checks
+      `tests tools` by the driver's verify; 30 alignment tests): the backend's `--words FILE` romanizes the
+      transcript's words with uroman (a pinned inline dependency) and returns `words_uroman` in the same order,
+      failing one word to an empty string instead of renaming it; the core takes that list and tokenizes the
+      romanized spelling while every returned word keeps its original text, so a Polish or French word that the raw
+      spelling excluded no longer forces a whole-song fallback (an empty romanized form keeps only that word at
+      Whisper's times). The calibrated defaults from round 20261018-113455-9cab are in: word evidence gate 0.35, a
+      whole-song fallback when more than 30% of the words are weak, and a displacement guard of 2.5 s (a word whose
+      aligned start differs from Whisper's by more keeps Whisper's time and counts as weak).
+      Next and visible: the pilot run itself — 10 songs with synced lyrics plus 10 held-out ones, raw Whisper times
+      against the refined ones, scored with the line segmentation locked to the reference breaks and exactly equal
+      words, as a herdr-job with the models downloaded on this machine.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
