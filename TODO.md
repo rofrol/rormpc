@@ -1282,6 +1282,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
       `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
       `scripts/rormpc_install.sh companions`) and remove the tag and its test. Found by the t-6bzyvzb6 worker.
+      Landed 2026-10-18 (run r-f4ex4hch, worker pi/gpt-6.1-sol, commit 6fd29f8; check `tests` by the driver's
+      verify): `RORMPC_TOOLS_TAG` is gone — the installer no longer defines it, the static and its parsing of
+      `scripts/rormpc_install.sh` are removed from rmpc/src/shared/dependencies.rs, and `cannot_run()` now tells the
+      user to `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc#subdirectory=tools"` or to run
+      `scripts/rormpc_install.sh companions` for tools at the same commit as rormpc. The `musicdb delete --preview`
+      version-mismatch message (rmpc/src/ui/modals/delete_menu.rs:99) keeps the companions hint without the tag,
+      `rormpc debuginfo` prints the tools heading without an expected tag, and AGENTS.md and RORMPC.md say the same.
+      A test pins the new hint and asserts the archived `rofrol/rormpc-tools` no longer appears. The first attempt
+      (7d1967c) did not compile because delete_menu.rs stayed outside its allowed paths.
 - [ ] YouTube deletion fails with HTTP 404 `videoNotFound` (user screenshot, 2026-10-13): add this to TODO and [t-pyr3xmsz]
       consult the models. `musicdb delete` reports "Deleted permanently" together with "failed, retried hourly".
       Diagnose playlist lookup/removal of unavailable videos, preserve deletion and restore evidence, classify
