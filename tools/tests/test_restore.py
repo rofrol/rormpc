@@ -26,7 +26,10 @@ def gone(env, monkeypatch, tmp_path):
     monkeypatch.setattr(musicdb, "LOCK", tmp_path / "deletions.lock")
     monkeypatch.setattr(musicdb, "export", lambda a: None)
     monkeypatch.setattr(musicdb.subprocess, "run", lambda cmd, **k: None)  # mpc update
-    monkeypatch.setattr(musicdb, "youtube_remove", lambda ytid: ["PL1"])
+    def removed(r):
+        r["youtube_removed"] = ["PL1"]
+        return {"results": [{"id": "PL1", "outcome": "removed"}]}
+    monkeypatch.setattr(musicdb, "youtube_remove_record", removed)
     monkeypatch.setattr(restore.settings, "XDG_CACHE", tmp_path / "cache")
     monkeypatch.setenv("LISTENBRAINZ_TOKEN", "test-token")
     musicdb.write_jsonl(identity.registry_path(), [{"id": SID, "path": RICK, "paths": [RICK], "state": "live",

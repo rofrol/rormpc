@@ -81,12 +81,107 @@ def titles(yt):
     return {pl["id"]: pl["snippet"]["title"] for pl in r.get("items", [])}
 
 
-def items_with(yt, video_id):
-    """[(playlist id, playlist item id)] of the chosen playlists that contain the video."""
-    out = []
+def api_error(err):
+    """Keep the structured API reason, not just HttpError's human-readable message."""
+    from googleapiclient.errors import HttpError
+    if isinstance(err, HttpError):
+        try:
+            reason = json.loads(err.content)["error"]["errors"][0]["reason"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            reason = "unknown"
+        return f"{err.resp.status} {reason}", reason
+    return str(err), type(err).__name__
+
+
+def video_of(item):
+    return (item.get("contentDetails", {}).get("videoId")
+            or item.get("snippet", {}).get("resourceId", {}).get("videoId"))
+
+
+def playlist_hits(yt, video_id, pid, unfiltered=False):
+    """Never interpret a lookup's videoNotFound as evidence of playlist absence."""
+    reason = None
+    if not unfiltered:
+        try:
+            items = list(pages(yt.playlistItems().list, part="id,snippet,contentDetails",
+                               playlistId=pid, videoId=video_id))
+            return [it["id"] for it in items if video_of(it) == video_id], reason
+        except Exception as err:
+            _, reason = api_error(err)
+            if reason != "videoNotFound":
+                raise
+    items = list(pages(yt.playlistItems().list, part="id,snippet,contentDetails", playlistId=pid))
+    return [it["id"] for it in items if video_of(it) == video_id], reason
+
+
+def find(yt, video_id):
+    out = {"video": video_id, "playlists": [], "results": []}
     for pid in chosen():
-        for it in pages(yt.playlistItems().list, part="id,snippet", playlistId=pid, videoId=video_id):
-            out.append((pid, it["id"]))
+        result = {"id": pid}
+        try:
+            hits, reason = playlist_hits(yt, video_id, pid)
+            result.update(outcome="present" if hits else "absent", reason=reason)
+            out["playlists"].extend({"id": pid, "item": item} for item in hits)
+        except Exception as err:
+            message, reason = api_error(err)
+            result.update(outcome=f"failed: {message}", reason=reason, operation="list")
+        out["results"].append(result)
+    failures = [r["outcome"] for r in out["results"] if r["outcome"].startswith("failed:")]
+    if failures:
+        out["error"] = "; ".join(failures)
+    return out
+
+
+def items_with(yt, video_id):
+    out = find(yt, video_id)
+    if out.get("error"):
+        raise RuntimeError(out["error"])
+    return [(p["id"], p["item"]) for p in out["playlists"]]
+
+
+def remove(yt, video_id, dry_run=False, progress=None, intents=None, playlist_ids=None):
+    """Complete scans reconcile prior intents; journal callbacks run before and after each DELETE."""
+    out = {"video": video_id, "removed": [], "results": []}
+    intents = intents if intents is not None else []
+    for pid in chosen() if playlist_ids is None else playlist_ids:
+        result = {"id": pid, "removed_items": [], "outcome": "absent"}
+        out["results"].append(result)
+        try:
+            # Unfiltered enumeration also reconciles a lost DELETE response without sending it twice.
+            hits, _ = playlist_hits(yt, video_id, pid, unfiltered=True)
+            for intent in intents:
+                if intent["id"] == pid and intent["item"] not in hits:
+                    intent["state"] = "removed"
+            for item in hits:
+                intent = next((x for x in intents if x["id"] == pid and x["item"] == item), None)
+                if intent and intent["state"] == "removed":
+                    continue
+                if dry_run:
+                    result["outcome"] = "would remove"
+                    continue
+                if intent is None:
+                    intent = {"id": pid, "item": item, "state": "intent"}
+                    intents.append(intent)
+                if progress:
+                    progress(out, intents)  # durable intent before the remote mutation
+                try:
+                    yt.playlistItems().delete(id=item).execute()
+                    intent["state"] = "removed"
+                except Exception as err:
+                    message, reason = api_error(err)
+                    result.update(outcome=f"failed: {message}", reason=reason, operation="delete")
+                if progress:
+                    progress(out, intents)
+            result["removed_items"] = [x["item"] for x in intents if x["id"] == pid and x["state"] == "removed"]
+            if result["removed_items"]:
+                out["removed"].append(pid)
+                if not result["outcome"].startswith("failed:"):
+                    result["outcome"] = "removed"
+        except Exception as err:
+            message, reason = api_error(err)
+            result.update(outcome=f"failed: {message}", reason=reason, operation="list")
+        if progress:
+            progress(out, intents)
     return out
 
 
@@ -153,10 +248,13 @@ def main():
         except SystemExit as e:  # login expired: answer from the cache, saying how old it is
             print(json.dumps(cached_find(a.video, str(e)), ensure_ascii=False))
             return
-        hits = items_with(yt, a.video)
+        out = find(yt, a.video)
         names = titles(yt)
-        print(json.dumps({"video": a.video, "playlists": [{"id": pid, "title": names.get(pid, pid), "item": item}
-                                                          for pid, item in hits]}, ensure_ascii=False))
+        for hit in out["playlists"]:
+            hit["title"] = names.get(hit["id"], hit["id"])
+        print(json.dumps(out, ensure_ascii=False))
+        if out.get("error"):
+            raise SystemExit(1)
         return
     if a.cmd == "index":
         out = build_index(api())
@@ -191,13 +289,10 @@ def main():
             for pid, item in hits:
                 print(pid, item)
     elif a.cmd == "remove":
-        yt = api()
-        hits = items_with(yt, a.video)
-        for pid, item in hits:
-            if not a.dry_run:
-                yt.playlistItems().delete(id=item).execute()
-            print(f"{'would remove' if a.dry_run else 'removed'} {a.video} from {pid}")
-        print(json.dumps({"video": a.video, "removed": [] if a.dry_run else [p for p, _ in hits]}))
+        out = remove(api(), a.video, dry_run=a.dry_run)
+        print(json.dumps(out))
+        if any(r["outcome"].startswith("failed:") for r in out["results"]):
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

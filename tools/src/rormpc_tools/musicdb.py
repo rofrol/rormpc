@@ -1067,10 +1067,23 @@ def delete(a):
         export(argparse.Namespace())
     # the last line is what rormpc shows in its status bar (stdout on success, stderr on failure)
     summary = f"{'Deleted permanently' if a.permanent else 'Trashed'}: {', '.join(names)}"
+    if a.listenbrainz:
+        yt_errors = [r["ops"]["youtube"].removeprefix("failed: ") for r in recs
+                     if r.get("ops", {}).get("youtube", "").startswith("failed")]
+        removed = sum(len(r.get("youtube_removed", [])) for r in recs)
+        if yt_errors:
+            summary += " · YouTube removal pending (retried hourly): " + "; ".join(yt_errors)
+        elif any(r.get("ops", {}).get("youtube") == "done" for r in recs):
+            summary += f" · YouTube: removed from {removed} playlists"
+        else:
+            summary += "; history deleted" if not errors else ""
+        other_errors = [r["ops"]["listenbrainz"].removeprefix("failed: ") for r in recs
+                        if r.get("ops", {}).get("listenbrainz", "").startswith("failed")]
+        if other_errors:
+            summary += " · ListenBrainz deletion pending (retried hourly): " + "; ".join(other_errors)
     if errors:
-        notify(summary[:120], f"FAILED, retried hourly: {'; '.join(errors)[:150]}")
-        sys.exit(f"{summary}; failed, retried hourly: {'; '.join(errors)} · {undo_hint(recs[-1])}")
-    print(summary + ("; history deleted" if a.listenbrainz else "") + " · " + undo_hint(recs[-1]))
+        notify(summary[:120], f"Remote cleanup pending, retried hourly: {'; '.join(errors)[:150]}")
+    print(" ".join(summary.splitlines()) + " · " + undo_hint(recs[-1]))
 
 
 def undo_hint(r):
@@ -1111,14 +1124,17 @@ def finish(r):
                 ops["listenbrainz"] = f"failed: {err}"
                 errors.append(f"ListenBrainz: {err}")
     if r.get("ytid") and ops.get("youtube") != "done":
-        yt = youtube_remove(r["ytid"])
+        yt = youtube_remove_record(r)
         if isinstance(yt, str):
             ops["youtube"] = yt
             if not yt.startswith("skipped"):
                 errors.append(f"YouTube: {yt}")
         else:
-            ops["youtube"] = "done"
-            r["youtube_removed"] = yt
+            failures = [p for p in yt["results"] if p["outcome"].startswith("failed:")]
+            r["youtube_failures"] = failures
+            ops["youtube"] = "; ".join(p["outcome"] for p in failures) if failures else "done"
+            if failures:
+                errors.append("YouTube: " + ops["youtube"])
     if ops.get("local") != "done":
         c = db()
         for e in r["events"]:  # local history: keep as tombstones, re-imports skip them
@@ -1302,6 +1318,37 @@ def youtube_remove(ytid):
     if p.returncode:
         return f"failed: {((p.stderr or p.stdout).strip().splitlines() or ['?'])[-1]} https://youtu.be/{ytid}"
     return json.loads(p.stdout.strip().splitlines()[-1])["removed"]
+
+
+def youtube_remove_record(r):
+    """Journal item intent and confirmed outcomes, including partial and ambiguous remote mutations.
+    Unlike the legacy youtube_remove helper, this keeps progress before each individual API write."""
+    from . import yt_playlist
+    if not (DATA / "youtube-playlists.json").exists() and "youtube_playlists" not in r:
+        return "skipped (no playlists chosen: yt-playlist use ID...)"
+
+    def checkpoint(out, intents):
+        r["youtube_items"] = intents
+        removed = r.setdefault("youtube_removed", [])
+        for item in intents:
+            if item["state"] == "removed" and item["id"] not in removed:
+                removed.append(item["id"])
+        r["youtube_results"] = out["results"]
+        # If interrupted here, the next hourly update reconciles the persisted intent.
+        r["ops"]["youtube"] = "failed: removal awaiting confirmation"
+        r["error"] = "YouTube: removal awaiting confirmation"
+        with journal_lock():
+            pending = jsonl(PENDING)
+            write_jsonl(PENDING, [r if p["id"] == r["id"] else p for p in pending])
+
+    try:
+        if "youtube_playlists" not in r:
+            r["youtube_playlists"] = yt_playlist.chosen()
+        checkpoint({"results": r.get("youtube_results", [])}, r.setdefault("youtube_items", []))
+        return yt_playlist.remove(yt_playlist.api(), r["ytid"], progress=checkpoint,
+                                  intents=r["youtube_items"], playlist_ids=r["youtube_playlists"])
+    except (Exception, SystemExit) as err:
+        return f"failed: {err}"
 
 
 def deletions(a):

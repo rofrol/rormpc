@@ -108,8 +108,7 @@ def test_history_delete_failure_is_journaled_and_retried(lib, monkeypatch):
     def down(req, timeout=None):
         raise urllib.error.URLError("ListenBrainz is down")
     monkeypatch.setattr(urllib.request, "urlopen", down)
-    with pytest.raises(SystemExit, match="failed, retried hourly"):
-        delete(listenbrainz=True)
+    delete(listenbrainz=True)  # remote cleanup never turns a successful local deletion into an error
     [rec] = musicdb.jsonl(musicdb.PENDING)
     assert rec["ops"]["listenbrainz"].startswith("failed") and rec["ops"]["local"] == "done"
     assert rec["error"] and musicdb.db().execute("SELECT count(*) FROM events").fetchone()[0] == 0
@@ -149,14 +148,14 @@ def test_permanent_delete_goes_to_done(lib, monkeypatch, capsys):
 
 @pytest.mark.parametrize("permanent, listenbrainz, hint", [
     (False, False, "Trashed: Rick Astley - Never Gonna Give You Up · Ctrl-y undoes"),
-    (False, True, "Trashed: Rick Astley - Never Gonna Give You Up; history deleted · Ctrl-y restores it with its "
+    (False, True, "Trashed: Rick Astley - Never Gonna Give You Up · YouTube: removed from 0 playlists · Ctrl-y restores it with its "
                   "history"),
-    (True, True, "Deleted permanently: Rick Astley - Never Gonna Give You Up; history deleted · Ctrl-y restores "
+    (True, True, "Deleted permanently: Rick Astley - Never Gonna Give You Up · YouTube: removed from 0 playlists · Ctrl-y restores "
                  "(downloads again)"),
 ])
 def test_every_deletion_says_what_ctrl_y_does(lib, monkeypatch, capsys, permanent, listenbrainz, hint):
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: io.BytesIO(b"{}"))
-    monkeypatch.setattr(musicdb, "youtube_remove", lambda ytid: [])
+    monkeypatch.setattr(musicdb, "youtube_remove_record", lambda r: {"results": []})
     delete(permanent=permanent, listenbrainz=listenbrainz)
     assert capsys.readouterr().out.splitlines()[-1] == hint
 
