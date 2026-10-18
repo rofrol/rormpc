@@ -1233,7 +1233,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       test starts on master by itself; close the item when its companions-linux job is green (this item), and note
       the run id.
 
-- [ ] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
+- [x] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
       Dispatched 2026-10-18 as run r-eehcbr64 (worker pi, check `tests`; task in /tmp/task-t-jminob65.md): no
       underline, accent heart on hover, two-cell click target, bold for liked only, and the status-bar hint if the
       status bar can show it without a sticky message or a timer (otherwise the worker reports what it could not do).
