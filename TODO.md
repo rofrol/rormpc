@@ -1244,6 +1244,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       heart takes the accent colour (checked on the selected row too), and the column is two cells wide (heart + a
       blank, which is also the click target); bold stays for liked only.
 
+- [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing
+      t-jsjs5ngd's and t-jminob65's worker commits): two workers in a row were blocked by the conflict between
+      AGENTS.md's "add an (AI-assisted) text to all messages" and the driver's requirement that a worker's commit
+      subject equal the coordinator's `--message` exactly, with no body. The coordinator now puts "(AI-assisted)" in
+      its `--message`, so the worker can obey both; write that into AGENTS.md "Coordination" (one line: the subject
+      the driver is given carries the disclosure, a worker adds nothing to the body) and say so in the worker
+      contract template. Parent: t-jminob65. Cost: a text change, no build.
 - [ ] Drop RORMPC_TOOLS_TAG from scripts/rormpc_install.sh: rmpc/src/shared/dependencies.rs reads it at build time for [t-z5e3iizs]
       the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
       `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
@@ -1819,7 +1826,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Needs a decision
 
-- [ ] The like column's hover hint in the status bar: the rest of d-njr573xw landed 2026-10-18 (no underline, accent
+- [x] The like column's hover hint in the status bar: the rest of d-njr573xw landed 2026-10-18 (no underline, accent
       heart, two-cell click target, bold for liked only; run r-eehcbr64, commit 393c76f), but the "click: like" /
       "click: unlike" text while the pointer is on the heart could not be built. The status bar is fed by
       `AppEvent::Status` messages that the event loop removes on a timer, so a hint would be sticky or need a timer,
@@ -1830,6 +1837,10 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       column's header row instead ("♥ click")
       Checked: worker w471's WORKER-BLOCKED report of run r-eehcbr64 and rmpc/src/shared/macros.rs:36-47 (the
       `status_info!`/`status_error!` log targets) plus the status-bar event handling in rmpc/src/ui.
+      Decided by the user 2026-10-18 ("tak", to the recommended option): build a hover-scoped status API — a pane
+      sets and clears the status line in the same mouse events that set and clear its hover state, with no timer —
+      and then show "click: like" / "click: unlike" while the pointer is on the heart. Approved work: the next run
+      of t-jminob65 after the styling one lands.
 
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in [t-4rtdcdqz]
       its first ~3 s? Decided 2026-10-07: no, Previous always goes back.
