@@ -1169,6 +1169,29 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       stable-ts, keeping Whisper's times where the alignment cost is high), which needs the model downloads and so
       runs outside a worker's sandbox — a herdr-job on this machine, read-only, results under
       ~/.local/share/rormpc-tools/.
+      Pilot core landed 2026-10-18 (run r-u6kher4r, worker pi/gpt-6.1-sol, commit 359888d; checks `tests tools` by
+      the driver's verify, 15 pure tests passed): `tools/src/rormpc_tools/transcribe_align.py` (full-utterance CTC
+      Viterbi with stay/advance/skip transitions, half-open frames, log-probability emissions, NFC/case-fold matching
+      that never changes the words, a per-word evidence margin averaged per token then per word, word/song fallback
+      thresholds defaulting to 0.2, whole-song fallback when any letter is outside the vocabulary, monotonicity
+      guards) and `tools/src/rormpc_tools/data/align_backend.py` (inline-dependency MMS/wav2vec2 CTC backend printing
+      vocabulary, emissions and frame rate; no model downloaded in the tests), plus README. The shipped transcription
+      path is untouched.
+      Consult round 20261018-113455-9cab (Sol, MiMo, Argon, all useful) on the pilot protocol, checked against the
+      code: start with torchaudio MMS_FA for all three languages (one inventory, one threshold; switch to a
+      language-specific wav2vec2 only if one language fails the gates); MMS_FA needs **uroman** romanization, which
+      this core deliberately does not do, so without it every Polish/French word falls outside the vocabulary and the
+      whole song falls back — the follow-up must add uroman in the backend and map the times back; word gate ~0.35
+      (Sol asked for a stronger measure: geometric mean posterior >= 0.5 with a margin >= 0.7 nats) with a whole-song
+      fallback when more than ~30% of words are weak, plus Argon's guard `|t_CTC - t_Whisper| > 2.5 s` for a word;
+      the cohort must be the 10 gold songs plus 10 more **with** synced lyrics (444 exist) because accuracy cannot be
+      measured on songs without a reference; score whisper vs refined with the line segmentation **locked to the
+      reference breaks** (MiMo: otherwise `hit` is confounded by re-segmentation) and require exactly equal words
+      (WER unchanged); freeze thresholds on 5 songs and keep 15 held out; pass gates: median |p50| <= 0.35 s, median
+      p90 <= 1.2 s, |drift| < 0.2-0.5 s/min, `hit` +10 pp or >= 0.75-0.8, no song worse in p90 by > 0.2-0.25 s;
+      abandon forced alignment if p90 improves < 15%; stable-ts is a separate follow-up (it re-segments lines and
+      would confound `hit`); CPU only — `torchaudio.functional.forced_align` has no MPS kernel — expecting ~15-25 min
+      for 70-80 min of audio with batch_size 1 and 2-4 GB RSS.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
