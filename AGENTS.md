@@ -113,6 +113,10 @@ on 2026-10-12. The old repository rofrol/rormpc-tools is archived (its tags stay
 
 ## Coordination
 
+To reconcile AGENTS.md's AI disclosure rule with herdr's exact-message verify, the coordinator puts
+`(AI-assisted)` in the `--message` subject given to `herdr todo run`, so the landed commit carries the disclosure.
+The worker commits exactly that subject, with no body or trailers, and does not add the marker itself.
+
 - One TODO coordinator for the whole repository, `tools/` included (herdr's rule of one coordinator per git
   repository, d-33kat4ps; since the move of rormpc-tools into `tools/`, d-kgxuqbvh, 2026-10-12): herdr agent
   `todo-rormpc` owns its `TODO.md`, workers and installs. The music-mpd coordinator keeps music-data and sends rormpc
