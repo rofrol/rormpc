@@ -2202,6 +2202,11 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       handed over to a note). r-iigptjsv stays waiting at preflight: it starts when a slot frees or after herdr's
       fix, whichever comes first; if herdr says the waiting run cannot start, redispatch the same task and paths
       (its task file is /tmp/task-t-jsjs5ngd-a.md).
+      Resumed 2026-10-18 03:47 (the user: "już sol dostępny do konsultacji, wznów"): the DeepSeek cap had cleared
+      and the run was blocked at preflight on disk instead ("0.4 GiB free ..., less than 15 GiB"; 28 GiB free by then,
+      it had been transient), so run r-iigptjsv was aborted (event 220484, the only action it offered) and the item
+      redispatched with `--agent pi` on the ChatGPT plan: run r-alp4b557 started (attempt 1, step start). Wait with
+      `herdr-job` + `herdr todo wait r-alp4b557`.
 
 ## Waiting on rormpc-tools
 
