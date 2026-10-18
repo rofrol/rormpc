@@ -1143,6 +1143,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       model downloads and so runs outside the worker sandbox.
       Slice 2 dispatched 2026-10-18 (run r-z4prcxfk): the sync metric by monotonic word alignment (signed p50, p90
       of the absolute error, drift per minute, the share of sampled times with the right line), check `tests tools`.
+      Blocked 2026-10-18 04:17: worker w458 (pi, gpt-6.1-sol) was reattached after herdr's 0.9.3 install restarted
+      the server and then its broker died; the worker record stays state=working with exited=0, `herdr worker
+      interrupt|stop|kill` do not change it, the run sits at step attention with `runs.pending_event` null, `todo
+      resume` has no event id to answer and `cancel-pending` refuses, so the run cannot be aborted by the documented
+      path (herdr report r-105; asked the herdr coordinator for the recovery action and the fix). Two files are
+      modified but uncommitted in the shared worker worktree (base 2e871e3); a fresh run for this slice needs that
+      slot reverted first. Next: redispatch slice 2 once the stuck run is resolved or once the user says to force it.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
