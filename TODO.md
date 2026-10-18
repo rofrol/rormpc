@@ -1333,6 +1333,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Read-only MPD check 2026-10-13: Title/Album PILLOWTALK, Artist ZAYN, recording MBID present,
       no Date or OriginalDate; hits.library_songs passes title/artist through unchanged. Actual file tags and
       official capitalization remain unverified; the filename's upload date is not release-year evidence.
+      File-tag audit 2026-10-18 (read-only, mutagen over the library, herdr-job 20261018-112057-cc90): 806 audio
+      files; **178 have no date tag at all** (so the missing year is source metadata, not a display or cache bug);
+      PILLOWTALK's tags are title "PILLOWTALK", artist "ZAYN", album "PILLOWTALK", no date — and both the title and
+      the artist are exactly the YouTube uploader's strings, which answers the "why the caps" question: the tags
+      copy the source title, the caps are not introduced by rormpc (9 titles and 32 artist strings are all-caps;
+      several are legitimate, e.g. M83, LMFAO, AWOLNATION, VA). Next: the year repair is the existing `musicdb
+      years` review workflow (reviewed, backed-up, atomic apply and rollback) over the 178 files without a date; it
+      needs the user's approval of the proposed years, and dates are never guessed from upload dates.
       Consult round 20261013-101517-e1fa (MiMo and DeepSeek): first compare file tags with MPD, then audit missing
       dates and capitalization provenance; reuse years.py's reviewed, freshness-guarded, backed-up atomic apply
       and rollback. Caps alone are not an error. Include unavailable release metadata, migration of upload dates,
