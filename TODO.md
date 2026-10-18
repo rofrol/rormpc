@@ -1266,6 +1266,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       ("2" liked, the values in rmpc/src/ui/rormpc_actions.rs:59-60; a ✗ becomes liked on a click, so it says
       "click: like"). Tests cover the ownership and leaving rules, the redraw bookkeeping, the timed-message
       priority and the rendered text.
+      Also landed under this run (dispatched with this item's id by mistake): the AGENTS.md paragraph that
+      reconciles the (AI-assisted) disclosure rule with herdr's exact-message verify — it belongs to item
+      t-5n24p4bs, which is marked done with that commit.
 
 - [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing [t-5n24p4bs]
       t-jsjs5ngd's and t-jminob65's worker commits): two workers in a row were blocked by the conflict between
