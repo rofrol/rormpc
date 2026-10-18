@@ -1255,6 +1255,17 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       repository's disclosure rule both hold.
       Next run of this item (approved by the user 2026-10-18, "tak"): the hover-scoped status API and then the
       "click: like"/"click: unlike" hint while the pointer is on the heart.
+      Landed 2026-10-18 (run r-ich3gpku, worker pi/gpt-6.1-sol, commit c65d2eb; check `tests` by the driver's
+      verify): the status bar now has a hover-scoped hint beside the timed messages. `Ctx` keeps the hint with the
+      pane that owns it and the area it covers (`set_like_hint`, `clear_like_hint`, `clear_hover_outside`,
+      `refresh_like_hint`, `set_hover_hint`), so a pane sets it when the pointer enters the like cell and clears it
+      when the pointer leaves that area, another pane cannot clear it, and a repaint cannot resurrect a departed
+      hover; only a real change sends `AppEvent::HoverHintChanged`, so no redraw is left pending (no timer
+      anywhere). The progress bar shows the hint only while no timed status message is alive, so an error is never
+      hidden. Hits, the queue and the queue plan show "click: like" / "click: unlike" from the song's like sticker
+      ("2" liked, the values in rmpc/src/ui/rormpc_actions.rs:59-60; a ✗ becomes liked on a click, so it says
+      "click: like"). Tests cover the ownership and leaving rules, the redraw bookkeeping, the timed-message
+      priority and the rendered text.
 
 - [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing
       t-jsjs5ngd's and t-jminob65's worker commits): two workers in a row were blocked by the conflict between
