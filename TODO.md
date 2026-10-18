@@ -1154,6 +1154,21 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       exited), the run's review event arrived and the coordinator aborted it; slice 2 was redispatched as run
       r-52mionae (agent pi). This session's lease went stale with the server handoff and was taken over again (pid
       97133).
+      Slice 2 landed 2026-10-18 (run r-52mionae, worker pi/gpt-6.1-sol, commit 159af42; the coordinator ran
+      `uv run --directory tools pytest -q` in the run's worktree: 685 passed): `transcribe_eval.sync()` now aligns the
+      reference and transcript words monotonically (unit gap/substitution costs, a reference line matched when at
+      least half its words match, the transcript line owning most matches, strictly increasing pairs) and reports
+      `matched`, the signed `p50`, the absolute `p90`, `drift` in seconds per minute and `hit`, the share of 2 s
+      samples where the line a player would show is the matched one; `within` counts matched pairs only. The summary
+      keeps `median_sync` as a median magnitude and adds `median_drift` and `median_hit`; the table's columns are
+      p50/p90/drift/hit. Tests cover the flaw that motivated this (over-segmentation no longer improves p50 or hit),
+      a constant offset, clock drift (1.1x times give 6 s/min), absent words, and the table. Known limitation,
+      documented in a test: when a later fragment of a line is what a player would display between two reference
+      starts, `hit` counts it a miss, so fragmentation can lower `hit` even when the timing is right.
+      Next: the forced-alignment pilot on ~20 songs (the plan's step: wav2vec2/MMS-CTC on the vocal stem against
+      stable-ts, keeping Whisper's times where the alignment cost is high), which needs the model downloads and so
+      runs outside a worker's sandbox — a herdr-job on this machine, read-only, results under
+      ~/.local/share/rormpc-tools/.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
