@@ -2179,6 +2179,19 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: accept the round's meanwhile plan | wait for herdr's `todo run --repo`
       Checked: herdr-85's message of 2026-10-12 (d-s2mkmlzc).
 
+- [ ] Worker dispatch is blocked: neither subscription has capacity, so "Next, in order" cannot run (herdr's quota
+      gate refused the first item's worker). Wait for the window, override the gate once, or stop until capacity
+      returns?
+      Options: wait for the window (recommended: herdr's usage poller publishes a measurement and wakes the pending
+      start when the reading drops below 80%, no timer of ours) | allow `--ignore-usage` for this one item now (the
+      user's explicit permission for this launch: `todo cancel-pending r-6fh3o42n`, then a new run with the flag) |
+      stop coordinating and leave the items for later
+      Checked: `herdr todo run t-jsjs5ngd` on 2026-10-18 02:47 created run r-6fh3o42n (attempt 1, step preflight,
+      status waiting) and the gate refused it: "OpenAI (ChatGPT plan) window five_hour (5h): 100% used (the gate
+      closed at a refusal reopens only below 80%)"; the Claude Code subscription reported its monthly limit on
+      2026-10-17 21:51 ("your weekly limit resets Oct 22 at 2am"). No run of this repository is in flight; the
+      predecessor's 278 runs are all terminal.
+
 ## Waiting on rormpc-tools
 
 Items that consume rormpc-tools work and wait on its coordinator's "landed <tag>" (cross-repository rule in AGENTS.md "Coordination", 2026-10-12). They move back to "Next, in order" when it replies.
