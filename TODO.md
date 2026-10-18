@@ -1270,13 +1270,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       reconciles the (AI-assisted) disclosure rule with herdr's exact-message verify — it belongs to item
       t-5n24p4bs, which is marked done with that commit.
 
-- [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing [t-5n24p4bs]
+- [x] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing [t-5n24p4bs]
       t-jsjs5ngd's and t-jminob65's worker commits): two workers in a row were blocked by the conflict between
       AGENTS.md's "add an (AI-assisted) text to all messages" and the driver's requirement that a worker's commit
       subject equal the coordinator's `--message` exactly, with no body. The coordinator now puts "(AI-assisted)" in
       its `--message`, so the worker can obey both; write that into AGENTS.md "Coordination" (one line: the subject
       the driver is given carries the disclosure, a worker adds nothing to the body) and say so in the worker
       contract template. Parent: t-jminob65. Cost: a text change, no build.
+      Done 2026-10-18 (commit d699dff, landed under run r-22dveye3): the paragraph is in AGENTS.md "Coordination".
 - [ ] Drop RORMPC_TOOLS_TAG from scripts/rormpc_install.sh: rmpc/src/shared/dependencies.rs reads it at build time for [t-z5e3iizs]
       the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
       `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
