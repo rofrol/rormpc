@@ -1216,8 +1216,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       compares the channel list for exact equality with `want="listenbrainz_feedback rormpc"`, while
       ro-listenbrainz-mpd also subscribes to listenbrainz_listen, so the log shows
       "MPD channels: listenbrainz_feedback listenbrainz_listen rormpc" and fails on the extra channel. The fix is a
-      containment test of the two channels that prove the daemons are connected. Its worker task is written
-      (/tmp/task-t-kwqstgkt.md) but dispatch is blocked while run r-z4prcxfk is stuck (see t-jsjs5ngd).
+      containment test of the two channels that prove the daemons are connected. Worker task written
+      (/tmp/task-t-kwqstgkt.md); dispatched 2026-10-18 as run r-cmzeb4fd once herdr cleared the stuck run.
 
 - [ ] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
       models"): the underline marks the heart under the mouse (rmpc/src/ui/rormpc_actions.rs `hovered_like`), and in
