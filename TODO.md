@@ -1209,7 +1209,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Decided by the user 2026-10-12 (d-qf5urpbq): the reference labels come from Whisper large-v3 on the tails; the
       user listens only to the disputed ones.
 
-- [ ] CI: the installer smoke test's companions-linux job fails on master: "a daemon never subscribed to its MPD [t-kwqstgkt]
+- [x] CI: the installer smoke test's companions-linux job fails on master: "a daemon never subscribed to its MPD [t-kwqstgkt]
       channel" (MPD channels listenbrainz_feedback, listenbrainz_listen, rormpc; runs 38187215102, 38188905972);
       found while checking the rewritten history, failing before it.
       Root cause read 2026-10-18 from the job log: the step "Units are enabled and active, and their programs run"
@@ -1218,6 +1218,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "MPD channels: listenbrainz_feedback listenbrainz_listen rormpc" and fails on the extra channel. The fix is a
       containment test of the two channels that prove the daemons are connected. Worker task written
       (/tmp/task-t-kwqstgkt.md); dispatched 2026-10-18 as run r-cmzeb4fd once herdr cleared the stuck run.
+      Done 2026-10-18 (run r-cmzeb4fd, commit f4d6523): the step now uses `has_channel()` for `rormpc` and
+      `listenbrainz_feedback`, extra channels are allowed, a missing one fails with its name. Confirmed on master:
+      the Installer smoke test of efedbc8 (run 39096017797) has **companions-linux: success** (it failed in every
+      earlier run: 38256551254, 38190365753, 38189525687). Its other job, install-stubbed (macos-latest), still
+      fails, but it failed in the previous run too, so it is a separate problem: "Proposed".
       Fix landed 2026-10-18 (run r-cmzeb4fd, worker pi/gpt-6.1-sol, commit 62aba8e; the coordinator checked the
       containment logic against three channel lists: the CI case passes, an extra channel passes, a missing channel
       fails naming it): the step "Units are enabled and active, and their programs run" no longer compares the
@@ -1760,6 +1765,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
+
+- [ ] The installer smoke test's macOS job fails on master: the `install-stubbed (macos-latest)` job of
+      .github/workflows/installer_smoke.yml fails in `scripts/test_rormpc_install.sh` (the log ends after
+      "restart running rormpc instances to use it" with exit code 1; it also failed in run 38256551254 of
+      2026-10-12, before the companions-linux fix, so it is not caused by it). Needs a run of the workflow with the
+      failing assertion read out of the full log, then the fix, and the same kind of review as t-kwqstgkt. Cost:
+      one worker run plus a CI run to confirm.
 
 - [x] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
       20261017-150106-b061, DeepSeek; after the 2026-10-18 round 20261018-015021-5614): OSXOutputPlugin sets the
