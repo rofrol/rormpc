@@ -1229,6 +1229,9 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the run id.
 
 - [ ] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
+      Dispatched 2026-10-18 as run r-eehcbr64 (worker pi, check `tests`; task in /tmp/task-t-jminob65.md): no
+      underline, accent heart on hover, two-cell click target, bold for liked only, and the status-bar hint if the
+      status bar can show it without a sticky message or a timer (otherwise the worker reports what it could not do).
       models"): the underline marks the heart under the mouse (rmpc/src/ui/rormpc_actions.rs `hovered_like`), and in
       the user's font the glyph is wider than its cell, so it looks like a glitch. Round 20261012-025148 (sol 124bcaab,
       MiMo 9800a64b, DeepSeek 2c338633): drop the underline. Decided by the user 2026-10-12 (d-njr573xw, after a
