@@ -1141,6 +1141,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       alignment to the reference, signed error p50/p90 per song and drift over the song, replacing the
       nearest-line-start distance — as its own run; then the forced-alignment pilot on ~20 songs, which needs the
       model downloads and so runs outside the worker sandbox.
+      Slice 2 dispatched 2026-10-18 (run r-z4prcxfk): the sync metric by monotonic word alignment (signed p50, p90
+      of the absolute error, drift per minute, the share of sampled times with the right line), check `tests tools`.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
