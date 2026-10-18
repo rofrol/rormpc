@@ -1218,6 +1218,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "MPD channels: listenbrainz_feedback listenbrainz_listen rormpc" and fails on the extra channel. The fix is a
       containment test of the two channels that prove the daemons are connected. Worker task written
       (/tmp/task-t-kwqstgkt.md); dispatched 2026-10-18 as run r-cmzeb4fd once herdr cleared the stuck run.
+      Fix landed 2026-10-18 (run r-cmzeb4fd, worker pi/gpt-6.1-sol, commit 62aba8e; the coordinator checked the
+      containment logic against three channel lists: the CI case passes, an extra channel passes, a missing channel
+      fails naming it): the step "Units are enabled and active, and their programs run" no longer compares the
+      channel list for exact equality. `has_channel()` tests that `rormpc` and `listenbrainz_feedback` are present,
+      the wait loop breaks as soon as both are, extra channels are allowed, and a missing one fails with its name.
+      The comment now records that the scrobbler subscribes to listenbrainz_listen as well.
+      Open until the next CI run confirms it: the push that lands this touches this workflow, so the Installer smoke
+      test starts on master by itself; close the item when its companions-linux job is green (this item), and note
+      the run id.
 
 - [ ] The like column's hover cue (asked 2026-10-12, a screenshot: "what is this underline under the heart? ask the [t-jminob65]
       models"): the underline marks the heart under the mouse (rmpc/src/ui/rormpc_actions.rs `hovered_like`), and in
