@@ -1,19 +1,19 @@
 # /// script
 # requires-python = ">=3.11,<3.13"
-# dependencies = ["torch==2.5.1", "torchaudio==2.5.1"]
+# dependencies = ["torch==2.5.1", "torchaudio==2.5.1", "uroman==1.3.1.1"]
 # ///
 """CTC emissions only; run with uv run --script, never import in the package.
 
-Usage: uv run --script align_backend.py --audio vocals.wav [--model MMS_FA]
+Usage: uv run --script align_backend.py --audio vocals.wav [--model MMS_FA] [--words words.json]
 Default model: torchaudio.pipelines.MMS_FA (multilingual, romanized labels).
 Input must already be 16 kHz mono WAV; this script does not separate/resample.
 Output is one JSON document: vocabulary (index order), blank_id, log-probability
 emissions (frames x labels, float32 rounded to 6 decimals), frame_rate (Hz),
 and model_id. No wildcard/star label: an unsupported word must fall back, not
-silently be absorbed by a wildcard. MMS expects romanization; the pilot core
-intentionally keeps unsupported Polish/French letters at Whisper times instead
-of changing or guessing words. Language-specific models/romanization and singing
-quality must be evaluated before this is connected to the transcript path.
+silently be absorbed by a wildcard. With --words (a JSON list of word strings),
+uroman provides a parallel words_uroman list for matching only; a failed word is
+an empty string. Singing quality must be evaluated before this is connected to
+the transcript path.
 """
 import argparse
 import contextlib
@@ -27,7 +27,28 @@ def main():
     parser.add_argument("--audio", required=True, help="16 kHz mono vocal-stem WAV")
     parser.add_argument("--model", choices=["MMS_FA"], default="MMS_FA",
                         help="torchaudio pipeline (default: MMS_FA)")
+    parser.add_argument("--words", help="JSON list of transcript word strings to romanize")
     args = parser.parse_args()
+    words_uroman = None
+    if args.words:
+        try:
+            with open(args.words, encoding="utf-8") as source:
+                words = json.load(source)
+            if not isinstance(words, list) or not all(isinstance(word, str) for word in words):
+                raise ValueError("expected a JSON list of word strings")
+        except (OSError, ValueError) as exc:
+            parser.exit(1, f"align backend: cannot read words: {exc}\n")
+        with contextlib.redirect_stdout(sys.stderr):
+            import uroman
+
+            romanizer = uroman.Uroman()
+            words_uroman = []
+            for word in words:
+                try:
+                    text = romanizer.romanize_string(word)
+                    words_uroman.append(text if isinstance(text, str) else "")
+                except Exception:
+                    words_uroman.append("")
     # Keep dependency/model progress away from the JSON stream.
     with contextlib.redirect_stdout(sys.stderr):
         import torch
@@ -56,10 +77,11 @@ def main():
             stride = math.prod(layer.conv.stride[0] for layer in model.feature_extractor.conv_layers)
         except (RuntimeError, ValueError) as exc:
             parser.exit(1, f"align backend: CTC inference failed: {exc}\n")
+    extra = {"words_uroman": words_uroman} if words_uroman is not None else {}
     json.dump({"vocabulary": vocabulary, "blank_id": 0,
                "emissions": [[round(p, 6) for p in row] for row in emissions.tolist()],
                "frame_rate": rate / stride, "model_id": "torchaudio/2.5.1/MMS_FA",
-               "emission_format": "log_probabilities_float32_rounded_6"}, sys.stdout, allow_nan=False)
+               "emission_format": "log_probabilities_float32_rounded_6", **extra}, sys.stdout, allow_nan=False)
     print()
 
 

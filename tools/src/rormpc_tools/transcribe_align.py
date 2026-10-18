@@ -2,15 +2,19 @@
 
 Emissions are *log probabilities*, frames x vocabulary (the backend's JSON list),
 not logits. Frame intervals are half-open. The vocabulary contains single-character
-labels and a blank; no implicit transliteration is performed. NFC/case folding and
-punctuation removal are matching-only: original word strings are always retained.
-Unsupported letters (including accents absent from a model) keep the whole song.
+labels and a blank; no implicit transliteration is performed. Optional parallel
+romanized spellings, NFC/case folding and punctuation removal are matching-only:
+original word strings are always retained. Without romanized spellings, unsupported
+letters keep the whole song; with them, an unusable spelling keeps only that word.
 
 Evidence is the mean positive posterior margin over the best competing label on
 nonblank path frames, averaged first by token, then by word. Uniform or blank-only
-emissions score zero. The 0.2 word/song gates are conservative pilot defaults, not
-calibrated singing confidence: melisma/backing vocals still need evaluation against
-stable-ts. This measures acoustic support, not a calibrated probability of timing.
+emissions score zero. A weak word (evidence below 0.35, unusable romanization or a
+start displacement over 2.5 seconds) costs its own alignment and counts toward the
+weak-word share: more than 0.30 abandons the whole song. These calibrated pilot
+defaults come from consult round 20261018-113455-9cab (Sol, MiMo, Argon).
+This measures acoustic support, not a calibrated probability of timing; singing,
+melisma and backing vocals still need evaluation against stable-ts.
 """
 import math
 import unicodedata
@@ -26,7 +30,7 @@ def _tokens(word, vocabulary, blank_id):
 
 
 def align_words(words, emissions, frame_rate, vocabulary, *, blank_id=0,
-                word_threshold=0.2, song_threshold=0.2):
+                romanized=None, word_threshold=0.35, song_threshold=0.30, max_shift_s=2.5):
     """Return copies with times and alignment metadata; never edit the input.
 
     Full-utterance CTC Viterbi uses stay/advance/skip transitions, with a mandatory
@@ -42,6 +46,10 @@ def align_words(words, emissions, frame_rate, vocabulary, *, blank_id=0,
         raise ValueError("vocabulary must be unique and contain blank_id")
     if not all(0 <= t <= 1 for t in (word_threshold, song_threshold)):
         raise ValueError("evidence thresholds must be between zero and one")
+    if not math.isfinite(max_shift_s) or max_shift_s < 0:
+        raise ValueError("max_shift_s must be finite and nonnegative")
+    if romanized is not None and len(romanized) != len(words):
+        raise ValueError("romanized must be parallel to words")
     result = [dict(w, start_frame=None, end_frame=None, evidence=0.0,
                    aligned=False, reason="no_path") for w in words]
     if not words:
@@ -56,12 +64,20 @@ def align_words(words, emissions, frame_rate, vocabulary, *, blank_id=0,
             raise ValueError("emission row has no finite probability")
         z = peak + math.log(sum(math.exp(x - peak) for x in row))
         rows.append([x - z for x in row])
-    token_words = [_tokens(w["word"], vocabulary, blank_id) for w in words]
-    if any(t is None for t in token_words):
+    spellings = romanized if romanized is not None else [w["word"] for w in words]
+    token_words = [_tokens(text, vocabulary, blank_id) for text in spellings]
+    if romanized is None and any(t is None for t in token_words):
         for w in result:
             w["reason"] = "unsupported_word"
         return result
-    tokens = [t for ts in token_words for t in ts]
+    for w, ts in zip(result, token_words):
+        if ts is None:
+            w["reason"] = "unsupported_word"
+    tokens = [t for ts in token_words if ts is not None for t in ts]
+    if not tokens:
+        for w in result:
+            w["reason"] = "weak_song"
+        return result
     states = [blank_id]
     for token in tokens:
         states.extend((token, blank_id))
@@ -97,20 +113,28 @@ def align_words(words, emissions, frame_rate, vocabulary, *, blank_id=0,
         token_evidence.append(sum(margins) / len(margins))
     offset = 0
     for w, ts in zip(result, token_words):
+        if ts is None:
+            continue
         count = len(ts)
         matched = [f for fs in frames[offset:offset + count] for f in fs]
         w.update(start_frame=min(matched), end_frame=max(matched) + 1,
                  evidence=sum(token_evidence[offset:offset + count]) / count)
         offset += count
-    evidence = sum(w["evidence"] for w in result) / len(result)
     for w in result:
-        if evidence < song_threshold:
-            w["reason"] = "weak_song"
-        elif w["evidence"] <= 0 or w["evidence"] < word_threshold:
+        if w["start_frame"] is None:
+            continue
+        if w["evidence"] <= 0 or w["evidence"] < word_threshold:
             w["reason"] = "weak_word"
+        elif abs(w["start_frame"] / frame_rate - w["start"]) > max_shift_s:
+            w["reason"] = "max_shift"
         else:
             w.update(start=w["start_frame"] / frame_rate, end=w["end_frame"] / frame_rate,
                      aligned=True, reason="aligned")
+    weak_share = sum(not w["aligned"] for w in result) / len(result)
+    if weak_share > song_threshold:
+        for w, old in zip(result, words):
+            w.update(start=old["start"], end=old["end"], aligned=False, reason="weak_song")
+        return result
     # Each pass rejects at least one candidate, so this is bounded by word count.
     for _ in range(len(result)):
         reject = set()
@@ -125,7 +149,7 @@ def align_words(words, emissions, frame_rate, vocabulary, *, blank_id=0,
     return result
 
 
-def refine_lines(words, emissions, frame_rate, vocabulary, groups=None, **options):
+def refine_lines(words, emissions, frame_rate, vocabulary, groups=None, *, romanized=None, **options):
     """Return (make_lines-shaped lines, summary); groups are original word indexes.
 
     With no groups, the utterance is one line. Supply the existing regroup() result
@@ -133,7 +157,7 @@ def refine_lines(words, emissions, frame_rate, vocabulary, groups=None, **option
     across *all* words, including zero shifts for words kept at Whisper's times.
     align_words() exposes per-word frames, evidence and fallback reasons.
     """
-    refined = align_words(words, emissions, frame_rate, vocabulary, **options)
+    refined = align_words(words, emissions, frame_rate, vocabulary, romanized=romanized, **options)
     if groups is None:
         groups = [list(range(len(words)))] if words else []
     aligned = sum(w["aligned"] for w in refined)
