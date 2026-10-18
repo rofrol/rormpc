@@ -1150,6 +1150,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       path (herdr report r-105; asked the herdr coordinator for the recovery action and the fix). Two files are
       modified but uncommitted in the shared worker worktree (base 2e871e3); a fresh run for this slice needs that
       slot reverted first. Next: redispatch slice 2 once the stuck run is resolved or once the user says to force it.
+      Resolved 2026-10-18 05:35 by herdr's rebuild (roherdr 6f35ab749): the orphaned worker w458 was reaped (state
+      exited), the run's review event arrived and the coordinator aborted it; slice 2 was redispatched as run
+      r-52mionae (agent pi). This session's lease went stale with the server handoff and was taken over again (pid
+      97133).
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
