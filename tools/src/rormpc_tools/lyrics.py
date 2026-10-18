@@ -246,6 +246,11 @@ def cmd_transcribe_eval(a):
     transcribe_eval.cmd(a)
 
 
+def cmd_align_pilot(a):
+    from . import align_pilot
+    align_pilot.cmd(a)
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="musicdb lyrics", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -266,5 +271,9 @@ def main(argv):
     p = sp.add_parser("transcribe-eval"); p.add_argument("list"); g = p.add_mutually_exclusive_group()
     g.add_argument("--out"); g.add_argument("--from", dest="from_dir"); p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_transcribe_eval)
+    p = sp.add_parser("align-pilot"); p.add_argument("list"); p.add_argument("--out", required=True)
+    p.add_argument("--raw", help="saved transcribe-eval results (default: --out)")
+    p.add_argument("--backend"); p.add_argument("--limit", type=int); p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_align_pilot)
     a = ap.parse_args(argv)
     a.fn(a)

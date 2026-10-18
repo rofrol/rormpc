@@ -169,6 +169,19 @@ the model only when explicitly run and prints vocabulary, emissions and frame ra
 mean unsupported Polish/French letters currently fall back unchanged. The evidence gates are provisional; singing,
 melisma and backing vocals still need comparison with stable-ts before integration. Neither file writes sidecars.
 
+`musicdb lyrics align-pilot LIST --raw EVAL_DIR --out DIR [--backend PATH] [--limit N] [--json]` compares saved
+Whisper words with forced alignment, without transcribing or creating stems. LIST is an evaluation TSV
+(`path<TAB>lyrics` for the 10 pilot songs, `path<TAB>held-out` for the 10 held-out songs; label-first also works);
+all 20 need synced reference lyrics. `--raw` names the earlier transcribe-eval output directory (there is no fixed
+evaluation default: it prints its temporary directory); omitted, it uses `--out`. Missing raw results, stems or
+references are reported as skipped. Both candidates use the same reference-derived lexical word partitions, never
+the candidate's line breaks. `pilot.json` records scores, exact word identity, aligned/kept counts, fallback reasons
+and mean endpoint shift; a table prints the six numbered gates. Aggregates are equal-song medians for timing,
+equal-song mean for hit and word-weighted aligned share; overall p90 improvement is the relative median reduction.
+PASS requires every gate and the complete 10+10 protocol; under 15% p90 improvement is ABANDON, otherwise failed
+gates give FAIL (partial runs give INCOMPLETE). `--json` prints JSON on stdout and the table on stderr. Cached
+float32 NPY stems are converted to disposable 16 kHz mono WAV backend inputs; the library and MPD are never written.
+
 ## Dependencies
 
 A missing program ends a command with one line: `<tool>: <program> not found on PATH; <what needs it>. Install:`
