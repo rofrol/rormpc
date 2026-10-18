@@ -165,6 +165,7 @@ impl<'ui> Ui<'ui> {
     }
 
     pub fn change_tab(&mut self, new_tab: TabName, ctx: &mut Ctx) -> Result<()> {
+        ctx.set_hover_hint(None)?;
         self.layout.for_each_pane(
             self.area,
             &mut |pane, _, _, _, _| {
@@ -270,6 +271,9 @@ impl<'ui> Ui<'ui> {
     }
 
     pub fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &mut Ctx) -> Result<()> {
+        // Composite panes may route the next move to a different child, so the old owner
+        // need not receive a leave event. Its painted cell still defines the hover's scope.
+        ctx.clear_hover_outside(event.into())?;
         let is_click = matches!(event.kind, MouseEventKind::LeftClick | MouseEventKind::RightClick);
         if let Some(ref mut modal) = self.modals.last_mut() {
             if is_click {
@@ -1014,6 +1018,7 @@ impl<'ui> Ui<'ui> {
     pub fn on_ui_app_event(&mut self, event: UiAppEvent, ctx: &mut Ctx) -> Result<()> {
         match event {
             UiAppEvent::Modal(modal) => {
+                ctx.set_hover_hint(None)?;
                 let existing_modal = modal.replacement_id().and_then(|id| {
                     self.modals
                         .iter_mut()
@@ -1061,6 +1066,7 @@ impl<'ui> Ui<'ui> {
     }
 
     pub fn resize(&mut self, area: Rect, ctx: &Ctx) -> Result<()> {
+        ctx.set_hover_hint(None)?;
         log::trace!(area:?; "Terminal was resized");
         self.calc_areas(area, ctx);
 

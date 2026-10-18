@@ -86,6 +86,8 @@ pub fn ctx(
         scheduler,
         db_update_start: None,
         messages: RingVec::default(),
+        hover_hint: RefCell::new(None),
+        hover_hint_scope: Cell::new(None),
         last_status_update: Instant::now(),
         song_played: None,
         input: InputManager::default(),

@@ -339,6 +339,9 @@ fn main_task<B: Backend + std::io::Write>(
                     resolved_key_event = ctx.key_resolver.handle_timeout(&ctx);
                     render_wanted = true;
                 }
+                AppEvent::HoverHintChanged => {
+                    render_wanted = true;
+                }
                 AppEvent::Status(mut message, level, timeout) => {
                     ctx.messages.push(StatusMessage {
                         level,

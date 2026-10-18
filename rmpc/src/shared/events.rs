@@ -130,6 +130,8 @@ pub(crate) enum AppEvent {
     ActionResolved(ActionEvent),
     InsertModeFlush((Option<ActionEvent>, Vec<Key>)),
     Status(String, Level, Duration),
+    /// The hover owner changed or cleared the context's hint; no expiry is scheduled.
+    HoverHintChanged,
     InfoModal {
         message: Vec<String>,
         title: Option<String>,

@@ -265,6 +265,37 @@ fn now() -> f64 {
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod hover_hint_tests {
+    use super::*;
+    use crate::tests::fixtures::ctx;
+    use rstest::rstest;
+
+    #[rstest]
+    fn hint_uses_the_painted_song_and_clears_on_leave_or_removal(mut ctx: Ctx) {
+        ctx.queue = vec![rmpc_mpd::commands::Song {
+            id: 42, file: "song.flac".to_owned(), ..Default::default()
+        }];
+        let mut view = PlanView::new();
+        view.area = Rect::new(0, 0, 80, 5);
+        view.like_cell = Some(Rect::new(10, 0, 2, 5));
+        view.rendered_rows = vec![Some((42, "song.flac".to_owned()))];
+        let enter = MouseEvent { x: 10, y: 0, kind: MouseEventKind::Moved };
+        for (value, expected) in [("0", "click: like"), ("1", "click: like"), ("2", "click: unlike")] {
+            ctx.set_song_stickers("song.flac".to_owned(), [("like".to_owned(), value.to_owned())].into());
+            view.mouse(enter, &ctx).unwrap();
+            assert_eq!(ctx.hover_hint.borrow().as_deref(), Some(expected));
+            view.mouse(MouseEvent { x: 12, ..enter }, &ctx).unwrap();
+            assert_eq!(*ctx.hover_hint.borrow(), None);
+        }
+        view.mouse(enter, &ctx).unwrap();
+        ctx.queue.clear();
+        view.refresh(&ctx, false);
+        assert_eq!(*ctx.hover_hint.borrow(), None);
+        assert_eq!(view.hover_like, None);
+    }
+}
+
 #[derive(Debug)]
 #[allow(clippy::struct_excessive_bools)] // independent view flags: selection, typing, staleness, header row
 pub struct PlanView {
@@ -463,6 +494,17 @@ impl PlanView {
                 offset.min(self.rows.len().saturating_sub(usize::from(self.area.height))),
             );
         }
+        if let Some(id) = self.hover_like {
+            let painted = self.rendered_rows.iter().position(|r| r.as_ref().is_some_and(|(old, _)| *old == id));
+            let still_here = painted.and_then(|row| {
+                let target = self.rendered_rows.get(row)?.as_ref()?;
+                let current = self.rows.get(self.state.offset() + row)?.id?;
+                ctx.queue.iter().find(|s| s.id == current && s.id == target.0 && s.file == target.1)
+            });
+            if still_here.is_none_or(|song| !ctx.refresh_like_hint("plan", Some(&song.file))) {
+                self.clear_hover(ctx);
+            }
+        }
         self.remember_selection();
         if snap {
             self.invalidated_selection = false;
@@ -656,6 +698,7 @@ impl PlanView {
     /// False only for ID/file-based actions which the ordinary Queue handler
     /// can safely execute after mapping.
     pub fn action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<bool> {
+        self.clear_hover(ctx);
         self.refresh(ctx, false);
         if let Some(action) = event.claim_queue().cloned() {
             match action {
@@ -802,6 +845,13 @@ impl PlanView {
             .collect();
     }
 
+    pub(crate) fn clear_hover(&mut self, ctx: &Ctx) {
+        if self.hover_like.take().is_some() {
+            let _ = ctx.clear_like_hint("plan");
+            let _ = ctx.render();
+        }
+    }
+
     pub fn mouse(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<bool> {
         // The pointer belongs to the last paint, not a forecast recomputed
         // between that paint and this event.
@@ -820,11 +870,22 @@ impl PlanView {
                 .as_ref()
                 .filter(|_| self.like_cell.is_some_and(|r| r.contains(event.into())))
                 .map(|(id, _)| *id);
+            let had_hover = self.hover_like.is_some();
             if hover != self.hover_like {
                 self.hover_like = hover;
                 ctx.render()?;
             }
+            let file = target.as_ref().filter(|_| hover.is_some()).and_then(|(id, file)| {
+                ctx.queue.iter().find(|s| s.id == *id && s.file == *file).map(|s| s.file.as_str())
+            });
+            if hover.is_some() || had_hover {
+                let area = Rect { y: event.y, height: 1, ..self.like_cell.unwrap_or_default() };
+                ctx.set_like_hint("plan", file, area)?;
+            }
             return Ok(true);
+        }
+        if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown | MouseEventKind::Drag { .. }) {
+            self.clear_hover(ctx);
         }
         self.refresh(ctx, false);
         if on_header
@@ -909,12 +970,10 @@ impl PlanView {
                 }
             }
             MouseEventKind::ScrollDown => {
-                self.hover_like = None; // another song is under the pointer now: the next move sets it again
                 self.state.scroll_down(ctx.config.scroll_amount, ctx.config.scrolloff);
                 self.remember_selection();
             }
             MouseEventKind::ScrollUp => {
-                self.hover_like = None;
                 self.state.scroll_up(ctx.config.scroll_amount, ctx.config.scrolloff);
                 self.remember_selection();
             }
@@ -936,6 +995,9 @@ impl PlanView {
             Constraint::Length(u16::from(ctx.config.theme.scrollbar.is_some())),
         ])
         .areas(body);
+        if self.area != table {
+            self.clear_hover(ctx);
+        }
         self.area = table;
         self.scrollbar = scrollbar;
         self.refresh(ctx, false);

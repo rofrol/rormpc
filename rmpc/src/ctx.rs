@@ -79,6 +79,8 @@ pub struct Ctx {
     #[debug(skip)]
     pub(crate) scheduler: Scheduler<(Sender<AppEvent>, Sender<ClientRequest>), DefaultTimeProvider>,
     pub(crate) messages: RingVec<10, StatusMessage>,
+    pub(crate) hover_hint: RefCell<Option<String>>,
+    pub(crate) hover_hint_scope: Cell<Option<(&'static str, ratatui::layout::Rect)>>,
     pub(crate) last_status_update: Instant,
     pub(crate) song_played: Option<Duration>,
     pub(crate) stickers_supported: StickersSupport,
@@ -150,6 +152,8 @@ impl Ctx {
             stickers_to_fetch: RefCell::new(HashSet::new()),
             rendered_frames: 0,
             messages: RingVec::default(),
+            hover_hint: RefCell::new(None),
+            hover_hint_scope: Cell::new(None),
             song_played: None,
             last_status_update: Instant::now(),
             stickers_supported,
@@ -157,6 +161,55 @@ impl Ctx {
             key_resolver,
             cached_queue_time_total,
         })
+    }
+
+    /// Hover state is durable until its owner clears it; the event only wakes the renderer.
+    pub(crate) fn set_hover_hint(&self, hint: Option<String>) -> Result<(), SendError<AppEvent>> {
+        self.hover_hint_scope.set(None);
+        if *self.hover_hint.borrow() != hint {
+            *self.hover_hint.borrow_mut() = hint;
+            self.app_event_sender.send(AppEvent::HoverHintChanged)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn clear_like_hint(&self, owner: &'static str) -> Result<(), SendError<AppEvent>> {
+        if self.hover_hint_scope.get().is_some_and(|(active, _)| active == owner) {
+            self.set_hover_hint(None)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn clear_hover_outside(
+        &self, position: ratatui::layout::Position,
+    ) -> Result<(), SendError<AppEvent>> {
+        if self.hover_hint_scope.get().is_some_and(|(_, area)| !area.contains(position)) {
+            self.set_hover_hint(None)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn refresh_like_hint(&self, owner: &'static str, file: Option<&str>) -> bool {
+        if let Some((active, area)) = self.hover_hint_scope.get().filter(|(active, _)| *active == owner) {
+            let _ = self.set_like_hint(active, file, area);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn set_like_hint(
+        &self, owner: &'static str, file: Option<&str>, area: ratatui::layout::Rect,
+    ) -> Result<(), SendError<AppEvent>> {
+        let Some(file) = file else {
+            return self.clear_like_hint(owner);
+        };
+        // The MPD sticker uses 2 for liked (1 is unrated, 0 is disliked), just like the glyph.
+        let liked = self.song_stickers(file).and_then(|st| st.get("like")).is_some_and(|v| v == "2");
+        let hint = if liked { "click: unlike" } else { "click: like" }.to_owned();
+        self.set_hover_hint(Some(hint))?;
+        self.hover_hint_scope.set(Some((owner, area)));
+        Ok(())
     }
 
     // TODO: Error comes from crossebeam, try to remove later if it gets solved

@@ -828,8 +828,17 @@ impl QueuePane {
 impl Pane for QueuePane {
     fn render(&mut self, frame: &mut Frame, area: Rect, ctx: &Ctx) -> anyhow::Result<()> {
         if self.plan_view(ctx) {
+            if self.hover_like.take().is_some() {
+                ctx.clear_like_hint("queue")?;
+            }
             self.plan.render(frame, area, ctx);
             return Ok(());
+        }
+        self.plan.clear_hover(ctx);
+        if let Some(idx) = self.hover_like
+            && !ctx.refresh_like_hint("queue", self.queue.items.get(idx).map(|song| song.file.as_str()))
+        {
+            self.hover_like = None;
         }
         let Ctx { config, .. } = ctx;
         self.calculate_areas(area, ctx)?;
@@ -1107,7 +1116,15 @@ impl Pane for QueuePane {
         Ok(())
     }
 
+    fn on_hide(&mut self, ctx: &Ctx) -> Result<()> {
+        self.hover_like = None;
+        self.plan.clear_hover(ctx);
+        ctx.clear_like_hint("queue")?;
+        Ok(())
+    }
+
     fn resize(&mut self, _area: Rect, ctx: &Ctx) -> Result<()> {
+        self.on_hide(ctx)?;
         self.queue.state.set_content_and_viewport_len(
             self.queue.len(),
             self.areas[Areas::Table].height as usize,
@@ -1119,6 +1136,11 @@ impl Pane for QueuePane {
     }
 
     fn on_event(&mut self, event: &mut UiEvent, is_visible: bool, ctx: &Ctx) -> Result<()> {
+        if matches!(event, UiEvent::QueueChanged | UiEvent::Database | UiEvent::Reconnected | UiEvent::ConfigChanged)
+            && self.hover_like.take().is_some()
+        {
+            ctx.clear_like_hint("queue")?;
+        }
         match event {
             UiEvent::Database | UiEvent::QueueChanged if self.find.is_some() => {
                 self.apply_find(ctx, false); // the filtered view is rebuilt from MPD's queue, by song id
@@ -1190,6 +1212,12 @@ impl Pane for QueuePane {
             return Ok(());
         }
         let position = event.into();
+        if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown | MouseEventKind::Drag { .. })
+            && self.hover_like.take().is_some()
+        {
+            ctx.clear_like_hint("queue")?;
+            ctx.render()?;
+        }
 
         // rormpc: the like cell. Hover shows a heart; a click toggles like <-> no rating and neither selects nor plays
         let table = self.areas[Areas::Table];
@@ -1200,9 +1228,16 @@ impl Pane for QueuePane {
         };
         if matches!(event.kind, MouseEventKind::Moved) {
             let hover = if on_like { like_row() } else { None };
+            let had_hover = self.hover_like.is_some();
             if hover != self.hover_like {
                 self.hover_like = hover;
                 ctx.render()?;
+            }
+            if hover.is_some() || had_hover {
+                let (x, width) = self.like_col.unwrap_or((event.x, 0));
+                let area = Rect::new(x, event.y, width, 1);
+                let file = hover.and_then(|i| self.queue.items.get(i)).map(|song| song.file.as_str());
+                ctx.set_like_hint("queue", file, area)?;
             }
             return Ok(());
         }
@@ -1444,6 +1479,10 @@ impl Pane for QueuePane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        if self.hover_like.take().is_some() {
+            ctx.clear_like_hint("queue")?;
+            ctx.render()?;
+        }
         // rormpc: `o` switches between physical Queue order and the plan view, keeping the selected and
         // marked songs by ID
         if event
@@ -2413,6 +2452,7 @@ mod rormpc_find_tests {
     use rmpc_mpd::commands::{Song, metadata_tag::MetadataTag};
 
     use super::find_matches;
+    use crate::tests::fixtures::ctx;
 
     fn song(id: u32, artist: &str, title: &str, file: &str) -> Song {
         let metadata = [("artist", artist), ("title", title)]
@@ -2420,6 +2460,29 @@ mod rormpc_find_tests {
             .map(|(k, v)| (k.to_owned(), MetadataTag::Single(v.to_owned())))
             .collect();
         Song { id, file: file.to_owned(), metadata, ..Default::default() }
+    }
+
+    #[rstest::rstest]
+    fn like_hover_hint_tracks_queue_rows_and_clears_when_the_queue_changes(mut ctx: crate::ctx::Ctx) {
+        use super::*;
+        let mut pane = QueuePane::new(&ctx);
+        pane.forced_plan = Some(false);
+        pane.queue.items = vec![Song { id: 1, file: "song.flac".to_owned(), ..Default::default() }];
+        pane.queue.state.set_content_and_viewport_len(1, 5);
+        pane.areas[Areas::Table] = Rect::new(0, 0, 80, 5);
+        pane.like_col = Some((10, 2));
+        let enter = MouseEvent { x: 10, y: 0, kind: MouseEventKind::Moved };
+        for (value, expected) in [("0", "click: like"), ("1", "click: like"), ("2", "click: unlike")] {
+            ctx.set_song_stickers("song.flac".to_owned(), [("like".to_owned(), value.to_owned())].into());
+            pane.handle_mouse_event(enter, &ctx).unwrap();
+            assert_eq!(ctx.hover_hint.borrow().as_deref(), Some(expected));
+            pane.handle_mouse_event(MouseEvent { x: 12, ..enter }, &ctx).unwrap();
+            assert_eq!(*ctx.hover_hint.borrow(), None);
+        }
+        pane.handle_mouse_event(enter, &ctx).unwrap();
+        pane.on_event(&mut UiEvent::QueueChanged, true, &ctx).unwrap();
+        assert_eq!(*ctx.hover_hint.borrow(), None);
+        assert_eq!(pane.hover_like, None);
     }
 
     #[test]

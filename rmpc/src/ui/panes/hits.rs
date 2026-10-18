@@ -473,6 +473,8 @@ pub struct HitsPane {
     query: String,
     /// the row whose like cell the mouse is over (shows a heart to click)
     hover_like: Option<usize>,
+    hover_like_file: Option<String>,
+    hover_like_offset: usize,
     /// the filter row under the mouse pointer: only a look (underline), never the cursor
     hover_filter: Option<usize>,
     label: String,
@@ -604,6 +606,8 @@ impl HitsPane {
             typing: false,
             query: String::new(),
             hover_like: None,
+            hover_like_file: None,
+            hover_like_offset: 0,
             hover_filter: None,
             label: String::new(),
             generated_at: String::new(),
@@ -2255,7 +2259,15 @@ impl HitsPane {
             self.render_body(frame, body, ctx);
         } else {
             self.table_area = Rect::default();
-            self.hover_like = None;
+            self.clear_like_hover(ctx);
+        }
+    }
+
+    fn clear_like_hover(&mut self, ctx: &Ctx) {
+        if self.hover_like.take().is_some() {
+            self.hover_like_file = None;
+            let _ = ctx.clear_like_hint("hits");
+            let _ = ctx.render();
         }
     }
 
@@ -2283,6 +2295,7 @@ impl HitsPane {
     fn render_body(&mut self, frame: &mut Frame, body: HitsBody, ctx: &Ctx) {
         let HitsBody { main, details, dl_main, dl_details } = body;
         if self.downloads {
+            self.clear_like_hover(ctx);
             self.load_downloads(ctx);
             let ready = self.dl_job.lock().expect("downloads lock").ready.take();
             match ready {
@@ -2338,6 +2351,9 @@ impl HitsPane {
             let style = ctx.config.theme.preview_label_style.add_modifier(Modifier::BOLD);
             frame.render_widget(Paragraph::new(Span::styled(text.clone(), style)).wrap(Wrap { trim: true }), banner_area);
         }
+        if self.table_area != table_area || self.hover_like_offset != self.state.offset() {
+            self.clear_like_hover(ctx);
+        }
         self.table_area = table_area;
         self.state.set_content_and_viewport_len(self.rows.len(), self.state_viewport());
 
@@ -2350,6 +2366,12 @@ impl HitsPane {
         let shuffle = crate::ui::rormpc_player::shuffle_state();
         let heard: std::collections::HashSet<&str> =
             shuffle.round.as_ref().map(|r| r.heard.iter().map(String::as_str).collect()).unwrap_or_default();
+        if let Some(idx) = self.hover_like {
+            let file = self.rows.get(idx).and_then(|r| r.file.as_deref());
+            if file != self.hover_like_file.as_deref() || !ctx.refresh_like_hint("hits", file) {
+                self.clear_like_hover(ctx);
+            }
+        }
         let hover = self.hover_like;
         let mut hovered_cell = None;
         // the song the Queue paints (playing or paused, not stopped): every row with its file lights up
@@ -2500,7 +2522,13 @@ impl Pane for HitsPane {
         Ok(())
     }
 
-    fn on_hide(&mut self, _ctx: &Ctx) -> Result<()> {
+    fn resize(&mut self, _area: Rect, ctx: &Ctx) -> Result<()> {
+        self.clear_like_hover(ctx);
+        Ok(())
+    }
+
+    fn on_hide(&mut self, ctx: &Ctx) -> Result<()> {
+        self.clear_like_hover(ctx);
         self.preview.lock().expect("preview lock").stop(); // a preview never outlives the view it was started in
         Ok(())
     }
@@ -2515,11 +2543,10 @@ impl Pane for HitsPane {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent, ctx: &Ctx) -> Result<()> {
-        if matches!(event.kind, MouseEventKind::Moved)
-            && !self.like_area().contains(event.into())
-            && self.hover_like.take().is_some()
+        if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown | MouseEventKind::Drag { .. })
+            || !self.like_area().contains(event.into())
         {
-            ctx.render()?;
+            self.clear_like_hover(ctx);
         }
         if self.hover_filter.is_some()
             && (!self.filter_area.contains(event.into()) || !matches!(event.kind, MouseEventKind::Moved))
@@ -2596,9 +2623,16 @@ impl Pane for HitsPane {
         let on_like = self.like_area().contains(event.into());
         if matches!(event.kind, MouseEventKind::Moved) {
             let hover = if on_like { self.state.get_at_rendered_row(row) } else { None };
+            let had_hover = self.hover_like.is_some();
             if hover != self.hover_like {
                 self.hover_like = hover;
+                self.hover_like_file = hover.and_then(|idx| self.rows.get(idx)).and_then(|r| r.file.clone());
+                self.hover_like_offset = self.state.offset();
                 ctx.render()?;
+            }
+            if hover.is_some() || had_hover {
+                let area = Rect { y: event.y, height: 1, ..self.like_area() };
+                ctx.set_like_hint("hits", self.hover_like_file.as_deref(), area)?;
             }
             return Ok(());
         }
@@ -2656,6 +2690,7 @@ impl Pane for HitsPane {
     }
 
     fn handle_action(&mut self, event: &mut ActionEvent, ctx: &mut Ctx) -> Result<()> {
+        self.clear_like_hover(ctx);
         if let Some(action) = event.claim_queue().cloned() {
             match action {
                 QueueActions::JumpToCurrent => {
@@ -3748,6 +3783,58 @@ mod tests {
             assert_eq!(pane.hover_like, Some(0));
         }
         pane.handle_mouse_event(MouseEvent { x: 0, y: 0, kind: MouseEventKind::Moved }, &ctx).unwrap();
+        assert_eq!(pane.hover_like, None);
+    }
+
+    #[rstest]
+    #[case(None, "click: like")]
+    #[case(Some("0"), "click: like")]
+    #[case(Some("1"), "click: like")]
+    #[case(Some("2"), "click: unlike")]
+    fn like_hover_hint_follows_the_sticker_and_clears_on_leave_or_resize(
+        mut ctx: Ctx, #[case] sticker: Option<&str>, #[case] expected: &str,
+    ) {
+        let mut pane = pane();
+        pane.rows = vec![row(Some("song.flac"), 1)];
+        pane.state.set_content_and_viewport_len(1, 2);
+        pane.table_area = Rect::new(7, 3, 120, 10);
+        if let Some(value) = sticker {
+            ctx.set_song_stickers("song.flac".to_owned(), [("like".to_owned(), value.to_owned())].into());
+        }
+        let area = pane.like_area();
+        let enter = MouseEvent { x: area.x, y: area.y, kind: MouseEventKind::Moved };
+        pane.handle_mouse_event(enter, &ctx).unwrap();
+        assert_eq!(ctx.hover_hint.borrow().as_deref(), Some(expected));
+        pane.handle_mouse_event(MouseEvent { x: 0, y: 0, kind: MouseEventKind::Moved }, &ctx).unwrap();
+        assert_eq!(*ctx.hover_hint.borrow(), None);
+        pane.handle_mouse_event(enter, &ctx).unwrap();
+        pane.resize(Rect::default(), &ctx).unwrap();
+        assert_eq!(*ctx.hover_hint.borrow(), None);
+        assert_eq!(pane.hover_like, None);
+        pane.handle_mouse_event(enter, &ctx).unwrap();
+        pane.on_hide(&ctx).unwrap();
+        assert_eq!(*ctx.hover_hint.borrow(), None);
+    }
+
+    #[rstest]
+    fn removing_the_hovered_result_clears_its_hint(ctx: Ctx) {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut pane = pane();
+        pane.rows = vec![row(Some("song.flac"), 1)];
+        let mut terminal = Terminal::new(TestBackend::new(120, 10)).unwrap();
+        let mut paint = |pane: &mut HitsPane| {
+            terminal.draw(|frame| {
+                let body = HitsBody { main: frame.area(), details: None, dl_main: frame.area(), dl_details: frame.area() };
+                pane.render_body(frame, body, &ctx);
+            }).unwrap();
+        };
+        paint(&mut pane);
+        let area = pane.like_area();
+        pane.handle_mouse_event(MouseEvent { x: area.x, y: area.y, kind: MouseEventKind::Moved }, &ctx).unwrap();
+        assert_eq!(ctx.hover_hint.borrow().as_deref(), Some("click: like"));
+        pane.rows.clear();
+        paint(&mut pane);
+        assert_eq!(*ctx.hover_hint.borrow(), None);
         assert_eq!(pane.hover_like, None);
     }
 
