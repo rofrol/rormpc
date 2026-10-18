@@ -1131,6 +1131,16 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Next slice: demote the check, the better metric, a forced-alignment pilot on ~20 songs, then the batch.
       Decided by the user 2026-10-12 (d-orwfxuit), replacing "show at once" of 2026-10-11: transcripts are generated
       but not shown or highlighted until the forced-alignment pilot succeeds.
+      Slice landed 2026-10-18 (run r-alp4b557, worker pi on openai-codex/gpt-6.1-sol, commit 03ac0b3; the
+      coordinator ran `uv run --directory tools pytest -q` in the run's worktree: 677 passed): `words_outside_speech`
+      no longer withholds. `transcribe.review_flags()` records it in the sidecar's new `review` list, sidecar
+      `version` is 2 and a version 1 record keeps its state until it is transcribed again (nothing rewrites existing
+      sidecars), `describe` adds "; review: words_outside_speech", and `transcribe_eval` reports it as a review flag
+      (`review_only` in the separating ranges: a review-only candidate bounds the lyrics flags but cannot catch an
+      instrumental). The other four reasons withhold exactly as before. Next slice: the sync metric — monotonic word
+      alignment to the reference, signed error p50/p90 per song and drift over the song, replacing the
+      nearest-line-start distance — as its own run; then the forced-alignment pilot on ~20 songs, which needs the
+      model downloads and so runs outside the worker sandbox.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
