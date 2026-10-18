@@ -182,20 +182,24 @@ jobs:
             # "activating" and passed), and a Type=simple unit is "active" right after the fork, even when its
             # executable is missing. Neither
             # daemon logs at startup (the scrobbler logs from WARN up, mpd-player only errors), but both subscribe
-            # to an MPD channel once connected: rormpc (mpd-player), listenbrainz_feedback (the scrobbler). MPD
-            # emits a subscription idle event for each subscribe, so each pass waits for one and lists the channels
+            # to MPD channels once connected: rormpc (mpd-player), listenbrainz_feedback and listenbrainz_listen
+            # (the scrobbler). Check only the required subset below; extra channels are allowed. MPD emits a
+            # subscription idle event for each subscribe, so each pass waits for one and lists the channels
             want="listenbrainz_feedback rormpc"
+            has_channel() { case " $channels" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
             coproc IDLE { exec mpc idleloop subscription; }
             for _ in $(seq 20); do
               channels="$(mpc channels | sort | tr "\n" " ")"
-              [ "$channels" = "$want " ] && break
+              has_channel listenbrainz_feedback && has_channel rormpc && break
               # delay: external deadline for a daemon to connect to MPD after its start (it takes about a second);
               # a missing or crashing program never subscribes, and this gives up
               read -r -t 60 -u "${IDLE[0]}" _ || break
             done
             kill "$IDLE_PID" || true
             echo "MPD channels: $channels"
-            [ "$channels" = "$want " ] || { echo "a daemon never subscribed to its MPD channel" >&2; exit 1; }
+            for channel in $want; do
+              has_channel "$channel" || { echo "a daemon never subscribed to its MPD channel: $channel" >&2; exit 1; }
+            done
             # and the subscribers are the units main processes, running the installed programs
             tools="$(uv tool dir --bin)"
             check_main() {  # UNIT EXPECTED: MainPID > 0 and EXPECTED is its executable or its script argument
