@@ -1,0 +1,67 @@
+# /// script
+# requires-python = ">=3.11,<3.13"
+# dependencies = ["torch==2.5.1", "torchaudio==2.5.1"]
+# ///
+"""CTC emissions only; run with uv run --script, never import in the package.
+
+Usage: uv run --script align_backend.py --audio vocals.wav [--model MMS_FA]
+Default model: torchaudio.pipelines.MMS_FA (multilingual, romanized labels).
+Input must already be 16 kHz mono WAV; this script does not separate/resample.
+Output is one JSON document: vocabulary (index order), blank_id, log-probability
+emissions (frames x labels, float32 rounded to 6 decimals), frame_rate (Hz),
+and model_id. No wildcard/star label: an unsupported word must fall back, not
+silently be absorbed by a wildcard. MMS expects romanization; the pilot core
+intentionally keeps unsupported Polish/French letters at Whisper times instead
+of changing or guessing words. Language-specific models/romanization and singing
+quality must be evaluated before this is connected to the transcript path.
+"""
+import argparse
+import contextlib
+import json
+import math
+import sys
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--audio", required=True, help="16 kHz mono vocal-stem WAV")
+    parser.add_argument("--model", choices=["MMS_FA"], default="MMS_FA",
+                        help="torchaudio pipeline (default: MMS_FA)")
+    args = parser.parse_args()
+    # Keep dependency/model progress away from the JSON stream.
+    with contextlib.redirect_stdout(sys.stderr):
+        import torch
+        import torchaudio
+
+        try:
+            info = torchaudio.info(args.audio)
+            if info.sample_rate != 16000 or info.num_channels != 1:
+                parser.exit(1, "align backend: expected a 16 kHz mono WAV vocal stem\n")
+            waveform, rate = torchaudio.load(args.audio)
+            if waveform.shape[1] == 0:
+                parser.exit(1, "align backend: audio is empty\n")
+        except (OSError, RuntimeError) as exc:
+            parser.exit(1, f"align backend: cannot read vocal stem: {exc}\n")
+        bundle = torchaudio.pipelines.MMS_FA
+        try:
+            model = bundle.get_model(with_star=False).cpu().eval()
+        except Exception as exc:
+            parser.exit(1, f"align backend: cannot load/download {args.model}; "
+                        f"check network access and the torch model cache: {exc}\n")
+        vocabulary = list(bundle.get_labels(star=None))
+        try:
+            with torch.inference_mode():
+                logits, _ = model(waveform)
+                emissions = logits[0].log_softmax(-1).to(torch.float32)
+            stride = math.prod(layer.conv.stride[0] for layer in model.feature_extractor.conv_layers)
+        except (RuntimeError, ValueError) as exc:
+            parser.exit(1, f"align backend: CTC inference failed: {exc}\n")
+    json.dump({"vocabulary": vocabulary, "blank_id": 0,
+               "emissions": [[round(p, 6) for p in row] for row in emissions.tolist()],
+               "frame_rate": rate / stride, "model_id": "torchaudio/2.5.1/MMS_FA",
+               "emission_format": "log_probabilities_float32_rounded_6"}, sys.stdout, allow_nan=False)
+    print()
+
+
+if __name__ == "__main__":
+    main()

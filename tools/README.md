@@ -161,6 +161,14 @@ packages and models):
 Without uv or that environment the command says so and exits 1. macOS on Apple Silicon only for now; Linux
 (faster-whisper) is planned.
 
+The forced-alignment pilot is separate from the shipped transcript path: `src/rormpc_tools/transcribe_align.py`
+aligns only the transcript's own words to CTC log probabilities, exposing word/song evidence and keeping Whisper's
+times when support is weak. Run `uv run --script src/rormpc_tools/data/align_backend.py --audio vocals.wav`
+from `tools/`, using `--model MMS_FA` by default on a 16 kHz mono vocal stem; it downloads
+the model only when explicitly run and prints vocabulary, emissions and frame rate as JSON. MMS's romanized labels
+mean unsupported Polish/French letters currently fall back unchanged. The evidence gates are provisional; singing,
+melisma and backing vocals still need comparison with stable-ts before integration. Neither file writes sidecars.
+
 ## Dependencies
 
 A missing program ends a command with one line: `<tool>: <program> not found on PATH; <what needs it>. Install:`
