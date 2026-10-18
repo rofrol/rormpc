@@ -1267,7 +1267,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       "click: like"). Tests cover the ownership and leaving rules, the redraw bookkeeping, the timed-message
       priority and the rendered text.
 
-- [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing
+- [ ] The `(AI-assisted)` disclosure and herdr's exact-message verify (found 2026-10-18 while landing [t-5n24p4bs]
       t-jsjs5ngd's and t-jminob65's worker commits): two workers in a row were blocked by the conflict between
       AGENTS.md's "add an (AI-assisted) text to all messages" and the driver's requirement that a worker's commit
       subject equal the coordinator's `--message` exactly, with no body. The coordinator now puts "(AI-assisted)" in
@@ -1278,7 +1278,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
       `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
       `scripts/rormpc_install.sh companions`) and remove the tag and its test. Found by the t-6bzyvzb6 worker.
-- [ ] YouTube deletion fails with HTTP 404 `videoNotFound` (user screenshot, 2026-10-13): add this to TODO and
+- [ ] YouTube deletion fails with HTTP 404 `videoNotFound` (user screenshot, 2026-10-13): add this to TODO and [t-pyr3xmsz]
       consult the models. `musicdb delete` reports "Deleted permanently" together with "failed, retried hourly".
       Diagnose playlist lookup/removal of unavailable videos, preserve deletion and restore evidence, classify
       terminal versus transient remote failures, and give a concise, accurate partial-success status. Test offline;
@@ -1295,7 +1295,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Timing: event-driven outcome reconciliation; existing hourly update is external YouTube reconciliation,
       not recovery of lost internal outcomes; no new timer, sleep, longer wait or blind resend.
 
-- [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review
+- [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review [t-dasiajfe]
       the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
       audit other missing years and uppercase titles/artists, distinguish missing source metadata from display/cache
       bugs, and report provenance. Follow the existing years review and rollback workflow; do not guess dates from
@@ -1796,14 +1796,14 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
-- [ ] The installer smoke test's macOS job fails on master: the `install-stubbed (macos-latest)` job of
+- [ ] The installer smoke test's macOS job fails on master: the `install-stubbed (macos-latest)` job of [t-23vr4rs4]
       .github/workflows/installer_smoke.yml fails in `scripts/test_rormpc_install.sh` (the log ends after
       "restart running rormpc instances to use it" with exit code 1; it also failed in run 38256551254 of
       2026-10-12, before the companions-linux fix, so it is not caused by it). Needs a run of the workflow with the
       failing assertion read out of the full log, then the fix, and the same kind of review as t-kwqstgkt. Cost:
       one worker run plus a CI run to confirm.
 
-- [x] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round
+- [x] Report the osx output rate race to MPD upstream (from the fast-playback fix of 2026-10-17, round [t-hxhcbpqm]
       20261017-150106-b061, DeepSeek; after the 2026-10-18 round 20261018-015021-5614): OSXOutputPlugin sets the
       device's physical format and initialises the audio unit without waiting for
       kAudioDevicePropertyNominalSampleRate to change, so 44.1/48 kHz switches can play at 48000/44100. Needs the
@@ -1818,7 +1818,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       kAudioStreamPropertyPhysicalFormat at OSXOutputPlugin.cxx:426, then AudioUnitSetInputStreamFormat:721 and
       AudioUnitInitialize:729 without waiting), the 1.0896 and the fixed-rate measurements, and an offer to prepare
       a patch that waits for the device to report the requested rate. The issue stays closed; watch for a reply.
-- [x] Report the osx output abort with a per-output `format` to MPD upstream (2026-10-18, t-ryp5kjet, after round
+- [x] Report the osx output abort with a per-output `format` to MPD upstream (2026-10-18, t-ryp5kjet, after round [t-73voypj6]
       20261018-015021-5614): MPD 0.24.15, per-output `format "48000:*:*"` on the osx output (soxr or libsamplerate),
       a seek into the last ~12 s, then a song change 44.1 -> 48 -> 44.1:
       `Assertion failed: (nbytes > 0), function PlayChunk, file Thread.cxx, line 269`. Isolation done: the `null`
@@ -1834,13 +1834,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       report), the seek sequence, the verbose log excerpt and the macOS crash report's backtrace of the output thread
       (`__assert_rtn` below `AudioOutputControl::PlayChunk`); 30.000 s files do not trigger it, so the leftover chunk
       matters. A fork with a patch and a regression test follows only if upstream asks (rule 6).
-- [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
+- [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek, [t-7xd7nok4]
       Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
       Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
       line and an MPD restart, no build.
       Done 2026-10-17 in dotfiles 8e9e5ee: `device "MacBook Pro Speakers"` (MPD matches the CoreAudio device name);
       kept in the 2026-10-18 rewrite (dde312e).
-- [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek,
+- [x] Pin the osx output to the built-in speakers' device UID in ~/.mpdconf (from the same round, MiMo, DeepSeek, [t-3etxycyf]
       Argon): with the default device MPD follows a switch to another output (Teams' virtual device, headphones).
       Changes behaviour when the user picks another output on purpose, so it is the user's choice. Cost: a config
       line and an MPD restart, no build.
@@ -1849,7 +1849,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Needs a decision
 
-- [x] The like column's hover hint in the status bar: the rest of d-njr573xw landed 2026-10-18 (no underline, accent
+- [x] The like column's hover hint in the status bar: the rest of d-njr573xw landed 2026-10-18 (no underline, accent [t-yepz4aez]
       heart, two-cell click target, bold for liked only; run r-eehcbr64, commit 393c76f), but the "click: like" /
       "click: unlike" text while the pointer is on the heart could not be built. The status bar is fed by
       `AppEvent::Status` messages that the event loop removes on a timer, so a hint would be sticky or need a timer,
@@ -2293,7 +2293,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Options: accept the round's meanwhile plan | wait for herdr's `todo run --repo`
       Checked: herdr-85's message of 2026-10-12 (d-s2mkmlzc).
 
-- [ ] Worker dispatch is blocked: neither subscription has capacity, so "Next, in order" cannot run (herdr's quota
+- [ ] Worker dispatch is blocked: neither subscription has capacity, so "Next, in order" cannot run (herdr's quota [t-jvfoarip]
       gate refused the first item's worker). Wait for the window, override the gate once, or stop until capacity
       returns?
       Options: wait for the window (recommended: herdr's usage poller publishes a measurement and wakes the pending
