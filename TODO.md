@@ -1807,6 +1807,18 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Needs a decision
 
+- [ ] The like column's hover hint in the status bar: the rest of d-njr573xw landed 2026-10-18 (no underline, accent
+      heart, two-cell click target, bold for liked only; run r-eehcbr64, commit 393c76f), but the "click: like" /
+      "click: unlike" text while the pointer is on the heart could not be built. The status bar is fed by
+      `AppEvent::Status` messages that the event loop removes on a timer, so a hint would be sticky or need a timer,
+      and the worker stopped rather than invent one. Build a hover-scoped way for a pane to show and clear a status
+      line, drop the hint and rely on the accent alone, or put the hint somewhere that is redrawn every frame?
+      Options: a hover-scoped status API (the pane sets and clears it on the same mouse events that set its hover
+      state; no timer) | drop the hint, the accent and the two-cell target are enough | show the hint in the like
+      column's header row instead ("♥ click")
+      Checked: worker w471's WORKER-BLOCKED report of run r-eehcbr64 and rmpc/src/shared/macros.rs:36-47 (the
+      `status_info!`/`status_error!` log targets) plus the status-bar event handling in rmpc/src/ui.
+
 - [x] Previous in the weighted shuffle: restart the current song (seek 0, no outcome) when Previous is pressed in [t-4rtdcdqz]
       its first ~3 s? Decided 2026-10-07: no, Previous always goes back.
       Checked: Sol says leave it out (it fights walking back), MiMo says restart; the TODO marks it undecided.
