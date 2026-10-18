@@ -1278,7 +1278,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the driver is given carries the disclosure, a worker adds nothing to the body) and say so in the worker
       contract template. Parent: t-jminob65. Cost: a text change, no build.
       Done 2026-10-18 (commit d699dff, landed under run r-22dveye3): the paragraph is in AGENTS.md "Coordination".
-- [ ] Drop RORMPC_TOOLS_TAG from scripts/rormpc_install.sh: rmpc/src/shared/dependencies.rs reads it at build time for [t-z5e3iizs]
+- [x] Drop RORMPC_TOOLS_TAG from scripts/rormpc_install.sh: rmpc/src/shared/dependencies.rs reads it at build time for [t-z5e3iizs]
       the missing-tool hints (`cannot_run`, delete_menu.rs, `debuginfo`); point those hints to
       `uv tool install "rormpc-tools @ git+https://github.com/rofrol/rormpc@<build commit>#subdirectory=tools"` (or
       `scripts/rormpc_install.sh companions`) and remove the tag and its test. Found by the t-6bzyvzb6 worker.
