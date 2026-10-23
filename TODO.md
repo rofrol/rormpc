@@ -1457,6 +1457,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       but no work link (`no-work`) get a year proposal from the recording's own earliest release of the same length,
       as a new high-confidence rule only when that release-group year is unambiguous; offline tests; then the
       coordinator runs `musicdb years --dry-run` and applies the new high rows.
+      Decided by the user 2026-10-23 (d-cjk223ao): an undated song may get a high year from this rule when the
+      recording's earliest official release and its release group give the same year; other rules unchanged.
 - [ ] Missing years (b), from t-mbidyld1 (decided by the user 2026-10-23, d-ekz2qq65): `musicdb mbid` treats [t-mbidmrge]
       AcoustID-supported candidates that are the same work with lengths within 10 s as one identity instead of a
       conflict (the 13 "tie or conflicting canonical evidence" rows of 2026-10-23); offline tests; then the
