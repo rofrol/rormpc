@@ -28,8 +28,11 @@ with journalled compensation. `--rollback [ID...]` restores absence/the old reco
 the written recording still match, preserving later unrelated tags and association edits; copied shared-key
 data survives. Resume interrupted work (or cancel an unapplied preparation with rollback) before a new dry run.
 MPD's directory update is waited and failures remain resumable. Afterwards run `musicdb years --dry-run` again:
-only newly computed `high` rows qualify for acceptance/apply; existing review rows and undated proposals stay
-untouched. Identification never authorizes date changes. (AI-assisted)
+only newly computed `high` rows qualify for acceptance/apply; existing review rows stay untouched.
+For plain audio without a work link, `own-no-work` proposes the recording's own earliest official Album/Single/EP
+release outside compilation, DJ-mix and mixtape groups (d-ekz2qq65); `needs_mbid` stays set.
+With matching release/release-group years, it is `high` for an earlier proposal or an undated song (d-cjk223ao);
+undated proposals under all other rules remain `review`, and identification never authorizes date changes. (AI-assisted)
 
 ### hits: sets, ranks, exceptions and smart lists
 

@@ -169,10 +169,63 @@ def test_a_reissue_only_recording_shows_the_earlier_release_group_as_evidence(mb
     assert row["proposed"] is None and "keeps-year" in row["classes"]
 
 
-def test_no_work_link_needs_an_mbid(mb):
-    mb.add(rec("lonely", "Song", 200_000, "2000"), [release("2000")])
+def test_no_work_link_proposes_its_own_earliest_official_release(mb):
+    mb.add(rec("lonely", "Song", 200_000, "1998"),
+           [release("2001"), release("2000-02-03"), release("1998", secondary=["Compilation"]),
+            release("1999", status="Promotion")])
     c = years.compute("lonely")
-    assert c["tdor"] is None and c["needs_mbid"] and "no-work" in c["classes"]
+    assert (c["tdor"], c["rule"], c["source"], c["tdrc_own"]) == ("2000-02-03", "own-no-work", "lonely", "1998")
+    assert c["needs_mbid"] and c["classes"] == ["no-work"]
+    assert 'source `lonely` "Song" on Album "Album" 2000-02-03' in c["evidence"]
+
+
+@pytest.mark.parametrize("rg_date,shown,expected", [
+    ("2000-01-01", None, "high"), ("1999", None, "review"),
+    ("2001", None, "review"), ("2000", 1999, "review"),
+    ("2000", 2000, "review"), ("2000", 2001, "high"),
+    ("1999", 2001, "review"),
+])
+def test_no_work_confidence(mb, rg_date, shown, expected):
+    mb.add(rec("lonely", "Song", 200_000, "2000"), [release("2000-02-03", rg_date=rg_date)])
+    assert years.confidence(years.compute("lonely"), shown) == expected
+
+
+@pytest.mark.parametrize("rels", [[], [release("2000", secondary=["Compilation"])],
+                                  [release("2000", status="Promotion")]])
+def test_no_work_without_an_official_own_release_has_no_proposal(mb, rels):
+    mb.add(rec("lonely", "Song", 200_000, "2000"), rels)
+    c = years.compute("lonely")
+    assert c["tdor"] is None and c["rule"] is None and c["needs_mbid"]
+    assert c["classes"] == ["no-work", "no-studio-release"]
+
+
+@pytest.mark.parametrize("video,dis,flag", [(True, "", "video"), (False, "part of a DJ-mix", "dj-mix")])
+def test_video_and_dj_mix_without_work_still_have_no_proposal(mb, video, dis, flag):
+    mb.add(rec("lonely", "Song", 200_000, "2000", video=video, dis=dis), [release("2000")])
+    c = years.compute("lonely")
+    assert c["tdor"] is None and c["needs_mbid"] and c["classes"] == [flag, "no-work"]
+    assert c["evidence"].endswith("; no work relationship on MusicBrainz")
+
+
+def test_version_without_work_still_uses_own(mb):
+    mb.add(rec("lonely", "Song (remix)", 200_000, "2000"), [release("2000", secondary=["Remix"])])
+    c = years.compute("lonely")
+    assert (c["tdor"], c["rule"], c["needs_mbid"], c["classes"]) == ("2000", "own", False, ["version"])
+
+
+@pytest.mark.parametrize("rule", ["same-length", "any-clean", "own", "work-same-length",
+                                 "work-same-length-no-studio"])
+def test_existing_rules_keep_undated_songs_in_review(rule):
+    assert years.confidence({"tdor": "2000", "rg_date": "2000", "rule": rule}, None) == "review"
+
+
+@pytest.mark.parametrize("first_release,expected", [
+    ("2000", ("2000-02-03", "lonely", "own-no-work")), (None, ("2000-02-03", "lonely", "own-no-work")),
+    ("1999", None),
+])
+def test_no_work_download_uses_the_rule_without_allowing_later_dates(mb, first_release, expected):
+    mb.add(rec("lonely", "Song", 200_000, "2000"), [release("2000-02-03")])
+    assert years.for_download({"mbid": "lonely", "first_release": first_release}) == expected
 
 
 def test_a_later_proposal_is_never_high(mb):
@@ -243,7 +296,7 @@ def lib(env, mb, tmp_path, monkeypatch):
     updates = []
     monkeypatch.setattr(years, "mpc_update", lambda dirs: updates.append(sorted(dirs)))
     sweet_dreams(mb)
-    mb.add(rec("lonely", "Other", 200_000, "2001"), [release("2001")])
+    mb.add(rec("lonely", "Other", 200_000, "2001"), [release("2001", secondary=["Compilation"])])
     mp3(music / "eu/Sweet Dreams.mp3", 440, "2000", "video")
     mp3(music / "Other.mp3", 550, "2001", "lonely")
     mp3(music / "Plain.mp3", 660, "1983", "audio")
@@ -330,6 +383,24 @@ def test_apply_writes_only_accepted_unchanged_rows_and_rollback_restores(lib):
     assert rows()["eu/Sweet Dreams.mp3"]["decision"] == "undecided"
     run("--rollback")  # nothing newer to undo: the file stays
     assert years.read_dates(path)["TDOR"] == "2000"
+
+
+@needs_ffmpeg
+def test_no_work_proposal_applies_and_rolls_back_without_changing_the_recording(lib):
+    lib.mb.rels["lonely"] = {"releases": [release("1995-02-03")]}
+    run("--dry-run")
+    row = rows()["Other.mp3"]
+    path = lib.music / row["file"]
+    before = years.read_dates(path)
+    assert (row["rule"], row["confidence"], row["needs_mbid"]) == ("own-no-work", "high", True)
+    run("--accept", str(row["id"]))
+    run("--apply")
+    assert years.read_dates(path) == {"TDRC": "2001", "TDOR": "1995-02-03",
+                                      "DATE_SOURCE": "musicbrainz:lonely", "DATE_RULE": "own-no-work"}
+    assert years.read_recording(path) == "lonely"
+    run("--rollback", str(row["id"]))
+    assert years.read_dates(path) == before
+    assert years.read_recording(path) == "lonely"
 
 
 @needs_ffmpeg

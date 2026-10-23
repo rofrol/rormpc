@@ -100,11 +100,15 @@ The rule (the sample's "hybrid"):
 3. Only if no same-length candidate has one, the same over all clean candidates (`any-clean`, lower confidence).
 4. Release dates, not release-group dates; a release-group date earlier than the release date is shown as evidence
    and makes the row "review".
-5. No recording reached (no work relationship, nothing studio): no proposal; the file keeps its year.
+5. Plain audio without a work relationship uses `own-no-work`: the recording's own earliest official
+   Album/Single/EP release outside compilation, DJ-mix and mixtape groups, keeping `no-work` and `needs_mbid`
+   (user decision d-ekz2qq65, 2026-10-23); nothing found means no proposal (`no-studio-release`).
 
 Confidence: **high** when the rule is `same-length`, the release-group year equals the release year, and the
 proposal is *earlier* than the current year (12 of 15 right in the sample, the 3 others within a year); everything
-else is **review**. A proposal later than the current year is never applied without review.
+else is **review**. Under `own-no-work`, matching release/release-group years also give **high** for an earlier
+proposal or an undated song (user decision d-cjk223ao, 2026-10-23); other rules' confidence is unchanged.
+A proposal later than the current year is never applied without review.
 
 ## Matching changes (new downloads)
 

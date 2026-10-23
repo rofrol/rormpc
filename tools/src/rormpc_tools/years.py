@@ -11,7 +11,7 @@
 Year definition (docs/release-years-plan.md): TDOR (MPD OriginalDate) is the song's original release, the year
 the views show; TDRC (MPD Date) stays this recording's own first release. Provenance in TXXX:DATE_SOURCE
 (`musicbrainz:<recording MBID>`, the recording the TDOR came from) and TXXX:DATE_RULE (`same-length`,
-`any-clean`, `own`; `first-release` when a download kept its recording's own first release). FLAC/Ogg: DATE,
+`any-clean`, `own`, `own-no-work`; `first-release` when a download kept its recording's own first release). FLAC/Ogg: DATE,
 ORIGINALDATE, DATE_SOURCE, DATE_RULE. The recording tag `--mbid` rewrites: ID3 UFID "http://musicbrainz.org" (MPD's
 MUSICBRAINZ_TRACKID, the scrobbler's recording_mbid); FLAC/Ogg: MUSICBRAINZ_TRACKID.
 
@@ -27,9 +27,11 @@ The rule, per file with a recording MBID:
   3. Only when none has one, the same over every such candidate whatever its length (`any-clean`).
   4. Release dates, never release-group dates; a release group dated earlier is evidence and keeps the row in
      review.
-  5. No work relationship: no proposal, the row "needs MBID"; nothing studio found: no proposal.
-Confidence `high`: same-length, release-group year = release year, and earlier than the year shown now; else
-`review`. Every row starts undecided: nothing is applied without an accept.
+  5. No work relationship (plain audio only): its own earliest official release outside NOT_OWN (`own-no-work`),
+     still marked "needs MBID"; nothing studio found: no proposal.
+Confidence `high`: same-length or own-no-work, release-group year = release year, and earlier than the year shown
+now; own-no-work also allows no year shown. Else `review`. Every row starts undecided: nothing is applied without
+an accept.
 
 MusicBrainz at 1 request/s with the shared User-Agent (mbtag.http, which backs 503 off), every response cached in
 the ytmb cache, so a second run reads only the cache.
@@ -299,8 +301,12 @@ def compute(mbid):
     elif not perf:
         out["needs_mbid"] = True
         out["classes"].append("no-work")
-        out["evidence"] = matched + "; no work relationship on MusicBrainz"
-        return out
+        if rec.get("video") or dj_mix(rec):
+            out["evidence"] = matched + "; no work relationship on MusicBrainz"
+            return out
+        e = earliest(releases(out["matched"]), NOT_OWN)
+        if e:
+            found, rule = (e[0], e[1], rec), "own-no-work"
     else:
         clean, same = work_candidates(rec, out["matched"], perf, attrs, rec.get("length"), out["classes"])
         for rule, group in (("same-length", same), ("any-clean", clean)):
@@ -328,9 +334,13 @@ def compute(mbid):
 
 
 def confidence(c, shown):
-    """high only for same-length, a release group of the same year, and earlier than the year shown now."""
+    """high for same-length or own-no-work with matching RG year and an earlier year; only own-no-work may
+    also be high when no year is shown."""
     if not c["tdor"]:
         return None
+    if c["rule"] == "own-no-work" and year(c["rg_date"] or c["tdor"]) == year(c["tdor"]) \
+            and (shown is None or year(c["tdor"]) < shown):
+        return "high"
     if c["rule"] == "same-length" and year(c["rg_date"] or c["tdor"]) == year(c["tdor"]) and shown \
             and year(c["tdor"]) < shown:
         return "high"
