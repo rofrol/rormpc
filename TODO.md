@@ -1333,7 +1333,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       `rormpc debuginfo` prints the tools heading without an expected tag, and AGENTS.md and RORMPC.md say the same.
       A test pins the new hint and asserts the archived `rofrol/rormpc-tools` no longer appears. The first attempt
       (7d1967c) did not compile because delete_menu.rs stayed outside its allowed paths.
-- [ ] YouTube deletion fails with HTTP 404 `videoNotFound` (user screenshot, 2026-10-13): add this to TODO and [t-pyr3xmsz]
+- [x] YouTube deletion fails with HTTP 404 `videoNotFound` (user screenshot, 2026-10-13): add this to TODO and [t-pyr3xmsz]
       consult the models. `musicdb delete` reports "Deleted permanently" together with "failed, retried hourly".
       Diagnose playlist lookup/removal of unavailable videos, preserve deletion and restore evidence, classify
       terminal versus transient remote failures, and give a concise, accurate partial-success status. Test offline;
@@ -1366,41 +1366,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Tests: 25 focused (fake API), the full suite 683 passed (9 socket tests blocked in the sandbox).
       Open: the message and the fallback are verified offline only; confirming them on a real unavailable video needs
       the user's playlists (a live run is his call).
-
-- [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review [t-dasiajfe]
-      the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
-      audit other missing years and uppercase titles/artists, distinguish missing source metadata from display/cache
-      bugs, and report provenance. Follow the existing years review and rollback workflow; do not guess dates from
-      YouTube uploads or blanket-title-case intentional artist/title styling.
-      Read-only MPD check 2026-10-13: Title/Album PILLOWTALK, Artist ZAYN, recording MBID present,
-      no Date or OriginalDate; hits.library_songs passes title/artist through unchanged. Actual file tags and
-      official capitalization remain unverified; the filename's upload date is not release-year evidence.
-      File-tag audit 2026-10-18 (read-only, mutagen over the library, herdr-job 20261018-112057-cc90): 806 audio
-      files; **178 have no date tag at all** (so the missing year is source metadata, not a display or cache bug);
-      PILLOWTALK's tags are title "PILLOWTALK", artist "ZAYN", album "PILLOWTALK", no date — and both the title and
-      the artist are exactly the YouTube uploader's strings, which answers the "why the caps" question: the tags
-      copy the source title, the caps are not introduced by rormpc (9 titles and 32 artist strings are all-caps;
-      several are legitimate, e.g. M83, LMFAO, AWOLNATION, VA). Next: the year repair is the existing `musicdb
-      years` review workflow (reviewed, backed-up, atomic apply and rollback) over the 178 files without a date; it
-      needs the user's approval of the proposed years, and dates are never guessed from upload dates.
-      Review run 2026-10-18 (`musicdb years --dry-run`, read-only, herdr-job 20261018-112312-7fc3): 516 rows in
-      /Users/romanfrolow/personal_projects/music-data/years-report.json (+ years-report.md) — 59 high confidence
-      (MusicBrainz, `same-length` rule), 66 to review, 391 with no evidence, 352 need an MBID first. Waiting for the
-      user's decision on accepting the 59 (apply writes TDRC/TDOR, backs up the old values to years-backup.jsonl and
-      has `--rollback`).
-      Applied 2026-10-18 (the user: "czemu mam coś przeglądać? rób z todo" — no review by hand): the 59
-      high-confidence rows were accepted (`musicdb years --accept <59 ids>`) and applied (`--apply`, herdr-jobs
-      20261018-112632-9b34 and 20261018-112635-d649): 59 files got TDRC and TDOR, `skipped: []`, the old values are in
-      music-data/years-backup.jsonl (`musicdb years --rollback` undoes it), and `mpc update --wait` ran. Spot check:
-      Nightcall now has date 2011 / originaldate 2010, MPD shows 2011. Remaining in the report: 66 rows to review
-      (each needs a human judgement) and 391 without evidence, 352 of them needing an MBID first; the caps question is
-      answered (the tags copy the source's title, rormpc does not change case).
-      Consult round 20261013-101517-e1fa (MiMo and DeepSeek): first compare file tags with MPD, then audit missing
-      dates and capitalization provenance; reuse years.py's reviewed, freshness-guarded, backed-up atomic apply
-      and rollback. Caps alone are not an error. Include unavailable release metadata, migration of upload dates,
-      stale MPD, and version identity in test fixtures. MiMo flags the eight-digit-date heuristic as a possible
-      ambiguity: verify provenance/format before treating an eight-digit value as upload metadata; not a confirmed
-      cause here. Timing: no timing, on-demand audit and reviewed repair. No personal library inventory in git.
+      Checked by the coordinator 2026-10-23: landed (f5916de); the open live check moved to "Needs a decision" (t-ackmwk2w).
 
 - [ ] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
@@ -2419,6 +2385,50 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       redispatched with `--agent pi` on the ChatGPT plan: run r-alp4b557 started (attempt 1, step start). Wait with
       `herdr-job` + `herdr todo wait r-alp4b557`.
       Outdated, closed by the coordinator 2026-10-23: runs dispatch again: r-u6kher4r, r-56u7iuad and r-kksiicj2 of t-jsjs5ngd ran and landed on 2026-10-18 and 2026-10-23.
+
+- [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review [t-dasiajfe]
+      the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
+      audit other missing years and uppercase titles/artists, distinguish missing source metadata from display/cache
+      bugs, and report provenance. Follow the existing years review and rollback workflow; do not guess dates from
+      YouTube uploads or blanket-title-case intentional artist/title styling.
+      Read-only MPD check 2026-10-13: Title/Album PILLOWTALK, Artist ZAYN, recording MBID present,
+      no Date or OriginalDate; hits.library_songs passes title/artist through unchanged. Actual file tags and
+      official capitalization remain unverified; the filename's upload date is not release-year evidence.
+      File-tag audit 2026-10-18 (read-only, mutagen over the library, herdr-job 20261018-112057-cc90): 806 audio
+      files; **178 have no date tag at all** (so the missing year is source metadata, not a display or cache bug);
+      PILLOWTALK's tags are title "PILLOWTALK", artist "ZAYN", album "PILLOWTALK", no date — and both the title and
+      the artist are exactly the YouTube uploader's strings, which answers the "why the caps" question: the tags
+      copy the source title, the caps are not introduced by rormpc (9 titles and 32 artist strings are all-caps;
+      several are legitimate, e.g. M83, LMFAO, AWOLNATION, VA). Next: the year repair is the existing `musicdb
+      years` review workflow (reviewed, backed-up, atomic apply and rollback) over the 178 files without a date; it
+      needs the user's approval of the proposed years, and dates are never guessed from upload dates.
+      Review run 2026-10-18 (`musicdb years --dry-run`, read-only, herdr-job 20261018-112312-7fc3): 516 rows in
+      /Users/romanfrolow/personal_projects/music-data/years-report.json (+ years-report.md) — 59 high confidence
+      (MusicBrainz, `same-length` rule), 66 to review, 391 with no evidence, 352 need an MBID first. Waiting for the
+      user's decision on accepting the 59 (apply writes TDRC/TDOR, backs up the old values to years-backup.jsonl and
+      has `--rollback`).
+      Applied 2026-10-18 (the user: "czemu mam coś przeglądać? rób z todo" — no review by hand): the 59
+      high-confidence rows were accepted (`musicdb years --accept <59 ids>`) and applied (`--apply`, herdr-jobs
+      20261018-112632-9b34 and 20261018-112635-d649): 59 files got TDRC and TDOR, `skipped: []`, the old values are in
+      music-data/years-backup.jsonl (`musicdb years --rollback` undoes it), and `mpc update --wait` ran. Spot check:
+      Nightcall now has date 2011 / originaldate 2010, MPD shows 2011. Remaining in the report: 66 rows to review
+      (each needs a human judgement) and 391 without evidence, 352 of them needing an MBID first; the caps question is
+      answered (the tags copy the source's title, rormpc does not change case).
+      Consult round 20261013-101517-e1fa (MiMo and DeepSeek): first compare file tags with MPD, then audit missing
+      dates and capitalization provenance; reuse years.py's reviewed, freshness-guarded, backed-up atomic apply
+      and rollback. Caps alone are not an error. Include unavailable release metadata, migration of upload dates,
+      stale MPD, and version identity in test fixtures. MiMo flags the eight-digit-date heuristic as a possible
+      ambiguity: verify provenance/format before treating an eight-digit value as upload metadata; not a confirmed
+      cause here. Timing: no timing, on-demand audit and reviewed repair. No personal library inventory in git.
+      Moved to "Needs a decision" by the coordinator 2026-10-23: what is left needs the user's choice.
+      The 66 review rows and the 352 songs without an MBID: how should they be handled, now that the user does not want to review by hand?
+      Options: leave them (the 59 sure years are applied; the rest stays without a year) | a worker plans an MBID lookup for the 352 (AcoustID/MusicBrainz, then `musicdb years` again; only sure rows applied) | the coordinator applies the 66 review rows with a stricter automatic rule decided after a consult round
+      Checked: music-data/years-report.json (516 rows, 2026-10-18), the apply and rollback already landed.
+
+- [ ] YouTube deletion, live check (from t-pyr3xmsz, landed f5916de, verified offline only): [t-ackmwk2w]
+      Confirm the new message and the videoNotFound fallback on a real unavailable video in your playlists?
+      Options: no, the offline tests are enough | yes, a read-only `find` on one unavailable video you name | yes, a real `musicdb delete` of a song you choose
+      Checked: the item's notes (25 focused tests on a fake API, the full suite passed in the driver's verify).
 
 ## Waiting on rormpc-tools
 
