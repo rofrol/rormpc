@@ -1383,7 +1383,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the user's playlists (a live run is his call).
       Checked by the coordinator 2026-10-23: landed (f5916de); the open live check moved to "Needs a decision" (t-ackmwk2w).
 
-- [ ] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review [t-dasiajfe]
+- [x] Missing release years and uppercase metadata (user, 2026-10-13): "PILLOWTALK — ZAYN has no year. Review [t-dasiajfe]
       the others. Why the caps? Ask the models." Trace this song's file tags, MPD fields and displayed metadata;
       audit other missing years and uppercase titles/artists, distinguish missing source metadata from display/cache
       bugs, and report provenance. Follow the existing years review and rollback workflow; do not guess dates from
@@ -1434,9 +1434,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       `musicdb mbid --dry-run | --apply | --rollback [ID...]`, 57 offline tests. Reviewed by the coordinator: no
       Shazam call, only the recording tag written, swaps withheld; its conflict rule is strict (any second
       AcoustID-supported candidate withholds the row), so the yield may be low; the dry run shows it.
-      In flight 2026-10-23: `musicdb mbid --dry-run`, herdr-job 20261023-174448-190f (output
-      ~/.local/share/rormpc-tools/mbid-2026-10-23/dry-run.json); then `--apply` of the SURE rows, then `musicdb years`
-      again with only new high rows.
+      Run 2026-10-23 by the coordinator (herdr-jobs 20261023-174448-190f dry run, 20261023-175657-720b apply,
+      20261023-175711-c285 years dry run; reports in ~/.local/share/rormpc-tools/mbid-2026-10-23/): 166 rows are
+      `needs_mbid` + `no-recording` (the 352 counted all `needs_mbid`, including songs with a recording but no work
+      link); 5 SURE, applied, none skipped (James Ingram - I Believe I Can Fly, Dex Arson - Years, Jack Vidgen - I
+      Have Nothing, two Postmodern Jukebox covers); 161 withheld: 90 no match (remixes, live, covers, obscure
+      Polish songs), 20 missing names or over 900 s, 16 search-only, 13 tie/conflict, 12 version ambiguity, 7 below
+      the thresholds, 2 video swaps, 1 duration. The years rerun gave none of the five a high-confidence year (two
+      `no-work`, two `version`/`undated`, one without a row), so nothing more was applied. `musicdb mbid --rollback`
+      undoes the five. Limits in "Proposed" (t-mbidyld1).
 
 - [x] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
@@ -1938,6 +1944,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
     in the TUI because Merge would move a real file to the quarantine.
 
 ## Proposed
+
+- [ ] Missing years, what the MBID repair left (from t-dasiajfe, 2026-10-23): [t-mbidyld1]
+      (a) songs with a recording but no work link (`no-work`, part of the 352 `needs_mbid`) get no year proposal;
+      a years rule from the recording's own earliest release (same length) could date them; (b) the strict
+      conflict rule withheld 13 rows (any second AcoustID-supported recording, which is common for one song on
+      several releases); merging candidates of the same work and length would recover some. Cost: one worker run
+      each, offline tests, no build.
 
 - [ ] The installer smoke test's macOS job fails on master: the `install-stubbed (macos-latest)` job of [t-23vr4rs4]
       .github/workflows/installer_smoke.yml fails in `scripts/test_rormpc_install.sh` (the log ends after
