@@ -1,12 +1,13 @@
 """Synthetic acoustic evidence only: no model imports, downloads or real state."""
 import contextlib
 import copy
-import io
 import json
 import math
 from pathlib import Path
 import runpy
 import sys
+import struct
+import wave
 from types import SimpleNamespace
 
 import pytest
@@ -198,7 +199,7 @@ def test_displacement_guard_keeps_whisper_and_counts_as_weak(shift, kept):
 
 
 @pytest.mark.parametrize("with_words", [False, True])
-def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypatch, capsys, with_words):
+def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypatch, capsys, tmp_path, with_words):
     # Fake every model/tensor API used by main: no torch or model download.
     class Tensor:
         shape = (1, 16000)
@@ -210,6 +211,14 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
             return self
 
         def to(self, dtype):
+            return self
+
+        def div_(self, value):
+            assert value == 32768
+            return self
+
+        def unsqueeze(self, axis):
+            assert axis == 0
             return self
 
         def tolist(self):
@@ -243,18 +252,22 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
             return {" nań": " nan", "été": "ete"}[word]
 
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
-        inference_mode=contextlib.nullcontext, float32="float32"))
+        inference_mode=contextlib.nullcontext, float32="float32", int16="int16",
+        frombuffer=lambda samples, dtype: Tensor()))
     monkeypatch.setitem(sys.modules, "torchaudio", SimpleNamespace(
-        info=lambda _: SimpleNamespace(sample_rate=16000, num_channels=1),
-        load=lambda _: (Tensor(), 16000), pipelines=SimpleNamespace(
+        pipelines=SimpleNamespace(
             MMS_FA=SimpleNamespace(get_model=get_model, get_labels=get_labels))))
     # The no-words run must not even construct a romanizer.
     monkeypatch.setitem(sys.modules, "uroman", SimpleNamespace(Uroman=Romanizer if with_words else None))
-    argv = ["align_backend.py", "--audio", "unused.wav"]
+    audio = tmp_path / "vocals.wav"
+    with wave.open(str(audio), "wb") as out:
+        out.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        out.writeframes(struct.pack("<h", 0))
+    argv = ["align_backend.py", "--audio", str(audio)]
     if with_words:
-        source = json.dumps([" nań", "fail", "été"])
-        monkeypatch.setattr("builtins.open", lambda *args, **kwargs: io.StringIO(source))
-        argv.extend(["--words", "unused.json"])
+        source = tmp_path / "words.json"
+        source.write_text(json.dumps([" nań", "fail", "été"]))
+        argv.extend(["--words", str(source)])
     monkeypatch.setattr(sys, "argv", argv)
     backend = Path(__file__).parents[1] / "src/rormpc_tools/data/align_backend.py"
     runpy.run_path(str(backend), run_name="__main__")
@@ -265,6 +278,29 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
     if with_words:
         expected["words_uroman"] = [" nan", "", "ete"]
     assert output == expected
+
+
+@pytest.mark.parametrize("channels,rate,width,frames,error", [
+    (1, 16000, 2, 3, None),
+    (2, 16000, 2, 3, "16 kHz mono PCM16"),
+    (1, 44100, 2, 3, "16 kHz mono PCM16"),
+    (1, 16000, 1, 3, "16 kHz mono PCM16"),
+    (1, 16000, 2, 0, "empty"),
+])
+def test_backend_pcm16_reader(tmp_path, channels, rate, width, frames, error):
+    backend = Path(__file__).parents[1] / "src/rormpc_tools/data/align_backend.py"
+    reader = runpy.run_path(str(backend))["read_pcm16"]  # No torch import needed.
+    audio = tmp_path / "vocals.wav"
+    with wave.open(str(audio), "wb") as out:
+        out.setparams((channels, width, rate, 0, "NONE", "not compressed"))
+        out.writeframes(struct.pack("<3h", -32768, 0, 32767)[:frames * width] * channels)
+    if error:
+        with pytest.raises(ValueError, match=error):
+            reader(audio)
+    else:
+        samples, sample_rate = reader(audio)
+        assert list(samples) == [-32768, 0, 32767]
+        assert sample_rate == 16000
 
 
 def test_invalid_romanized_length():

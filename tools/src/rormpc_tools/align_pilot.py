@@ -46,11 +46,12 @@ def read_list(path):
     return songs
 
 
-def reference_groups(ref, words):
+def reference_partition(ref, words):
     """Lock word membership once, by lexical edit alignment, never by candidate times.
 
     Insertions remain in the preceding line; deletions do not fabricate words. A
-    reference line with no matching word is unscorable, rather than a free timing hit.
+    reference line with no matching word or a non-increasing first match is omitted
+    from both the returned reference and partition, rather than a free timing hit.
     The traceback tie order matches transcribe_eval.sync().
     """
     rw = [(w, i) for i, (_, text) in enumerate(ref) for w in text.split()]
@@ -79,12 +80,23 @@ def reference_groups(ref, words):
             i -= 1
         else:
             j -= 1
-    if not matches or any(not m for m in matches):
-        raise ValueError("reference line has no matching Whisper word")
-    starts = [0] + [min(m) for m in matches[1:]]
-    if any(a >= b for a, b in zip(starts, starts[1:])):
-        raise ValueError("reference breaks cannot partition the Whisper words")
-    return [list(range(a, b)) for a, b in zip(starts, starts[1:] + [len(words)])]
+    kept, starts = [], []
+    for line, matched in zip(ref, matches):
+        if not matched:
+            continue
+        first = min(matched)
+        if starts and first <= starts[-1]:
+            continue
+        kept.append(line)
+        starts.append(first)
+    if starts:
+        starts[0] = 0  # Leading insertions belong to the first scorable line.
+    groups = [list(range(a, b)) for a, b in zip(starts, starts[1:] + [len(words)])]
+    return kept, groups
+
+
+def reference_groups(ref, words):
+    return reference_partition(ref, words)[1]
 
 
 def check_words(raw, refined):
@@ -95,7 +107,8 @@ def check_words(raw, refined):
 
 def score(ref, raw, refined, groups=None):
     check_words(raw, refined)
-    groups = reference_groups(ref, raw) if groups is None else groups
+    if groups is None:
+        ref, groups = reference_partition(ref, raw)
     def lines(words):
         return [{"start": words[g[0]]["start"], "text": " ".join(words[i]["word"] for i in g)}
                 for g in groups]
@@ -201,7 +214,12 @@ def evaluate(rel, label, raw_dir, backend):
     if not ref:
         return rec | {"status": "skipped", "reason": "no synced lyrics reference"}
     words = transcribe.flat_words(raw["out"].get("segments", []))
-    groups = reference_groups(ref, words)
+    reduced, groups = reference_partition(ref, words)
+    rec.update(ref_lines=len(ref), ref_lines_scored=len(reduced))
+    if len(reduced) * 2 < len(ref):
+        return rec | {"status": "skipped",
+                      "reason": f"unscorable: {len(reduced)} of {len(ref)} reference lines"}
+    ref = reduced
     out = run_backend(stem, words, backend)
     args = (words, out["emissions"], out["frame_rate"], out["vocabulary"])
     options = {"blank_id": out.get("blank_id", 0), "romanized": out.get("words_uroman")}
@@ -245,15 +263,16 @@ def cmd(a):
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "pilot.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
     stream = sys.stderr if a.json else sys.stdout
-    print("song\tcohort\traw p50/p90/drift/hit -> refined\taligned/kept\tmean shift", file=stream)
+    print("song\tcohort\tref_lines\tref_lines_scored\traw p50/p90/drift/hit -> refined\taligned/kept\tmean shift", file=stream)
     for s in results:
+        counts = f"{s.get('ref_lines', 'n/a')}\t{s.get('ref_lines_scored', 'n/a')}"
         if s["status"] != "ok":
-            print(f"{s['file']}\t{s['status']}: {s['reason']}", file=stream)
+            print(f"{s['file']}\t{s['status']}: {s['reason']}\t{counts}", file=stream)
             continue
         def metrics(side):
             return "/".join(f"{s[side][k]:.3f}" if s[side][k] is not None else "n/a"
                             for k in ("p50", "p90", "drift", "hit"))
-        print(f"{s['file']}\t{s['label']}\t{metrics('raw')} -> {metrics('refined')}\t"
+        print(f"{s['file']}\t{s['label']}\t{counts}\t{metrics('raw')} -> {metrics('refined')}\t"
               f"{s['words_aligned']}/{s['words_kept']}\t{s['mean_shift_s']:.3f}"
               f"\t{s['fallback_reason'] or '-'}", file=stream)
     for gate in verdict["gates"]:

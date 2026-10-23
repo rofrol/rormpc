@@ -16,10 +16,30 @@ an empty string. Singing quality must be evaluated before this is connected to
 the transcript path.
 """
 import argparse
+import array
 import contextlib
 import json
 import math
 import sys
+import wave
+
+
+def read_pcm16(path):
+    """Read the pilot's mono 16 kHz PCM16 WAV without audio/model dependencies."""
+    with wave.open(str(path), "rb") as source:
+        if (source.getnchannels(), source.getframerate(), source.getsampwidth()) != (1, 16000, 2):
+            raise ValueError("expected a 16 kHz mono PCM16 WAV vocal stem")
+        frames = source.getnframes()
+        data = source.readframes(frames)
+    if not data:
+        raise ValueError("audio is empty")
+    if len(data) != frames * 2:
+        raise ValueError("truncated PCM16 audio")
+    samples = array.array("h")
+    samples.frombytes(data)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    return samples, 16000
 
 
 def main():
@@ -55,13 +75,9 @@ def main():
         import torchaudio
 
         try:
-            info = torchaudio.info(args.audio)
-            if info.sample_rate != 16000 or info.num_channels != 1:
-                parser.exit(1, "align backend: expected a 16 kHz mono WAV vocal stem\n")
-            waveform, rate = torchaudio.load(args.audio)
-            if waveform.shape[1] == 0:
-                parser.exit(1, "align backend: audio is empty\n")
-        except (OSError, RuntimeError) as exc:
+            samples, rate = read_pcm16(args.audio)
+            waveform = torch.frombuffer(samples, dtype=torch.int16).to(torch.float32).div_(32768).unsqueeze(0)
+        except (OSError, RuntimeError, ValueError, wave.Error, EOFError) as exc:
             parser.exit(1, f"align backend: cannot read vocal stem: {exc}\n")
         bundle = torchaudio.pipelines.MMS_FA
         try:

@@ -44,8 +44,24 @@ def test_breaks_are_lexical_not_reference_time_windows():
 def test_insertion_deletion_and_unscorable_line():
     raw = [{"word": s, "start": i, "end": i + .5} for i, s in enumerate(["a", "extra", "b"])]
     assert p.reference_groups([(0, "a missing"), (4, "b")], raw) == [[0, 1], [2]]
-    with pytest.raises(ValueError, match="no matching"):
-        p.reference_groups([(0, "a"), (4, "absent")], raw)
+    assert p.reference_groups([(0, "a"), (4, "absent")], raw) == [[0, 1, 2]]
+
+
+@pytest.mark.parametrize("ref,scored,groups", [
+    ([(1, "a"), (3, "absent"), (5, "b"), (9, "c")],
+     [(1, "a"), (5, "b"), (9, "c")], [[0], [1], [2]]),
+    # Both normalized tokens belong to the same Whisper word: the second
+    # reference line's first match cannot advance the partition.
+    ([(1, "a"), (3, "b"), (9, "c")], [(1, "a"), (9, "c")], [[0], [1]]),
+])
+def test_reduced_reference_is_shared(ref, scored, groups):
+    raw = words() if len(ref) == 4 else [dict(words()[0], word=" a b"), words()[2]]
+    assert p.reference_partition(ref, raw) == (scored, groups)
+    result = p.score(ref, raw, copy.deepcopy(raw))
+    assert result["raw"] == result["refined"]
+    assert result["raw"] == transcribe_eval.sync(scored, [
+        {"start": raw[g[0]]["start"], "text": " ".join(raw[i]["word"] for i in g)} for g in groups])
+    assert result["raw"]["lines"] == len(scored)
 
 
 @pytest.mark.parametrize("changed", ["replacement", "order", "whitespace", "dropped"])
@@ -123,11 +139,16 @@ def test_missing_stem_skipped(tmp_path, monkeypatch):
     assert "missing cached vocal stem" in rec["reason"]
 
 
-def test_fake_emissions_end_to_end(tmp_path, monkeypatch):
+@pytest.mark.parametrize("ref", [
+    [(1, "a"), (5, "b"), (9, "c")],
+    [(1, "a"), (3, "absent"), (5, "b"), (9, "c")],
+    [(0, "missing"), (1, "a"), (3, "absent"), (5, "b"), (7, "gone"), (9, "c")],
+])
+def test_fake_emissions_end_to_end(tmp_path, monkeypatch, ref):
     save_raw(tmp_path)
     monkeypatch.setattr(transcribe, "CACHE", tmp_path)
     (tmp_path / ("a" * 64 + ".npy")).touch()
-    monkeypatch.setattr(transcribe_eval, "reference", lambda rel: [(1, "a"), (5, "b"), (9, "c")])
+    monkeypatch.setattr(transcribe_eval, "reference", lambda rel: ref)
     # Strong, separated a/b/c frames at exactly the raw starts.
     emissions = [[0.0, -20., -20., -20.] for _ in range(20)]
     for frame, label in [(2, 1), (10, 2), (18, 3)]:
@@ -139,6 +160,8 @@ def test_fake_emissions_end_to_end(tmp_path, monkeypatch):
     assert rec["status"] == "ok"
     assert rec["raw"] == rec["refined"]
     assert rec["words_identical"]
+    assert rec["ref_lines"] == len(ref)
+    assert rec["ref_lines_scored"] == 3
     assert rec["words_aligned"] == 3
     assert rec["fallback_reason"] is None
     assert rec["mean_shift_s"] == 0
@@ -148,6 +171,31 @@ def test_fake_emissions_end_to_end(tmp_path, monkeypatch):
     rec = p.evaluate("song.flac", "lyrics", tmp_path, p.BACKEND)
     assert rec["words_kept"] == 3
     assert rec["fallback_reason"] == ["unsupported_word"]
+
+
+@pytest.mark.parametrize("ref,scored", [
+    ([(1, "a"), (3, "absent"), (5, "missing")], 1),
+    ([(1, "absent"), (5, "missing")], 0),
+])
+def test_unscorable_song_is_skipped(tmp_path, monkeypatch, capsys, ref, scored):
+    save_raw(tmp_path)
+    monkeypatch.setattr(transcribe, "CACHE", tmp_path)
+    (tmp_path / ("a" * 64 + ".npy")).touch()
+    monkeypatch.setattr(transcribe_eval, "reference", lambda rel: ref)
+    monkeypatch.setattr(p, "run_backend", lambda *a: pytest.fail("unscorable song must not run backend"))
+    path = tmp_path / "list.tsv"
+    path.write_text("song.flac\tlyrics\n")
+    p.cmd(argparse.Namespace(list=path, out=tmp_path, raw=None, backend=None, limit=None, json=False))
+    report = json.loads((tmp_path / "pilot.json").read_text())
+    rec = report["songs"][0]
+    assert rec["status"] == "skipped"
+    assert rec["reason"] == f"unscorable: {scored} of {len(ref)} reference lines"
+    assert (rec["ref_lines"], rec["ref_lines_scored"]) == (len(ref), scored)
+    assert report["verdict"] == "INCOMPLETE"
+    assert p.gates([song(), rec])["verdict"] != "PASS"
+    output = capsys.readouterr().out
+    assert "ref_lines\tref_lines_scored" in output
+    assert f"\t{len(ref)}\t{scored}" in output
 
 
 def test_changed_word_from_alignment_is_an_error(tmp_path, monkeypatch):
