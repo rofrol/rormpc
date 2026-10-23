@@ -1406,10 +1406,18 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Decided by the user 2026-10-23 (d-xwswxqek): an MBID lookup for the 352 songs without one (AcoustID /
       MusicBrainz), then `musicdb years` again with only the sure rows applied; a worker plans it first. The 66
       review rows stay as they are.
+      In flight 2026-10-23: the plan, run r-mnv4a65h (pi), tools/docs/mbid-lookup-plan.md; check with
+      `herdr todo status r-mnv4a65h`.
 
 - [ ] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
       way (download, tag, MPD); check against tools/ and music-mpd's scope before dispatch.
+      Downloaded 2026-10-23 by the coordinator (herdr-job 20261023-170836-d188, `yt-mp3-mb --batch --json`, then
+      `mpc update --wait`; a worker cannot, its sandbox has no network): Singles/Lands_of_Glory--Alan_Silvestri_Cast_
+      Away_Theme_Cast_Away_Soundtrack_HQ--_Z-wO3mbKBY--20221217.mp3, status `review`: tagged with the uploader as artist
+      and the raw title, no MBID; proposal Alan Silvestri - "End Credits" (MBID 8828c43e-21ad-4899-8788-1bfc851ae356,
+      Shazam, score 0.81). Retag it with the proposal?
+      Options: yes, retag with the proposal | keep the uploader's tags
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
