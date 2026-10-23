@@ -16,6 +16,21 @@ installed and released with it; the old repository rofrol/rormpc-tools is archiv
 | `liveplaylist` | a public YouTube playlist or [Omarchy Radio](https://radio.omarchy.org/) as a "live" MPD playlist (rormpc's Live playlists pane): `add URL`, `check` for new tracks (Omarchy Radio also once a day: rormpc's `companions` run `check --kind omarchy --notify`, which only adds them as pending and notifies), `accept` / `reject` them, `download`, `list`, `rename` its MPD playlist; every command takes `--json` |
 | `yt-playlist` | your YouTube playlists through the YouTube Data API (OAuth), for removing deleted songs |
 
+`musicdb mbid --dry-run` refreshes the years report and identifies only its `needs_mbid` + `no-recording`
+files, rechecking their own tags: AcoustID first, then cleaned file artist/title on MusicBrainz, with shared
+HTTP pacing and no Shazam, downloads or playback changes. `mbid-report.json` and the fsynced, versioned
+`mbid-backup.jsonl` live in `data_dir`. `--apply [ID...]` writes only the recording tag for SURE canonical,
+AcoustID-supported matches meeting provisional score/check thresholds (1.0/0.8); ties, conflicting evidence,
+version uncertainty, search-only results, lookup errors and video/DJ swaps stay untouched with reasons.
+Writes use a same-directory copy and atomic replace, guarded by full-file SHA-256 and stat freshness;
+per-file checkpoints resume interrupted apply/rollback without rewriting tags, and song-key associations follow
+with journalled compensation. `--rollback [ID...]` restores absence/the old recording only while audio and
+the written recording still match, preserving later unrelated tags and association edits; copied shared-key
+data survives. Resume interrupted work (or cancel an unapplied preparation with rollback) before a new dry run.
+MPD's directory update is waited and failures remain resumable. Afterwards run `musicdb years --dry-run` again:
+only newly computed `high` rows qualify for acceptance/apply; existing review rows and undated proposals stay
+untouched. Identification never authorizes date changes. (AI-assisted)
+
 ### hits: sets, ranks, exceptions and smart lists
 
 Selection = (union of `+` sets, or the whole library when no set is `+`) − (union of `-` sets) ∩ period ∩ genres

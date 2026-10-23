@@ -1,6 +1,7 @@
 # Missing recording MBIDs: lookup plan
 
-Status: proposal only (AI-assisted); no implementation or library changes. The approved direction is lookup,
+Status: implemented offline (AI-assisted), with the user's 2026-10-23 decisions below; no live lookup or library
+changes performed during implementation. The approved direction is lookup,
 then years with only sure rows applied, without manual row review; the existing 66 review rows stay untouched
 (`TODO.md:1387-1409`). Keep inventories, reports and account data outside this public repository
 (`tools/README.md:339-340`). Source references below abbreviate `tools/src/rormpc_tools/`.
@@ -125,7 +126,30 @@ only high years IDs accepted; undated/review rows untouched. This follows the re
 Only an authorized live run can establish service coverage, real match precision, actual runtime, fpcalc/API
 availability and MPD/scrobbler visibility. No network, library inspection or live writes belong to this plan.
 
-## Open questions before implementation
+## Implementation and decided policy (2026-10-23)
+
+Built `musicdb mbid --dry-run | --apply | --rollback [ID...]` in `mbid.py`, with offline evidence and temporary
+ID3/Vorbis transaction tests in `test_mbid.py`. The years report/CLI and downloader behavior are unchanged.
+Dry-run refreshes years first and rechecks actual tags. The recording-only writer journals a full-file digest,
+stat snapshot, old/new recording, staged-byte digest and association operations before replacing files. Apply,
+rollback, association compensation and waited MPD updates resume at durable checkpoints. Rollback preserves
+later unrelated tags and association edits, and copied associations still used by another file.
+
+- d-mux3adcq: ship the AcoustID-supported canonical MB auto gate, with both provisional auto thresholds and
+  conservative exclusions; non-SURE rows are reported with reasons, never a manual review queue. Versioned
+  recordings are conservatively withheld even when their broad markers agree: that does not establish which
+  live/remix/edit performance the file contains. Search contributes the distinct-method bonus only with the
+  existing search name/score/duration checks. Repeated queries and redirected duplicate IDs do not add votes.
+- d-nec7jsge: Shazam is disabled entirely for this repair, superseding the optional hint described above.
+- d-awp3qij7: video/DJ-to-audio swaps cannot authorize writes. Canonical candidate identities, flags, lengths,
+  redirects and any audio alternatives found by the lookups stay in the report. The work-based swap lookup is
+  deliberately not invoked: its earliest-release heuristic cannot make an exact-audio repair safe.
+
+The separate follow-up remains a fresh years run and acceptance of newly computed high rows only, not an
+automatic side effect of MBID application. Precision, service coverage and live integration still require an
+authorized run outside the sandbox; offline fixtures do not establish them.
+
+## Original questions (answered above)
 
 - Which automatic identification gate should ship?
   Options: AcoustID-supported auto thresholds plus the conservative exclusions above (recommended) | report-only
