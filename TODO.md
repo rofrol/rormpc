@@ -1211,6 +1211,21 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       numbered gates (PASS / FAIL / ABANDON / INCOMPLETE). Decided by the worker, checked by the coordinator:
       transcribe-eval has no fixed output directory (its default is a fresh temp dir), so `--raw` defaults to
       `--out`. Next: transcribe-eval on the 10 + 10 songs into a kept directory, then align-pilot on it.
+      Pilot run 2026-10-23 (herdr-job 20261023-170725-70c4; inputs and outputs in
+      ~/.local/share/rormpc-tools/align-pilot-2026-10-23/: pilot-list.tsv, raw/, out/pilot.json, pilot-table.txt):
+      transcribe-eval of the 10 held-out songs succeeded (raw/ has all 20), but align-pilot scored nothing:
+      INCOMPLETE, 20/20 errors. 16 songs: "reference line has no matching Whisper word" (`reference_groups()` raises
+      when any reference line has no matched word, which every real song with WER ~0.3 has). 4 songs: "alignment
+      backend exited with 1", stderr "align backend: cannot read vocal stem: Couldn't find appropriate backend to
+      handle uri .../vocals.wav and format None" after "UserWarning: Failed to initialize NumPy: No module named
+      numpy" (align_backend.py's inline dependencies give torchaudio 2.5.1 no audio backend and no numpy).
+- [ ] Follow-up of t-jsjs5ngd: make the alignment pilot score real songs (both failures above). [t-q7pilotf]
+      (1) reference lines without a matched Whisper word, or whose first match breaks the order, are left out of
+      the scoring for both raw and refined alike (the same reduced reference for both), counted in pilot.json;
+      a song with fewer than half its reference lines scorable is `skipped: unscorable`, not an error. (2)
+      align_backend.py reads the 16 kHz mono PCM16 WAV with the stdlib `wave` module into a torch tensor, no
+      torchaudio.load, no new dependency, and works without numpy. Offline tests for both. Then the coordinator
+      reruns align-pilot on the kept directory (no new transcription).
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
