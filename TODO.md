@@ -1204,6 +1204,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       Next and visible: the pilot run itself — 10 songs with synced lyrics plus 10 held-out ones, raw Whisper times
       against the refined ones, scored with the line segmentation locked to the reference breaks and exactly equal
       words, as a herdr-job with the models downloaded on this machine.
+      Pilot runner landed 2026-10-23 (run r-kksiicj2, worker pi/gpt-6.1-sol, e0940b2; checks `tests tools` by the
+      driver's verify; installed): `musicdb lyrics align-pilot LIST --raw EVAL_DIR --out DIR` reads saved
+      transcribe-eval results and cached vocal stems (never transcribes or separates), scores raw and refined line
+      starts with the reference's line partition, fails on any word change, writes pilot.json and prints the six
+      numbered gates (PASS / FAIL / ABANDON / INCOMPLETE). Decided by the worker, checked by the coordinator:
+      transcribe-eval has no fixed output directory (its default is a fresh temp dir), so `--raw` defaults to
+      `--out`. Next: transcribe-eval on the 10 + 10 songs into a kept directory, then align-pilot on it.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
@@ -2371,7 +2378,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 - [x] [t-a66m24n7] Transcribed lyrics: Try one commercial transcription API on the evaluation set as an upper bound (the audio leaves the machine)?
       Decided by the user 2026-10-11: yes, the whole evaluation set (d-j6gatiuc); it needs an API key the user has.
 
-- [ ] rormpc-tools items while herdr todo run cannot serve them (reports r-8, r-9; d-rp6cp5mq): herdr's round of [t-lwdzxibp]
+- [x] rormpc-tools items while herdr todo run cannot serve them (reports r-8, r-9; d-rp6cp5mq): herdr's round of [t-lwdzxibp]
       2026-10-12 (sol, MiMo, DeepSeek; queued in herdr TODO 7e8d6163) plans `todo run --repo <path>` (the item stays
       here, slot/checks/commit/install/push from the target, default branch read from git), release recipes in the
       target's .herdr run by the driver (staged, resumable), and a two-repository change as two chained items (the
@@ -2381,8 +2388,9 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       Should the coordinator do that (the user said "what overrides?" before the round and chose none meanwhile)?
       Options: accept the round's meanwhile plan | wait for herdr's `todo run --repo`
       Checked: herdr-85's message of 2026-10-12 (d-s2mkmlzc).
+      Outdated, closed by the coordinator 2026-10-23: herdr todo run serves tools/ items now that rormpc-tools lives in tools/ (d-kgxuqbvh); e.g. r-kksiicj2 landed tools/ code with `--check tools`.
 
-- [ ] Worker dispatch is blocked: neither subscription has capacity, so "Next, in order" cannot run (herdr's quota [t-jvfoarip]
+- [x] Worker dispatch is blocked: neither subscription has capacity, so "Next, in order" cannot run (herdr's quota [t-jvfoarip]
       gate refused the first item's worker). Wait for the window, override the gate once, or stop until capacity
       returns?
       Options: wait for the window (recommended: herdr's usage poller publishes a measurement and wakes the pending
@@ -2410,6 +2418,7 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
       it had been transient), so run r-iigptjsv was aborted (event 220484, the only action it offered) and the item
       redispatched with `--agent pi` on the ChatGPT plan: run r-alp4b557 started (attempt 1, step start). Wait with
       `herdr-job` + `herdr todo wait r-alp4b557`.
+      Outdated, closed by the coordinator 2026-10-23: runs dispatch again: r-u6kher4r, r-56u7iuad and r-kksiicj2 of t-jsjs5ngd ran and landed on 2026-10-18 and 2026-10-23.
 
 ## Waiting on rormpc-tools
 
