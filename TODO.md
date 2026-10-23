@@ -1408,8 +1408,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       review rows stay as they are.
       In flight 2026-10-23: the plan, run r-mnv4a65h (pi), tools/docs/mbid-lookup-plan.md; check with
       `herdr todo status r-mnv4a65h`.
+      Plan written 2026-10-23 (run r-mnv4a65h, pi, 138d922; tools/docs/mbid-lookup-plan.md): a new `musicdb mbid
+      --dry-run | --apply | --rollback`, writing only the recording MBID tag, with years.py's backup, atomic apply,
+      freshness guard and rollback, then `musicdb years` again with only high-confidence rows. Its open questions,
+      decided by the user 2026-10-23: the automatic gate is AcoustID-supported, MB-verified, both existing auto
+      thresholds, no ties or version doubt, everything else left alone (d-mux3adcq); Shazam is disabled for this
+      repair, no extra audio leaves the machine (d-nec7jsge); video/DJ-to-audio swaps are withheld, their evidence
+      kept in the report (d-awp3qij7). Next: a worker implements the plan with these answers.
 
-- [ ] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
+- [x] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
       way (download, tag, MPD); check against tools/ and music-mpd's scope before dispatch.
       Downloaded 2026-10-23 by the coordinator (herdr-job 20261023-170836-d188, `yt-mp3-mb --batch --json`, then
@@ -1418,6 +1425,11 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       and the raw title, no MBID; proposal Alan Silvestri - "End Credits" (MBID 8828c43e-21ad-4899-8788-1bfc851ae356,
       Shazam, score 0.81). Retag it with the proposal?
       Options: yes, retag with the proposal | keep the uploader's tags
+      Decided by the user 2026-10-23 (d-iucftlgq): yes; then, told that the file is 660 s and "End Credits" 243 s
+      (d-655r5pss): names only, no MBID. Done by the coordinator (`yt-mp3-mb --retag`, manual names):
+      Singles/Alan_Silvestri--Cast_Away_Theme--_Z-wO3mbKBY--20221217.mp3, Alan Silvestri - Cast Away Theme, 11:00, in
+      MPD. The library already had bit.do--spotify2015/063--JokerRecordings--Cast_Away_Theme_-_End_Credits--
+      PIAcN3qRAV8--20090129.mp3 (Alan Silvestri, 7:13), a different cut; both kept.
 
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
