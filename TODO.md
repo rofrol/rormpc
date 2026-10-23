@@ -1395,6 +1395,10 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       ambiguity: verify provenance/format before treating an eight-digit value as upload metadata; not a confirmed
       cause here. Timing: no timing, on-demand audit and reviewed repair. No personal library inventory in git.
 
+- [ ] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
+      sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
+      way (download, tag, MPD); check against tools/ and music-mpd's scope before dispatch.
+
 ## Done: live Queue plan view (approved 2026-10-06, done 2026-10-07)
 
 - [x] `o` toggles a view-only Queue plan; never sort or move the MPD queue to display it. Show the last two [t-hauxb32o]
