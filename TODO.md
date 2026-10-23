@@ -1251,6 +1251,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       verdict measures the gated aligner; a word is weak below posterior 0.35 or when it moves more than 2.5 s from
       Whisper's time, while Whisper's own p90 error is ~2 s, so the gates may reject exactly the corrections; an
       ungated score was not measured. Asked the user (d-eiogzcqt) whether to abandon or measure ungated first.
+      The user answered 2026-10-23 "stop the work" (no choice made): d-eiogzcqt stays open; ask it again next time.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
@@ -1473,6 +1474,8 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       but no work link (`no-work`) get a year proposal from the recording's own earliest release of the same length,
       as a new high-confidence rule only when that release-group year is unambiguous; offline tests; then the
       coordinator runs `musicdb years --dry-run` and applies the new high rows.
+      Landed 2026-10-23 (run r-2dwbmomi, pi, 38dbc8f; checks by the driver's verify; installed). Not done yet: the
+      `musicdb years --dry-run` and the apply of the new high rows (the user stopped the work before it).
       Decided by the user 2026-10-23 (d-cjk223ao): an undated song may get a high year from this rule when the
       recording's earliest official release and its release group give the same year; other rules unchanged.
 - [ ] Missing years (b), from t-mbidyld1 (decided by the user 2026-10-23, d-ekz2qq65): `musicdb mbid` treats [t-mbidmrge]
