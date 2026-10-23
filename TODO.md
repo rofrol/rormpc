@@ -1415,7 +1415,13 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       thresholds, no ties or version doubt, everything else left alone (d-mux3adcq); Shazam is disabled for this
       repair, no extra audio leaves the machine (d-nec7jsge); video/DJ-to-audio swaps are withheld, their evidence
       kept in the report (d-awp3qij7). Next: a worker implements the plan with these answers.
-      In flight 2026-10-23: the implementation, run r-fxaabooq (pi); check with `herdr todo status r-fxaabooq`.
+      Implemented 2026-10-23 (run r-fxaabooq, pi, e836381; checks `tests tools` by the driver's verify; installed):
+      `musicdb mbid --dry-run | --apply | --rollback [ID...]`, 57 offline tests. Reviewed by the coordinator: no
+      Shazam call, only the recording tag written, swaps withheld; its conflict rule is strict (any second
+      AcoustID-supported candidate withholds the row), so the yield may be low; the dry run shows it.
+      In flight 2026-10-23: `musicdb mbid --dry-run`, herdr-job 20261023-174448-190f (output
+      ~/.local/share/rormpc-tools/mbid-2026-10-23/dry-run.json); then `--apply` of the SURE rows, then `musicdb years`
+      again with only new high rows.
 
 - [x] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
