@@ -1235,6 +1235,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       candidate for the next run. Second attempt of this item: run r-c7ej5e3l (pi), the frame rate from the
       emission count and the audio length, every model failure as one line. After it lands the coordinator runs the
       backend once on one stem before the whole pilot.
+      Landed 2026-10-23 (run r-c7ej5e3l, pi, 33d9f01); checked first by the coordinator on one real stem (herdr-job
+      20261023-201442-51f6, the branch's backend: exit 0, 49.995 frames/s, 11588 frames, 425 romanized words).
+      Found meanwhile: ~/.cache/uv had been emptied between about 17:50 and 18:00 (not by this session or the
+      installer; it was recreated at 20:14), so the transcription backend's environment was gone (`uv run --offline`
+      check: "demucs was not found in the cache") and transcribe-eval of the replacement song ended with the install
+      hint. Replacement for Bon Jovi: Music_from_macbook2010/Let it be.mp3 (the 11th seeded candidate,
+      pilot-list-2.tsv). Running: herdr-job 20261023-201832-1cf6 (`musicdb lyrics transcribe --install`, the
+      replacement's transcribe-eval, then align-pilot into out3/).
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
