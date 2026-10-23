@@ -1415,6 +1415,7 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       thresholds, no ties or version doubt, everything else left alone (d-mux3adcq); Shazam is disabled for this
       repair, no extra audio leaves the machine (d-nec7jsge); video/DJ-to-audio swaps are withheld, their evidence
       kept in the report (d-awp3qij7). Next: a worker implements the plan with these answers.
+      In flight 2026-10-23: the implementation, run r-fxaabooq (pi); check with `herdr todo status r-fxaabooq`.
 
 - [x] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
