@@ -1226,6 +1226,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       align_backend.py reads the 16 kHz mono PCM16 WAV with the stdlib `wave` module into a torch tensor, no
       torchaudio.load, no new dependency, and works without numpy. Offline tests for both. Then the coordinator
       reruns align-pilot on the kept directory (no new transcription).
+      Landed 2026-10-23 (run r-lbuwvz4a, pi, 845b1aa; checks by the driver's verify). Rerun (herdr-job
+      20261023-175808-8bc6, out2/, pilot2-table.txt): still INCOMPLETE; 19 songs "alignment backend exited with 1":
+      `AttributeError: '_Wav2Vec2Model' object has no attribute 'feature_extractor'` (align_backend.py's frame-rate
+      line; MMS_FA.get_model() returns a wrapper), never caught as a one-line error. Bon Jovi - Livin' On A Prayer is
+      `unscorable: 0 of 45` because transcribe-eval judged it `no_vocals` (VAD found 3.2 s of singing) and wrote no
+      words: a correct skip, but the held-out cohort then has 9; the coordinator replaces it with the next seeded
+      candidate for the next run. Second attempt of this item: run r-c7ej5e3l (pi), the frame rate from the
+      emission count and the audio length, every model failure as one line. After it lands the coordinator runs the
+      backend once on one stem before the whole pilot.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
@@ -1443,6 +1452,15 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       the thresholds, 2 video swaps, 1 duration. The years rerun gave none of the five a high-confidence year (two
       `no-work`, two `version`/`undated`, one without a row), so nothing more was applied. `musicdb mbid --rollback`
       undoes the five. Limits in "Proposed" (t-mbidyld1).
+
+- [ ] Missing years (a), from t-mbidyld1 (decided by the user 2026-10-23, d-ekz2qq65): songs with a recording [t-yrnowork]
+      but no work link (`no-work`) get a year proposal from the recording's own earliest release of the same length,
+      as a new high-confidence rule only when that release-group year is unambiguous; offline tests; then the
+      coordinator runs `musicdb years --dry-run` and applies the new high rows.
+- [ ] Missing years (b), from t-mbidyld1 (decided by the user 2026-10-23, d-ekz2qq65): `musicdb mbid` treats [t-mbidmrge]
+      AcoustID-supported candidates that are the same work with lengths within 10 s as one identity instead of a
+      conflict (the 13 "tie or conflicting canonical evidence" rows of 2026-10-23); offline tests; then the
+      coordinator reruns the dry run and applies SURE rows.
 
 - [x] Add https://www.youtube.com/watch?v=_Z-wO3mbKBY (asked 2026-10-23: "add https://www.youtube.com/watch?v=_Z-wO3mbKBY", [t-wli5nnjl]
       sent while the coordinator worked through the TODO). Presumably: add this song to the music library the usual
@@ -1945,12 +1963,13 @@ Plan (2026-10-03, after asking GPT-6.1 Sol and MiMo; both: tests first, CI secon
 
 ## Proposed
 
-- [ ] Missing years, what the MBID repair left (from t-dasiajfe, 2026-10-23): [t-mbidyld1]
+- [x] Missing years, what the MBID repair left (from t-dasiajfe, 2026-10-23): [t-mbidyld1]
       (a) songs with a recording but no work link (`no-work`, part of the 352 `needs_mbid`) get no year proposal;
       a years rule from the recording's own earliest release (same length) could date them; (b) the strict
       conflict rule withheld 13 rows (any second AcoustID-supported recording, which is common for one song on
       several releases); merging candidates of the same work and length would recover some. Cost: one worker run
       each, offline tests, no build.
+      Decided by the user 2026-10-23 (d-ekz2qq65): both (a) and (b), for workers; queued in "Next, in order".
 
 - [ ] The installer smoke test's macOS job fails on master: the `install-stubbed (macos-latest)` job of [t-23vr4rs4]
       .github/workflows/installer_smoke.yml fails in `scripts/test_rormpc_install.sh` (the log ends after
