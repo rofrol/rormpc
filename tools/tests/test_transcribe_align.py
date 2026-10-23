@@ -1,4 +1,4 @@
-"""Synthetic acoustic evidence only: no model imports, downloads or real state."""
+"""Synthetic acoustic evidence only: no real models, downloads or real state."""
 import contextlib
 import copy
 import json
@@ -198,11 +198,13 @@ def test_displacement_guard_keeps_whisper_and_counts_as_weak(shift, kept):
         assert all(w["reason"] == "weak_song" for w in result)
 
 
+@pytest.mark.parametrize("failure", [None, "load", "labels", "inference", "tolist"])
 @pytest.mark.parametrize("with_words", [False, True])
-def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypatch, capsys, tmp_path, with_words):
+def test_backend_words_are_optional_parallel_and_failed_words_are_empty(
+        monkeypatch, capsys, tmp_path, with_words, failure):
     # Fake every model/tensor API used by main: no torch or model download.
     class Tensor:
-        shape = (1, 16000)
+        shape = (1, 2)
 
         def __getitem__(self, index):
             return self
@@ -222,10 +224,12 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
             return self
 
         def tolist(self):
+            if failure == "tolist":
+                raise AttributeError("conversion\nfailed")
             return [[-0.1, -2.352168]]
 
     class Model:
-        feature_extractor = SimpleNamespace(conv_layers=[SimpleNamespace(conv=SimpleNamespace(stride=[320]))])
+        # Like MMS_FA's wrapper, this exposes no feature_extractor or numpy API.
 
         def cpu(self):
             return self
@@ -234,14 +238,20 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
             return self
 
         def __call__(self, waveform):
+            if failure == "inference":
+                raise AttributeError("inference\nfailed")
             return Tensor(), None
 
     def get_model(*, with_star):
         assert with_star is False
+        if failure == "load":
+            raise AttributeError("load\nfailed")
         return Model()
 
     def get_labels(*, star):
         assert star is None
+        if failure == "labels":
+            raise AttributeError("labels\nfailed")
         return ("-", "a")
 
     class Romanizer:
@@ -262,7 +272,7 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
     audio = tmp_path / "vocals.wav"
     with wave.open(str(audio), "wb") as out:
         out.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
-        out.writeframes(struct.pack("<h", 0))
+        out.writeframes(struct.pack("<h", 0) * 320)
     argv = ["align_backend.py", "--audio", str(audio)]
     if with_words:
         source = tmp_path / "words.json"
@@ -270,6 +280,18 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
         argv.extend(["--words", str(source)])
     monkeypatch.setattr(sys, "argv", argv)
     backend = Path(__file__).parents[1] / "src/rormpc_tools/data/align_backend.py"
+    if failure:
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_path(str(backend), run_name="__main__")
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        errors = [line for line in captured.err.splitlines() if line.startswith("align backend:")]
+        assert len(errors) == 1
+        assert errors[0].endswith("failed")
+        assert "\nfailed" not in captured.err
+        assert "Traceback" not in captured.err
+        return
     runpy.run_path(str(backend), run_name="__main__")
     output = json.loads(capsys.readouterr().out)
     expected = {"vocabulary": ["-", "a"], "blank_id": 0, "emissions": [[-0.1, -2.352168]],
@@ -278,6 +300,52 @@ def test_backend_words_are_optional_parallel_and_failed_words_are_empty(monkeypa
     if with_words:
         expected["words_uroman"] = [" nan", "", "ete"]
     assert output == expected
+
+
+def test_backend_with_torch_and_wrapped_model(monkeypatch, capsys, tmp_path):
+    torch = pytest.importorskip("torch")
+
+    class Model:
+        def cpu(self):
+            return self
+
+        def eval(self):
+            return self
+
+        def __call__(self, waveform):
+            assert waveform.shape == (1, 16000)
+            return torch.zeros((1, 50, 2)), None
+
+    bundle = SimpleNamespace(get_model=lambda **kwargs: Model(), get_labels=lambda **kwargs: ("-", "a"))
+    monkeypatch.setitem(sys.modules, "torchaudio", SimpleNamespace(pipelines=SimpleNamespace(MMS_FA=bundle)))
+    audio = tmp_path / "vocals.wav"
+    with wave.open(str(audio), "wb") as out:
+        out.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        out.writeframes(struct.pack("<h", 0) * 16000)
+    monkeypatch.setattr(sys, "argv", ["align_backend.py", "--audio", str(audio)])
+    backend = Path(__file__).parents[1] / "src/rormpc_tools/data/align_backend.py"
+    runpy.run_path(str(backend), run_name="__main__")
+    output = json.loads(capsys.readouterr().out)
+    assert output["frame_rate"] == 50.0
+    assert output["emissions"] == [[-0.693147, -0.693147]] * 50
+
+
+@pytest.mark.parametrize("frames,samples,rate,expected", [
+    (50, 16000, 16000, 50.0),
+    (75, 32000, 16000, 37.5),
+    (50, 8000, 8000, 50.0),
+    (0, 16000, 16000, None),
+    (50, 0, 16000, None),
+    (50, 16000, 0, None),
+])
+def test_backend_frame_rate(frames, samples, rate, expected):
+    backend = Path(__file__).parents[1] / "src/rormpc_tools/data/align_backend.py"
+    compute = runpy.run_path(str(backend))["frame_rate"]
+    if expected is None:
+        with pytest.raises(ValueError, match="positive"):
+            compute(frames, samples, rate)
+    else:
+        assert compute(frames, samples, rate) == expected
 
 
 @pytest.mark.parametrize("channels,rate,width,frames,error", [
