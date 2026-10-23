@@ -1243,6 +1243,14 @@ Triaged 2026-10-07 from the sections below; each item points at its section for 
       hint. Replacement for Bon Jovi: Music_from_macbook2010/Let it be.mp3 (the 11th seeded candidate,
       pilot-list-2.tsv). Running: herdr-job 20261023-201832-1cf6 (`musicdb lyrics transcribe --install`, the
       replacement's transcribe-eval, then align-pilot into out3/).
+      Pilot result 2026-10-23 (herdr-job 20261023-201832-1cf6; out3/pilot.json, pilot3-table.txt): complete, 10 +
+      10 songs scored, verdict ABANDON (p90 improvement 0.0%). 19 of 20 songs fell back whole (`weak_song`: over 30%
+      of the words weak), so refined = raw; only Pilate's Dream aligned 27 of 99 words (p50 -1.25 -> -0.71 s, p90
+      unchanged). Aligned words 0.5% overall. Gates: 1 FAIL (median |p50| 0.680), 2 FAIL (median p90 2.135),
+      3 PASS (drift 0.211), 4 FAIL (hit 0.654, +0.003), 5 PASS (no regression), 6 FAIL (0.5% aligned). Caveat: the
+      verdict measures the gated aligner; a word is weak below posterior 0.35 or when it moves more than 2.5 s from
+      Whisper's time, while Whisper's own p90 error is ~2 s, so the gates may reject exactly the corrections; an
+      ungated score was not measured. Asked the user (d-eiogzcqt) whether to abandon or measure ungated first.
 
 - [ ] Lyrics timed for another cut (moved from rormpc's TODO t-7cqbsitp; MONTERO by Lil Nas X). [t-fb4wapwk]
       - Flag a suspicious LRCLIB entry, one whose last line is far before the file's end. The round of 2026-10-11
